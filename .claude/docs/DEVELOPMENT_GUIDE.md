@@ -140,3 +140,4 @@ Table data_transmissions {
 ```
 4. 각 도메인에 대한 책임을 분리.
 5. 단일 책임 원칙을 따를 것.
+6. 예외처리는 `BaseException` class를 사용하고, 에러 메시지는 영어로 작성할것.

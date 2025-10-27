@@ -1,6 +1,10 @@
 package com.hhplus.ecommerce.domain.coupon.entity
 
 import com.hhplus.ecommerce.common.entity.CustomBaseEntity
+import com.hhplus.ecommerce.common.exception.CouponSoldOutException
+import com.hhplus.ecommerce.common.exception.InvalidCouponDateException
+import com.hhplus.ecommerce.common.exception.InvalidCouponQuantityException
+import com.hhplus.ecommerce.common.exception.InvalidDiscountRateException
 import com.hhplus.ecommerce.domain.order.entity.Order
 import jakarta.persistence.*
 import java.time.LocalDateTime
@@ -34,14 +38,26 @@ class Coupon(
     var endDate: LocalDateTime,
 
     @OneToMany(mappedBy = "coupon", cascade = [CascadeType.ALL], orphanRemoval = true)
-    val userCoupons: MutableList<UserCoupon> = mutableListOf()
+    val userCoupons: MutableList<UserCoupon> = mutableListOf(),
+
+    @Version
+    @Column(name = "version")
+    var version: Long = 0
 ) : CustomBaseEntity(id) {
 
     init {
-        require(discountRate in 1..100) { "할인율은 1~100 사이여야 합니다." }
-        require(totalQuantity > 0) { "총 수량은 0보다 커야 합니다." }
-        require(issuedQuantity >= 0) { "발급 수량은 0 이상이어야 합니다." }
-        require(startDate.isBefore(endDate)) { "시작일은 종료일보다 이전이어야 합니다." }
+        if (discountRate !in 1..100) {
+            throw InvalidDiscountRateException(discountRate)
+        }
+        if (totalQuantity <= 0) {
+            throw InvalidCouponQuantityException("Total quantity must be greater than 0")
+        }
+        if (issuedQuantity < 0) {
+            throw InvalidCouponQuantityException("Issued quantity must be greater than or equal to 0")
+        }
+        if (!startDate.isBefore(endDate)) {
+            throw InvalidCouponDateException("Start date must be before end date")
+        }
     }
 
     fun canIssue(): Boolean {
@@ -49,7 +65,9 @@ class Coupon(
     }
 
     fun issue() {
-        require(canIssue()) { "쿠폰 발급 가능 수량을 초과했습니다." }
+        if (!canIssue()) {
+            throw CouponSoldOutException(id)
+        }
         issuedQuantity++
     }
 

@@ -27,6 +27,9 @@ enum class ErrorCode(
     ALREADY_USED_COUPON("C004", "Coupon already used", HttpStatus.BAD_REQUEST),
     COUPON_NOT_FOUND("C005", "Coupon not found", HttpStatus.NOT_FOUND),
     COUPON_ALREADY_ISSUED("C006", "Coupon already issued to user", HttpStatus.BAD_REQUEST),
+    INVALID_DISCOUNT_RATE("C007", "Invalid discount rate", HttpStatus.BAD_REQUEST),
+    INVALID_COUPON_QUANTITY("C008", "Invalid coupon quantity", HttpStatus.BAD_REQUEST),
+    INVALID_COUPON_DATE("C009", "Invalid coupon date", HttpStatus.BAD_REQUEST),
 
     // User related
     USER_NOT_FOUND("U001", "User not found", HttpStatus.NOT_FOUND),

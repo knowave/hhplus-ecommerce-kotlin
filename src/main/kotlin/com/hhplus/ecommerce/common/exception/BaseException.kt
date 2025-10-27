@@ -93,6 +93,21 @@ class CouponAlreadyIssuedException(userId: String, couponId: String) : BaseExcep
     message = "User already has this coupon. User id: $userId, Coupon id: $couponId"
 )
 
+class InvalidDiscountRateException(discountRate: Int) : BaseException(
+    errorCode = ErrorCode.INVALID_DISCOUNT_RATE,
+    message = "Discount rate must be between 1 and 100. Given: $discountRate"
+)
+
+class InvalidCouponQuantityException(message: String) : BaseException(
+    errorCode = ErrorCode.INVALID_COUPON_QUANTITY,
+    message = message
+)
+
+class InvalidCouponDateException(message: String) : BaseException(
+    errorCode = ErrorCode.INVALID_COUPON_DATE,
+    message = message
+)
+
 // User related
 class UserNotFoundException(userId: String) : BaseException(
     errorCode = ErrorCode.USER_NOT_FOUND,

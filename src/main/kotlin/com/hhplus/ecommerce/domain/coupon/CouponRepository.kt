@@ -15,9 +15,4 @@ interface CouponRepository : JpaRepository<Coupon, String> {
     @Lock(LockModeType.OPTIMISTIC)
     @Query("SELECT c FROM Coupon c WHERE c.id = :id")
     fun findByIdWithOptimisticLock(id: String): Optional<Coupon>
-
-    fun findByStartDateBeforeAndEndDateAfter(
-        currentTime1: LocalDateTime,
-        currentTime2: LocalDateTime
-    ): List<Coupon>
 }
