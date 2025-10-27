@@ -18,7 +18,7 @@ interface UserCouponRepository : JpaRepository<UserCoupon, String> {
 
     fun existsByUserIdAndCouponId(userId: String, couponId: String): Boolean
 
-    @Query("SELECT uc FROM UserCoupon uc WHERE uc.userId = :userId AND uc.couponId = :couponId AND uc.status = :status")
+    @Query("SELECT uc FROM UserCoupon uc WHERE uc.user.id = :userId AND uc.coupon.id = :couponId AND uc.status = :status")
     fun findByUserIdAndCouponIdAndStatus(
         userId: String,
         couponId: String,

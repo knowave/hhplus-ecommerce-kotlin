@@ -267,3 +267,112 @@ finalAmount = totalAmount - discountAmount
 4. 데이터 연동
     - 주문 데이터 외부 전송
     - 실패 시에도 주문은 정상 처리
+
+## Step 2: API 설계
+
+### 2.1 상품 관련 API (예시)
+
+```json
+# 상품 목록 조회
+GET /api/products
+Query:
+  category: string (optional)
+  sort: "price" | "popularity" | "newest"
+Response:
+  products: [
+    {
+      productId: string,
+      name: string,
+      price: number,
+      stock: number,
+      category: string
+    }
+  ]
+
+# 인기 상품 조회
+GET /api/products/top
+Response:
+  period: "3days",
+  products: [
+    {
+      rank: number,
+      productId: string,
+      name: string,
+      salesCount: number,
+      revenue: number
+    }
+  ]
+
+```
+
+### 2.2 주문/결제 API (예시)
+
+```json
+# 주문 생성
+POST /api/orders
+Request:
+  userId: string
+  items: [
+    {
+      productId: string,
+      quantity: number
+    }
+  ]
+  couponId: string (optional)
+Response:
+  orderId: string
+  items: [
+    {
+      productId: string,
+      name: string,
+      quantity: number,
+      unitPrice: number,
+      subtotal: number
+    }
+  ]
+  subtotalAmount: number
+  discountAmount: number
+  totalAmount: number
+  status: "PENDING" | "COMPLETED"
+
+# 결제 처리
+POST /api/orders/{orderId}/payment
+Request:
+  userId: string
+Response:
+  orderId: string
+  paidAmount: number
+  remainingBalance: number
+  status: "SUCCESS" | "FAILED"
+  dataTransmission: "SUCCESS" | "FAILED"
+
+```
+
+### 2.3 쿠폰 API (예시)
+
+```json
+# 쿠폰 발급 (선착순)
+POST /api/coupons/{couponId}/issue
+Request:
+  userId: string
+Response:
+  userCouponId: string
+  couponName: string
+  discountRate: number
+  expiresAt: string
+  remainingQuantity: number
+
+# 보유 쿠폰 조회
+GET /api/users/{userId}/coupons
+Response:
+  coupons: [
+    {
+      userCouponId: string,
+      couponName: string,
+      discountRate: number,
+      status: "AVAILABLE" | "USED" | "EXPIRED",
+      expiresAt: string
+    }
+  ]
+
+```
