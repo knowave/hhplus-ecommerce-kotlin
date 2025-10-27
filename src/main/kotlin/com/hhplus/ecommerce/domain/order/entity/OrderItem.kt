@@ -1,6 +1,7 @@
 package com.hhplus.ecommerce.domain.order.entity
 
 import com.hhplus.ecommerce.common.entity.CustomBaseEntity
+import com.hhplus.ecommerce.domain.product.entity.Product
 import jakarta.persistence.*
 import java.math.BigDecimal
 
@@ -19,8 +20,9 @@ class OrderItem(
     @JoinColumn(name = "order_id", nullable = false)
     val order: Order,
 
-    @Column(name = "product_id", nullable = false)
-    val productId: String,
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "product_id", nullable = false)
+    val product: Product,
 
     @Column(name = "quantity", nullable = false)
     val quantity: Int,

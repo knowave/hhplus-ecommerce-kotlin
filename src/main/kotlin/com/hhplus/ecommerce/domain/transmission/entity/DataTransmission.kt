@@ -1,6 +1,7 @@
 package com.hhplus.ecommerce.domain.transmission.entity
 
 import com.hhplus.ecommerce.common.entity.CustomBaseEntity
+import com.hhplus.ecommerce.domain.order.entity.Order
 import jakarta.persistence.*
 import java.time.LocalDateTime
 
@@ -15,8 +16,9 @@ import java.time.LocalDateTime
 class DataTransmission(
     id: String,
 
-    @Column(name = "order_id", nullable = false)
-    val orderId: String,
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "order_id", nullable = false)
+    val order: Order,
 
     @Column(name = "payload", columnDefinition = "JSON", nullable = false)
     var payload: String,

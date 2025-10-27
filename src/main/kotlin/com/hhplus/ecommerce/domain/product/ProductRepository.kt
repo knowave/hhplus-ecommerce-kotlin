@@ -21,18 +21,18 @@ interface ProductRepository : JpaRepository<Product, String> {
 
     @Query("""
         SELECT new com.hhplus.ecommerce.domain.product.dto.TopProductInfo(
-            oi.productId,
+            p.id,
             p.name,
             SUM(oi.quantity),
             SUM(oi.subtotal)
         )
         FROM OrderItem oi
-        JOIN Product p ON oi.productId = p.id
-        JOIN Order o ON oi.order.id = o.id
+        JOIN oi.product p
+        JOIN oi.order o
         WHERE o.createdAt >= :fromDate
         AND o.status = 'PAID'
-        GROUP BY oi.productId, p.name
+        GROUP BY p.id, p.name
         ORDER BY SUM(oi.quantity) DESC
     """)
-    fun findTopProductsByRecentSales(fromDate: LocalDateTime, limit: Int): List<TopProductInfo>
+    fun findTopProductsByRecentSales(fromDate: LocalDateTime): List<TopProductInfo>
 }

@@ -1,6 +1,7 @@
 package com.hhplus.ecommerce.domain.coupon.entity
 
 import com.hhplus.ecommerce.common.entity.CustomBaseEntity
+import com.hhplus.ecommerce.domain.order.entity.Order
 import jakarta.persistence.*
 import java.time.LocalDateTime
 
@@ -32,9 +33,8 @@ class Coupon(
     @Column(name = "end_date", nullable = false)
     var endDate: LocalDateTime,
 
-    @Version
-    @Column(name = "version", nullable = false)
-    var version: Long = 0
+    @OneToMany(mappedBy = "coupon", cascade = [CascadeType.ALL], orphanRemoval = true)
+    val userCoupons: MutableList<UserCoupon> = mutableListOf()
 ) : CustomBaseEntity(id) {
 
     init {

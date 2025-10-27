@@ -22,3 +22,10 @@ data class TopProductsResponseDto(
     val period: String,
     val products: List<TopProductResponseDto>
 )
+
+data class ProductStockResponseDto(
+    val productId: String,
+    val name: String,
+    val stock: Int,
+    val isAvailable: Boolean
+)

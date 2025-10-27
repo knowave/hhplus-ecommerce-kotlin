@@ -14,13 +14,16 @@ class UserService(
     private val userRepository: UserRepository,
     private val userCouponRepository: UserCouponRepository
 ) {
-    fun createUser(dto: CreateUserRequestDto): Boolean {
-         userRepository.save<User>(User(
+    fun createUser(dto: CreateUserRequestDto): UserResponseDto {
+        val user = userRepository.save<User>(User(
             id = UUID.randomUUID().toString(),
             balance = dto.balance
         ))
 
-        return true
+        return UserResponseDto(
+            id = user.id,
+            balance = user.balance
+        )
     }
 
     fun getUser(userId: String): UserResponseDto {

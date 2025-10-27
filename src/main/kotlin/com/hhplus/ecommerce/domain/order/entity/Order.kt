@@ -1,6 +1,8 @@
 package com.hhplus.ecommerce.domain.order.entity
 
 import com.hhplus.ecommerce.common.entity.CustomBaseEntity
+import com.hhplus.ecommerce.domain.transmission.entity.DataTransmission
+import com.hhplus.ecommerce.domain.user.entity.User
 import jakarta.persistence.*
 import java.math.BigDecimal
 import java.time.LocalDateTime
@@ -16,8 +18,9 @@ import java.time.LocalDateTime
 class Order(
     id: String,
 
-    @Column(name = "user_id", nullable = false)
-    val userId: String,
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "user_id", nullable = false)
+    val user: User,
 
     @Column(name = "total_amount", nullable = false, precision = 10, scale = 2)
     val totalAmount: BigDecimal,
@@ -36,7 +39,10 @@ class Order(
     var paidAt: LocalDateTime? = null,
 
     @OneToMany(mappedBy = "order", cascade = [CascadeType.ALL], orphanRemoval = true)
-    val items: MutableList<OrderItem> = mutableListOf()
+    val items: MutableList<OrderItem> = mutableListOf(),
+
+    @OneToMany(mappedBy = "order", cascade = [CascadeType.ALL], orphanRemoval = true)
+    val dataTransmissions: MutableList<DataTransmission> = mutableListOf()
 ) : CustomBaseEntity(id) {
 
     fun markAsPaid() {
