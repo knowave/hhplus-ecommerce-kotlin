@@ -32,11 +32,7 @@ class Product(
     var stock: Int,
 
     @Column(name = "category", nullable = false)
-    var category: String,
-
-    @Version
-    @Column(name = "version", nullable = false)
-    var version: Long = 0
+    var category: String
 ) : CustomBaseEntity(id) {
 
     fun decreaseStock(quantity: Int) {
