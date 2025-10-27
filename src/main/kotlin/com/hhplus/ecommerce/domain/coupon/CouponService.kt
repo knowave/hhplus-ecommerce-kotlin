@@ -5,6 +5,7 @@ import com.hhplus.ecommerce.common.exception.CouponNotFoundException
 import com.hhplus.ecommerce.common.exception.InvalidCouponException
 import com.hhplus.ecommerce.common.exception.UserNotFoundException
 import com.hhplus.ecommerce.domain.coupon.dto.CouponIssueResponseDto
+import com.hhplus.ecommerce.domain.coupon.dto.CouponResponseDto
 import com.hhplus.ecommerce.domain.coupon.entity.CouponStatus
 import com.hhplus.ecommerce.domain.coupon.entity.UserCoupon
 import com.hhplus.ecommerce.domain.user.UserRepository
@@ -59,5 +60,19 @@ class CouponService(
             expiresAt = expiresAt,
             remainingQuantity = remainingQuantity
         )
+    }
+
+    @Transactional(readOnly = true)
+    fun getAllCoupons(): List<CouponResponseDto> {
+        val currentTime = LocalDateTime.now()
+        return couponRepository.findByStartDateBeforeAndEndDateAfter(currentTime, currentTime)
+            .map { CouponResponseDto(it) }
+    }
+
+    @Transactional(readOnly = true)
+    fun getCouponById(couponId: String): CouponResponseDto {
+        val coupon = couponRepository.findById(couponId)
+            .orElseThrow { CouponNotFoundException(couponId) }
+        return CouponResponseDto(coupon)
     }
 }

@@ -24,7 +24,9 @@ class CouponDataInitialize {
                         totalQuantity = 1000,
                         issuedQuantity = 0,
                         startDate = now,
-                        endDate = now.plusDays(30)
+                        endDate = now.plusDays(30),
+                        userCoupons = mutableListOf(),
+                        version = 0
                     ),
                     Coupon(
                         id = UUID.randomUUID().toString(),
@@ -33,7 +35,9 @@ class CouponDataInitialize {
                         totalQuantity = 500,
                         issuedQuantity = 0,
                         startDate = now,
-                        endDate = now.plusDays(60)
+                        endDate = now.plusDays(60),
+                        userCoupons = mutableListOf(),
+                        version = 0
                     ),
                     Coupon(
                         id = UUID.randomUUID().toString(),
@@ -42,7 +46,9 @@ class CouponDataInitialize {
                         totalQuantity = 100,
                         issuedQuantity = 0,
                         startDate = now,
-                        endDate = now.plusDays(90)
+                        endDate = now.plusDays(90),
+                        userCoupons = mutableListOf(),
+                        version = 0
                     ),
                     Coupon(
                         id = UUID.randomUUID().toString(),
@@ -51,7 +57,9 @@ class CouponDataInitialize {
                         totalQuantity = 300,
                         issuedQuantity = 0,
                         startDate = now,
-                        endDate = now.plusDays(7)
+                        endDate = now.plusDays(7),
+                        userCoupons = mutableListOf(),
+                        version = 0
                     ),
                     Coupon(
                         id = UUID.randomUUID().toString(),
@@ -60,7 +68,9 @@ class CouponDataInitialize {
                         totalQuantity = 200,
                         issuedQuantity = 0,
                         startDate = now,
-                        endDate = now.plusDays(45)
+                        endDate = now.plusDays(45),
+                        userCoupons = mutableListOf(),
+                        version = 0
                     ),
                     Coupon(
                         id = UUID.randomUUID().toString(),
@@ -69,7 +79,9 @@ class CouponDataInitialize {
                         totalQuantity = 800,
                         issuedQuantity = 0,
                         startDate = now,
-                        endDate = now.plusDays(30)
+                        endDate = now.plusDays(30),
+                        userCoupons = mutableListOf(),
+                        version = 0
                     ),
                     Coupon(
                         id = UUID.randomUUID().toString(),
@@ -78,7 +90,9 @@ class CouponDataInitialize {
                         totalQuantity = 600,
                         issuedQuantity = 0,
                         startDate = now,
-                        endDate = now.plusDays(30)
+                        endDate = now.plusDays(30),
+                        userCoupons = mutableListOf(),
+                        version = 0
                     ),
                     Coupon(
                         id = UUID.randomUUID().toString(),
@@ -87,7 +101,9 @@ class CouponDataInitialize {
                         totalQuantity = 400,
                         issuedQuantity = 0,
                         startDate = now,
-                        endDate = now.plusDays(20)
+                        endDate = now.plusDays(20),
+                        userCoupons = mutableListOf(),
+                        version = 0
                     ),
                     Coupon(
                         id = UUID.randomUUID().toString(),
@@ -96,7 +112,9 @@ class CouponDataInitialize {
                         totalQuantity = 1500,
                         issuedQuantity = 0,
                         startDate = now,
-                        endDate = now.plusDays(14)
+                        endDate = now.plusDays(14),
+                        userCoupons = mutableListOf(),
+                        version = 0
                     ),
                     Coupon(
                         id = UUID.randomUUID().toString(),
@@ -105,7 +123,9 @@ class CouponDataInitialize {
                         totalQuantity = 250,
                         issuedQuantity = 0,
                         startDate = now,
-                        endDate = now.plusDays(365)
+                        endDate = now.plusDays(365),
+                        userCoupons = mutableListOf(),
+                        version = 0
                     ),
                     Coupon(
                         id = UUID.randomUUID().toString(),
@@ -114,7 +134,9 @@ class CouponDataInitialize {
                         totalQuantity = 350,
                         issuedQuantity = 0,
                         startDate = now,
-                        endDate = now.plusDays(40)
+                        endDate = now.plusDays(40),
+                        userCoupons = mutableListOf(),
+                        version = 0
                     ),
                     Coupon(
                         id = UUID.randomUUID().toString(),
@@ -123,7 +145,9 @@ class CouponDataInitialize {
                         totalQuantity = 180,
                         issuedQuantity = 0,
                         startDate = now,
-                        endDate = now.plusDays(50)
+                        endDate = now.plusDays(50),
+                        userCoupons = mutableListOf(),
+                        version = 0
                     ),
                     Coupon(
                         id = UUID.randomUUID().toString(),
@@ -132,7 +156,9 @@ class CouponDataInitialize {
                         totalQuantity = 150,
                         issuedQuantity = 0,
                         startDate = now,
-                        endDate = now.plusDays(10)
+                        endDate = now.plusDays(10),
+                        userCoupons = mutableListOf(),
+                        version = 0
                     ),
                     Coupon(
                         id = UUID.randomUUID().toString(),
@@ -141,7 +167,9 @@ class CouponDataInitialize {
                         totalQuantity = 700,
                         issuedQuantity = 0,
                         startDate = now,
-                        endDate = now.plusDays(60)
+                        endDate = now.plusDays(60),
+                        userCoupons = mutableListOf(),
+                        version = 0
                     ),
                     Coupon(
                         id = UUID.randomUUID().toString(),
@@ -150,7 +178,9 @@ class CouponDataInitialize {
                         totalQuantity = 900,
                         issuedQuantity = 0,
                         startDate = now,
-                        endDate = now.plusDays(30)
+                        endDate = now.plusDays(30),
+                        userCoupons = mutableListOf(),
+                        version = 0
                     ),
                     Coupon(
                         id = UUID.randomUUID().toString(),
@@ -159,7 +189,9 @@ class CouponDataInitialize {
                         totalQuantity = 1200,
                         issuedQuantity = 0,
                         startDate = now,
-                        endDate = now.plusDays(90)
+                        endDate = now.plusDays(90),
+                        userCoupons = mutableListOf(),
+                        version = 0
                     ),
                     Coupon(
                         id = UUID.randomUUID().toString(),
@@ -168,7 +200,9 @@ class CouponDataInitialize {
                         totalQuantity = 450,
                         issuedQuantity = 0,
                         startDate = now,
-                        endDate = now.plusDays(45)
+                        endDate = now.plusDays(45),
+                        userCoupons = mutableListOf(),
+                        version = 0
                     ),
                     Coupon(
                         id = UUID.randomUUID().toString(),
@@ -177,7 +211,9 @@ class CouponDataInitialize {
                         totalQuantity = 50,
                         issuedQuantity = 0,
                         startDate = now,
-                        endDate = now.plusHours(24)
+                        endDate = now.plusHours(24),
+                        userCoupons = mutableListOf(),
+                        version = 0
                     ),
                     Coupon(
                         id = UUID.randomUUID().toString(),
@@ -186,7 +222,9 @@ class CouponDataInitialize {
                         totalQuantity = 120,
                         issuedQuantity = 0,
                         startDate = now,
-                        endDate = now.plusDays(60)
+                        endDate = now.plusDays(60),
+                        userCoupons = mutableListOf(),
+                        version = 0
                     ),
                     Coupon(
                         id = UUID.randomUUID().toString(),
@@ -195,7 +233,9 @@ class CouponDataInitialize {
                         totalQuantity = 300,
                         issuedQuantity = 0,
                         startDate = now,
-                        endDate = now.plusDays(15)
+                        endDate = now.plusDays(15),
+                        userCoupons = mutableListOf(),
+                        version = 0
                     )
                 )
             )
