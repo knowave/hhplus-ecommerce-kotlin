@@ -1,6 +1,10 @@
 package com.hhplus.ecommerce.domain.coupon.entity
 
 import com.hhplus.ecommerce.common.entity.CustomBaseEntity
+import com.hhplus.ecommerce.common.exception.AlreadyUsedCouponException
+import com.hhplus.ecommerce.common.exception.ExpiredCouponException
+import com.hhplus.ecommerce.common.exception.InvalidCouponException
+import com.hhplus.ecommerce.domain.user.entity.User
 import jakarta.persistence.*
 import java.time.LocalDateTime
 
@@ -16,11 +20,13 @@ import java.time.LocalDateTime
 class UserCoupon(
     id: String,
 
-    @Column(name = "user_id", nullable = false)
-    val userId: String,
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "user_id", nullable = false)
+    val user: User,
 
-    @Column(name = "coupon_id", nullable = false)
-    val couponId: String,
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "coupon_id", nullable = false)
+    val coupon: Coupon,
 
     @Enumerated(EnumType.STRING)
     @Column(name = "status", nullable = false)
@@ -37,14 +43,20 @@ class UserCoupon(
 ) : CustomBaseEntity(id) {
 
     fun use() {
-        require(status == CouponStatus.AVAILABLE) { "사용 가능한 쿠폰만 사용할 수 있습니다." }
-        require(!isExpired()) { "만료된 쿠폰은 사용할 수 없습니다." }
+        if (status != CouponStatus.AVAILABLE) {
+            throw InvalidCouponException("사용 가능한 쿠폰만 사용할 수 있습니다.")
+        }
+        if (isExpired()) {
+            throw ExpiredCouponException(coupon.id)
+        }
         status = CouponStatus.USED
         usedAt = LocalDateTime.now()
     }
 
     fun restore() {
-        require(status == CouponStatus.USED) { "사용된 쿠폰만 복원할 수 있습니다." }
+        if (status != CouponStatus.USED) {
+            throw InvalidCouponException("사용된 쿠폰만 복원할 수 있습니다.")
+        }
         if (isExpired()) {
             status = CouponStatus.EXPIRED
         } else {

@@ -1,7 +1,11 @@
 package com.hhplus.ecommerce.domain.coupon
 
+import com.hhplus.ecommerce.domain.coupon.dto.UserCouponResponseDto
+import com.hhplus.ecommerce.domain.coupon.entity.CouponStatus
+import com.hhplus.ecommerce.domain.coupon.entity.UserCoupon
 import org.springframework.data.jpa.repository.JpaRepository
 import org.springframework.data.jpa.repository.Query
+import org.springframework.data.repository.query.Param
 import org.springframework.stereotype.Repository
 import java.time.LocalDateTime
 
@@ -22,4 +26,19 @@ interface UserCouponRepository : JpaRepository<UserCoupon, String> {
     ): UserCoupon?
 
     fun findByExpiresAtBeforeAndStatus(expiresAt: LocalDateTime, status: CouponStatus): List<UserCoupon>
+
+    @Query("""
+        select new com.hhplus.ecommerce.domain.coupon.dto.UserCouponResponseDto(
+            uc.id,
+            c.name,
+            c.discountRate,
+            uc.status,
+            uc.expiresAt
+        )
+        from UserCoupon uc
+        join uc.coupon c
+        where uc.user.id = :userId
+        order by uc.expiresAt asc
+    """)
+    fun findAllCouponsForUser(@Param("userId") userId: String): List<UserCouponResponseDto>
 }

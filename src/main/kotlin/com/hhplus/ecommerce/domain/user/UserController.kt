@@ -1,5 +1,6 @@
 package com.hhplus.ecommerce.domain.user
 
+import com.hhplus.ecommerce.domain.coupon.dto.UserCouponResponseDto
 import com.hhplus.ecommerce.domain.user.dto.CreateUserRequestDto
 import com.hhplus.ecommerce.domain.user.dto.UserResponseDto
 import org.springframework.http.HttpStatus
@@ -24,5 +25,10 @@ class UserController(
     @GetMapping("/{userId}")
     fun getUser(@PathVariable userId: String): ResponseEntity<UserResponseDto> {
         return ResponseEntity.status(HttpStatus.OK).body(userService.getUser(userId))
+    }
+
+    @GetMapping("/{userId}/coupons")
+    fun getManyUserCoupon(@PathVariable userId: String): ResponseEntity<List<UserCouponResponseDto>>{
+        return ResponseEntity.status(HttpStatus.OK).body(userService.getManyUserCoupon(userId))
     }
 }
