@@ -30,8 +30,8 @@ logging:
         SQL: debug
         type.descriptor.sql: trace
 
-jwt:
-  secret: ${JWT_SECRET}
+#jwt:
+#  secret: ${JWT_SECRET}
 
 springdoc:
   api-docs:

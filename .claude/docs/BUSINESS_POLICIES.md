@@ -6,9 +6,9 @@
 
 ### 1.1 주문 생성 규칙
 - **주문 생성 조건**
-  - 모든 상품의 재고가 주문 수량 이상이어야 함
-  - 사용자 잔액이 최종 결제 금액 이상이어야 함
-  - 쿠폰 사용 시 쿠폰이 유효한 상태(AVAILABLE)여야 함
+    - 모든 상품의 재고가 주문 수량 이상이어야 함
+    - 사용자 잔액이 최종 결제 금액 이상이어야 함
+    - 쿠폰 사용 시 쿠폰이 유효한 상태(AVAILABLE)여야 함
 
 - **주문 상태**
   ```
@@ -19,19 +19,19 @@
 
 ### 1.2 결제 프로세스
 1. **주문 생성 시**
-   - 재고 차감 (낙관적 락 사용)
-   - 쿠폰 상태를 USED로 변경
-   - 주문 상태를 PENDING으로 설정
+    - 재고 차감 (낙관적 락 사용)
+    - 쿠폰 상태를 USED로 변경
+    - 주문 상태를 PENDING으로 설정
 
 2. **결제 실행 시**
-   - 사용자 잔액 차감
-   - 결제 성공 시 주문 상태를 PAID로 변경
-   - 결제 실패 시 보상 트랜잭션 실행
+    - 사용자 잔액 차감
+    - 결제 성공 시 주문 상태를 PAID로 변경
+    - 결제 실패 시 보상 트랜잭션 실행
 
 3. **결제 실패 시 보상 처리**
-   - 차감된 재고 복원
-   - 사용된 쿠폰 상태를 AVAILABLE로 복원
-   - 주문 상태를 CANCELLED로 변경
+    - 차감된 재고 복원
+    - 사용된 쿠폰 상태를 AVAILABLE로 복원
+    - 주문 상태를 CANCELLED로 변경
 
 ### 1.3 주문 취소 정책
 - PENDING 상태의 주문만 취소 가능
@@ -47,9 +47,9 @@
 
 ### 2.2 동시성 제어
 - **낙관적 락(Optimistic Lock) 사용**
-  - Entity에 `@Version` 필드 추가
-  - 재고 업데이트 시 버전 충돌 체크
-  - 충돌 발생 시 `OptimisticLockException` 발생 → 재시도 또는 주문 실패
+    - Entity에 `@Version` 필드 추가
+    - 재고 업데이트 시 버전 충돌 체크
+    - 충돌 발생 시 `OptimisticLockException` 발생 → 재시도 또는 주문 실패
 
 - **재고 차감 쿼리**
   ```sql
@@ -74,18 +74,18 @@
 
 ### 3.1 쿠폰 발급 규칙
 - **선착순 발급**
-  - `issued_quantity < total_quantity` 조건 체크
-  - 동시 발급 요청 시 동시성 제어 필요 (낙관적 락)
+    - `issued_quantity < total_quantity` 조건 체크
+    - 동시 발급 요청 시 동시성 제어 필요 (낙관적 락)
 
 - **중복 발급 방지**
-  - 1인 1매 제한
-  - `user_coupons` 테이블에서 (user_id, coupon_id) 조합으로 중복 체크
-  - 이미 발급받은 경우 에러 반환
+    - 1인 1매 제한
+    - `user_coupons` 테이블에서 (user_id, coupon_id) 조합으로 중복 체크
+    - 이미 발급받은 경우 에러 반환
 
 - **쿠폰 발급 시점**
-  - 사용자 요청 시 즉시 발급
-  - 발급 시 `coupons.issued_quantity` 증가
-  - `user_coupons` 레코드 생성 (상태: AVAILABLE)
+    - 사용자 요청 시 즉시 발급
+    - 발급 시 `coupons.issued_quantity` 증가
+    - `user_coupons` 레코드 생성 (상태: AVAILABLE)
 
 ### 3.2 쿠폰 상태
 ```
@@ -153,10 +153,10 @@ finalAmount = totalAmount - discountAmount
 
 ### 5.4 데드락 방지
 - 리소스 접근 순서 통일
-  1. 쿠폰 검증 및 사용
-  2. 재고 차감
-  3. 주문 생성
-  4. 잔액 차감
+    1. 쿠폰 검증 및 사용
+    2. 재고 차감
+    3. 주문 생성
+    4. 잔액 차감
 
 ## 6. 데이터 전송 정책 (Outbox Pattern)
 
@@ -168,15 +168,15 @@ finalAmount = totalAmount - discountAmount
 ### 6.2 재시도 정책
 - **최대 재시도 횟수**: 3회
 - **재시도 간격**: 지수 백오프
-  - 1차: 1분 후
-  - 2차: 5분 후
-  - 3차: 15분 후
+    - 1차: 1분 후
+    - 2차: 5분 후
+    - 3차: 15분 후
 
 - **재시도 실행**
-  - 배치 작업 또는 스케줄러로 PENDING/FAILED 상태 레코드 조회
-  - 외부 시스템으로 데이터 전송 시도
-  - 성공 시: status = SUCCESS, sent_at 기록
-  - 실패 시: attempts 증가, status = FAILED
+    - 배치 작업 또는 스케줄러로 PENDING/FAILED 상태 레코드 조회
+    - 외부 시스템으로 데이터 전송 시도
+    - 성공 시: status = SUCCESS, sent_at 기록
+    - 실패 시: attempts 증가, status = FAILED
 
 ### 6.3 최종 실패 처리
 - 3회 재시도 후에도 실패 시 상태를 FAILED로 유지
@@ -193,16 +193,16 @@ finalAmount = totalAmount - discountAmount
 ### 7.1 비즈니스 예외
 - 명확한 에러 메시지 제공
 - HTTP 상태 코드 적절히 사용
-  - 400: 잘못된 요청 (재고 부족, 쿠폰 중복 등)
-  - 404: 리소스 없음 (상품, 쿠폰 미존재)
-  - 409: 동시성 충돌 (낙관적 락 실패)
-  - 500: 서버 내부 오류
+    - 400: 잘못된 요청 (재고 부족, 쿠폰 중복 등)
+    - 404: 리소스 없음 (상품, 쿠폰 미존재)
+    - 409: 동시성 충돌 (낙관적 락 실패)
+    - 500: 서버 내부 오류
 
 ### 7.2 로깅
 - 모든 비즈니스 예외는 WARNING 레벨로 로깅
 - 시스템 오류는 ERROR 레벨로 로깅
 - 주요 비즈니스 이벤트는 INFO 레벨로 로깅
-  - 주문 생성, 결제 완료, 쿠폰 발급 등
+    - 주문 생성, 결제 완료, 쿠폰 발급 등
 
 ## 8. 검증 규칙
 
@@ -235,17 +235,17 @@ finalAmount = totalAmount - discountAmount
 ## 구현 시 주의사항
 
 1. **트랜잭션 경계 명확히**
-   - 주문 생성, 결제, 보상 트랜잭션은 명확히 분리
-   - 각 단계에서 롤백 조건 명확히 정의
+    - 주문 생성, 결제, 보상 트랜잭션은 명확히 분리
+    - 각 단계에서 롤백 조건 명확히 정의
 
 2. **멱등성 보장**
-   - 동일한 요청이 여러 번 들어와도 결과가 동일해야 함
-   - 주문 ID, 쿠폰 발급 이력 등으로 중복 체크
+    - 동일한 요청이 여러 번 들어와도 결과가 동일해야 함
+    - 주문 ID, 쿠폰 발급 이력 등으로 중복 체크
 
 3. **테스트 커버리지**
-   - 동시성 시나리오 테스트 필수
-   - 재고 부족, 쿠폰 만료 등 예외 케이스 테스트
-   - 보상 트랜잭션 정상 동작 검증
+    - 동시성 시나리오 테스트 필수
+    - 재고 부족, 쿠폰 만료 등 예외 케이스 테스트
+    - 보상 트랜잭션 정상 동작 검증
 
 ## 이커머스 핵심 기능
 1. 상품 관리
@@ -267,3 +267,112 @@ finalAmount = totalAmount - discountAmount
 4. 데이터 연동
     - 주문 데이터 외부 전송
     - 실패 시에도 주문은 정상 처리
+
+## Step 2: API 설계
+
+### 2.1 상품 관련 API (예시)
+
+```json
+# 상품 목록 조회
+GET /api/products
+Query:
+  category: string (optional)
+  sort: "price" | "popularity" | "newest"
+Response:
+  products: [
+    {
+      productId: string,
+      name: string,
+      price: number,
+      stock: number,
+      category: string
+    }
+  ]
+
+# 인기 상품 조회
+GET /api/products/top
+Response:
+  period: "3days",
+  products: [
+    {
+      rank: number,
+      productId: string,
+      name: string,
+      salesCount: number,
+      revenue: number
+    }
+  ]
+
+```
+
+### 2.2 주문/결제 API (예시)
+
+```json
+# 주문 생성
+POST /api/orders
+Request:
+  userId: string
+  items: [
+    {
+      productId: string,
+      quantity: number
+    }
+  ]
+  couponId: string (optional)
+Response:
+  orderId: string
+  items: [
+    {
+      productId: string,
+      name: string,
+      quantity: number,
+      unitPrice: number,
+      subtotal: number
+    }
+  ]
+  subtotalAmount: number
+  discountAmount: number
+  totalAmount: number
+  status: "PENDING" | "COMPLETED"
+
+# 결제 처리
+POST /api/orders/{orderId}/payment
+Request:
+  userId: string
+Response:
+  orderId: string
+  paidAmount: number
+  remainingBalance: number
+  status: "SUCCESS" | "FAILED"
+  dataTransmission: "SUCCESS" | "FAILED"
+
+```
+
+### 2.3 쿠폰 API (예시)
+
+```json
+# 쿠폰 발급 (선착순)
+POST /api/coupons/{couponId}/issue
+Request:
+  userId: string
+Response:
+  userCouponId: string
+  couponName: string
+  discountRate: number
+  expiresAt: string
+  remainingQuantity: number
+
+# 보유 쿠폰 조회
+GET /api/users/{userId}/coupons
+Response:
+  coupons: [
+    {
+      userCouponId: string,
+      couponName: string,
+      discountRate: number,
+      status: "AVAILABLE" | "USED" | "EXPIRED",
+      expiresAt: string
+    }
+  ]
+
+```

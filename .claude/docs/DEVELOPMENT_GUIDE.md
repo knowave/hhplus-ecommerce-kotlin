@@ -1,8 +1,8 @@
 ## 개발 진행 순서
 1. `application.yml` 파일을 정의.
-   2. default API = `/api`
-   3. jpa configuration
-   4. jwt token 정의 (access token)
+    2. default API = `/api`
+    3. jpa configuration
+    4. jwt token 정의 (access token)
 2. 각 도메인에 대한 entity 정의 id, createdAt, updatedAt 과 같은 중복되는 column은 `CustomBaseEntity` 를 생성해서 상속받아서 entity를 생성.
 ```sql
 -- 상품 정보
@@ -140,3 +140,4 @@ Table data_transmissions {
 ```
 4. 각 도메인에 대한 책임을 분리.
 5. 단일 책임 원칙을 따를 것.
+6. 예외처리는 `BaseException` class를 사용하고, 에러 메시지는 영어로 작성할것.
