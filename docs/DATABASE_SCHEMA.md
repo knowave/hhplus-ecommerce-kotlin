@@ -94,6 +94,112 @@ erDiagram
     }
 ```
 
+## 엔티티 클래스 다이어그램
+
+```mermaid
+classDiagram
+    CustomBaseEntity <|-- User
+    CustomBaseEntity <|-- Product
+    CustomBaseEntity <|-- Order
+    CustomBaseEntity <|-- OrderItem
+    CustomBaseEntity <|-- Coupon
+    CustomBaseEntity <|-- UserCoupon
+    CustomBaseEntity <|-- DataTransmission
+
+    class CustomBaseEntity {
+        <<abstract>>
+        +String id
+        +LocalDateTime createdAt
+        +LocalDateTime updatedAt
+    }
+
+    class User {
+        +BigDecimal balance
+        +List~Order~ orders
+        +List~UserCoupon~ userCoupons
+        +chargeBalance(amount)
+        +deductBalance(amount)
+    }
+
+    class Product {
+        +String name
+        +String description
+        +BigDecimal price
+        +int stock
+        +String category
+        +decreaseStock(quantity)
+        +increaseStock(quantity)
+    }
+
+    class Order {
+        +User user
+        +BigDecimal totalAmount
+        +BigDecimal discountAmount
+        +BigDecimal finalAmount
+        +OrderStatus status
+        +LocalDateTime paidAt
+        +List~OrderItem~ items
+        +List~DataTransmission~ dataTransmissions
+        +markAsPaid()
+        +cancel()
+        +addItem(orderItem)
+    }
+
+    class OrderItem {
+        +Order order
+        +Product product
+        +int quantity
+        +BigDecimal unitPrice
+        +BigDecimal subtotal
+    }
+
+    class Coupon {
+        +String name
+        +int discountRate
+        +int totalQuantity
+        +int issuedQuantity
+        +LocalDateTime startDate
+        +LocalDateTime endDate
+        +Long version
+        +List~UserCoupon~ userCoupons
+        +canIssue() bool
+        +issue()
+        +isValid() bool
+    }
+
+    class UserCoupon {
+        +User user
+        +Coupon coupon
+        +CouponStatus status
+        +LocalDateTime issuedAt
+        +LocalDateTime usedAt
+        +LocalDateTime expiresAt
+        +use()
+        +restore()
+        +isExpired() bool
+        +checkExpired()
+    }
+
+    class DataTransmission {
+        +Order order
+        +String payload
+        +TransmissionStatus status
+        +int attempts
+        +LocalDateTime sentAt
+        +markAsSuccess()
+        +markAsFailed()
+        +canRetry() bool
+        +retry()
+    }
+
+    User "1" --> "N" Order
+    User "1" --> "N" UserCoupon
+    Order "1" --> "N" OrderItem
+    Order "1" --> "N" DataTransmission
+    Product "1" --> "N" OrderItem
+    Coupon "1" --> "N" UserCoupon
+```
+
 ## 테이블 상세 설명
 
 ### 1. users
