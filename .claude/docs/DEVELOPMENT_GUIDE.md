@@ -1,2 +1,7 @@
 ## 개발 진행
-1. requirements-analysis.MD 파일을 기반으로 Database entity를 Mermaid를 이용해서 MD파일 docs안에 생성하고 왜 이렇게 정의를 했는지 설명한다.
+1. 프로젝트 최상위 경로에 위치한 docs와 docs/api를 기반으로 개발을 진행.
+2. 변수 이름은 camelCase로 하고, class는 PascalCase로 한다.
+3. 실제 비즈니스 로직은 src/.../domains로 각 domain을 만들어서 진행한다.
+4. API 문서 자동화를 위해서 spring docs를 사용
+5. 개발 단계가 아니기에 Mock Server를 docs/api를 이용하여 구현한다. 
+6. Mock Server를 구현할 때 controller class 에서 간단하게 Map or Object를 사용해서 구현한다.
