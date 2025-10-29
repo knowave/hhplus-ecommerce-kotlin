@@ -467,7 +467,6 @@ flowchart TD
 | User | Order | 한 사용자는 여러 주문을 생성 |
 | User | UserCoupon | 한 사용자는 여러 쿠폰을 보유 |
 | User | Payment | 한 사용자는 여러 결제를 실행 |
-| User | Cart | 한 사용자는 하나의 장바구니를 소유 (1:1) |
 | Cart | CartItem | 한 장바구니는 여러 상품 아이템 포함 |
 | Order | OrderItem | 한 주문은 여러 상품 아이템 포함 |
 | Order | DataTransmission | 한 주문은 여러 전송 이력 보유 (재시도) |
