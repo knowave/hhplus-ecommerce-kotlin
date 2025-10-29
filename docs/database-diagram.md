@@ -5,31 +5,22 @@
 ## 1. Entity Relationship Diagram (ERD)
 
 ### 1.1 전체 ERD
-
 ```mermaid
 erDiagram
     User ||--o{ Order : "places"
     User ||--o{ UserCoupon : "owns"
-    User ||--o{ Cart : "owns"
-    User ||--o{ Payment : "makes"
-
-    Product ||--o{ OrderItem : "ordered in"
-    Product ||--o{ CartItem : "added to cart"
-
-    Cart ||--|{ CartItem : "contains"
+    Coupon ||--o{ UserCoupon : "issued as"
 
     Order ||--|{ OrderItem : "contains"
-    Order ||--o| Payment : "paid by"
-    Order ||--o{ DataTransmission : "triggers"
+    Product ||--o{ OrderItem : "ordered in"
+    Order ||--o{ Payment : "has"
+    Order ||--o{ Shipping : "has"
     Order }o--o| UserCoupon : "may use"
-
-    Coupon ||--o{ UserCoupon : "issued as"
 
     User {
         long id PK "사용자 ID"
+        string name "이름"
         string email "이메일"
-        string name "사용자명"
-        decimal balance "사용자 잔액"
         timestamp created_at
         timestamp updated_at
     }
@@ -37,62 +28,8 @@ erDiagram
     Product {
         long id PK "상품 ID"
         string name "상품명"
-        text description "상세 설명"
-        decimal price "가격"
+        int price "상품 가격"
         int stock "재고 수량"
-        string category "카테고리"
-        long version "낙관적 락 버전"
-        timestamp created_at
-        timestamp updated_at
-    }
-
-    Cart {
-        long id PK "장바구니 ID"
-        long user_id FK "사용자 ID"
-        timestamp created_at
-        timestamp updated_at
-    }
-
-    CartItem {
-        long id PK "장바구니 아이템 ID"
-        long cart_id FK "장바구니 ID"
-        long product_id FK "상품 ID"
-        int quantity "수량"
-        timestamp created_at
-        timestamp updated_at
-    }
-
-    Order {
-        long id PK "주문 ID"
-        string order_number "주문 번호"
-        long user_id FK "사용자 ID"
-        long user_coupon_id FK "사용한 쿠폰 ID"
-        decimal total_amount "상품 총액"
-        decimal discount_amount "할인 금액"
-        decimal final_amount "최종 결제액"
-        string status "PENDING|PAID|CANCELLED"
-        timestamp created_at
-        timestamp updated_at
-    }
-
-    OrderItem {
-        long id PK "주문 아이템 ID"
-        long order_id FK "주문 ID"
-        long product_id FK "상품 ID"
-        int quantity "주문 수량"
-        decimal unit_price "주문시 단가"
-        decimal subtotal "소계"
-        timestamp created_at
-        timestamp updated_at
-    }
-
-    Payment {
-        long id PK "결제 ID"
-        long order_id FK "주문 ID"
-        long user_id FK "사용자 ID"
-        decimal amount "결제 금액"
-        string status "SUCCESS|FAILED"
-        timestamp paid_at "결제 일시"
         timestamp created_at
         timestamp updated_at
     }
@@ -100,13 +37,11 @@ erDiagram
     Coupon {
         long id PK "쿠폰 ID"
         string name "쿠폰명"
-        text description "쿠폰 설명"
-        int discount_rate "할인율(1-100)"
-        int total_quantity "총 발급가능수"
-        int issued_quantity "현재 발급수"
-        timestamp start_date "사용 시작일"
-        timestamp end_date "사용 종료일"
-        int validity_days "유효 기간(일)"
+        int discount_rate "할인율(%)"
+        int total_quantity "총 발급 수량"
+        int issued_quantity "현재 발급 수량"
+        timestamp start_date "시작일"
+        timestamp end_date "종료일"
         long version "낙관적 락 버전"
         timestamp created_at
         timestamp updated_at
@@ -124,21 +59,46 @@ erDiagram
         timestamp updated_at
     }
 
-    DataTransmission {
-        long id PK "전송 ID"
+    Order {
+        long id PK "주문 ID"
+        long user_id FK "사용자 ID"
+        string status "PENDING|PAID|CANCELLED"
+        int total_amount "총 금액"
+        timestamp created_at
+        timestamp updated_at
+    }
+
+    OrderItem {
+        long id PK "주문상품 ID"
         long order_id FK "주문 ID"
-        json payload "전송 데이터"
-        string status "PENDING|SUCCESS|FAILED"
-        int attempts "재시도 횟수"
-        int max_attempts "최대 재시도 횟수"
-        timestamp sent_at "전송 일시"
-        timestamp next_retry_at "다음 재시도 시간"
-        text error_message "에러 메시지"
+        long product_id FK "상품 ID"
+        int quantity "수량"
+        int price "상품 단가"
+    }
+
+    Payment {
+        long id PK "결제 ID"
+        long order_id FK "주문 ID"
+        string method "결제수단"
+        string status "READY|COMPLETED|CANCELLED"
+        int amount "결제금액"
+        timestamp paid_at
+        timestamp created_at
+    }
+
+    Shipping {
+        long id PK "배송 ID"
+        long order_id FK "주문 ID"
+        string carrier "택배사"
+        string tracking_number "송장번호"
+        timestamp shipping_start_at "배송 시작일"
+        timestamp estimated_arrival_at "도착 예정일"
+        timestamp delivered_at "실제 도착일"
+        string status "PENDING|IN_TRANSIT|DELIVERED"
         timestamp created_at
         timestamp updated_at
     }
 ```
-
 ---
 
 ## 2. 도메인별 상세 다이어그램
@@ -270,15 +230,15 @@ erDiagram
     Order }o--o| UserCoupon : "may use"
 
     User {
-        string id PK
+        long id PK
         decimal balance
         timestamp created_at
         timestamp updated_at
     }
 
     Order {
-        string id PK
-        string user_id FK
+        long id PK
+        long user_id FK
         decimal total_amount
         decimal discount_amount
         decimal final_amount
@@ -289,9 +249,9 @@ erDiagram
     }
 
     OrderItem {
-        string id PK
-        string order_id FK
-        string product_id FK
+        long id PK
+        long order_id FK
+        long product_id FK
         int quantity
         decimal unit_price
         decimal subtotal
@@ -300,9 +260,9 @@ erDiagram
     }
 
     UserCoupon {
-        string id PK
-        string user_id FK
-        string coupon_id FK
+        long id PK
+        long user_id FK
+        long coupon_id FK
         string status
         timestamp issued_at
         timestamp used_at
@@ -333,14 +293,14 @@ erDiagram
     Coupon ||--o{ UserCoupon : "issued as"
 
     User {
-        string id PK
+        long id PK
         decimal balance
         timestamp created_at
         timestamp updated_at
     }
 
     Coupon {
-        string id PK
+        long id PK
         string name
         int discount_rate
         int total_quantity
@@ -353,10 +313,10 @@ erDiagram
     }
 
     UserCoupon {
-        string id PK
-        string user_id FK
-        string coupon_id FK
-        string status
+        long id PK
+        long user_id FK
+        long coupon_id FK
+        long status
         timestamp issued_at
         timestamp used_at
         timestamp expires_at
@@ -381,31 +341,21 @@ erDiagram
 
 ---
 
-### 2.4 데이터 연동 도메인 (Outbox Pattern)
+### 2.4 배송 (shipping)
 
 ```mermaid
 erDiagram
-    Order ||--o{ DataTransmission : "triggers"
+    Order ||--o{ Shipping : "has"
 
-    Order {
-        string id PK
-        string user_id FK
-        decimal total_amount
-        decimal discount_amount
-        decimal final_amount
-        string status
-        timestamp paid_at
-        timestamp created_at
-        timestamp updated_at
-    }
-
-    DataTransmission {
-        string id PK
-        string order_id FK
-        json payload
-        string status
-        int attempts
-        timestamp sent_at
+    Shipping {
+        long id PK "배송 ID"
+        long order_id FK "주문 ID"
+        string carrier "택배사"
+        string tracking_number "송장번호"
+        timestamp shipping_start_at "배송 시작일"
+        timestamp estimated_arrival_at "도착 예정일"
+        timestamp delivered_at "실제 도착일"
+        string status "PENDING|IN_TRANSIT|DELIVERED"
         timestamp created_at
         timestamp updated_at
     }
