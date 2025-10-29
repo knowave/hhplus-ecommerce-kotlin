@@ -183,6 +183,8 @@ class CouponServiceImpl(
                 issuedAt = uc.issuedAt,
                 expiresAt = uc.expiresAt,
                 usedAt = uc.usedAt,
+                isExpired,
+                daysRemaining
             )
         }
 

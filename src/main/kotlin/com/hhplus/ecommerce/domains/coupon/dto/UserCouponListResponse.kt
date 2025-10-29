@@ -14,7 +14,9 @@ data class UserCouponItem(
     val status: String,
     val issuedAt: String,
     val expiresAt: String,
-    val usedAt: String?
+    val usedAt: String?,
+    val isExpired: Boolean,
+    val daysRemaining: Int
 )
 
 data class UserCouponSummary(
