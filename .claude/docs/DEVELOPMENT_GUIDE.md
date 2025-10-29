@@ -5,5 +5,6 @@
 4. API 문서 자동화를 위해서 spring docs를 사용
 5. 개발 단계가 아니기에 Mock Server를 docs/api를 이용하여 구현한다. 
 6. Mock Server를 구현할 때 controller class 에서 간단하게 Map or Object를 사용해서 구현한다.
-7. Type은 절대로 Any로 지정하지 않는다.
-8. GlobalCustomException을 사용하고 error message는 영어로 한다.
+7. Repository (임시 Mock으로 대체), Service, Controller 계층을 분리한다.
+8. Type은 절대로 Any로 지정하지 않는다.
+9. GlobalCustomException을 사용하고 error message는 영어로 한다.
