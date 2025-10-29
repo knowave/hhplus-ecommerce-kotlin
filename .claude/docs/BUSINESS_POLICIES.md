@@ -22,10 +22,13 @@
     - 재고 차감 (낙관적 락 사용)
     - 쿠폰 상태를 USED로 변경
     - 주문 상태를 PENDING으로 설정
+    - 배송 생성 시 PENDING으로 생성
 
 2. **결제 실행 시**
     - 사용자 잔액 차감
-    - 결제 성공 시 주문 상태를 PAID로 변경
+    - 결제 성공 시
+      - 주문 상태를 PAID로 변경
+      - 배송 준비중 상태의 배송 생성
     - 결제 실패 시 보상 트랜잭션 실행
 
 3. **결제 실패 시 보상 처리**
@@ -35,6 +38,7 @@
 
 ### 1.3 주문 취소 정책
 - PENDING 상태의 주문만 취소 가능
+- PENDING 상태의 배송만 취소 가능 
 - 취소 시 재고 복원 및 쿠폰 복원 처리
 - PAID 상태 주문은 별도 환불 프로세스 필요 (향후 구현)
 
@@ -268,111 +272,6 @@ finalAmount = totalAmount - discountAmount
     - 주문 데이터 외부 전송
     - 실패 시에도 주문은 정상 처리
 
-## Step 2: API 설계
-
-### 2.1 상품 관련 API (예시)
-
-```json
-# 상품 목록 조회
-GET /api/products
-Query:
-  category: string (optional)
-  sort: "price" | "popularity" | "newest"
-Response:
-  products: [
-    {
-      productId: string,
-      name: string,
-      price: number,
-      stock: number,
-      category: string
-    }
-  ]
-
-# 인기 상품 조회
-GET /api/products/top
-Response:
-  period: "3days",
-  products: [
-    {
-      rank: number,
-      productId: string,
-      name: string,
-      salesCount: number,
-      revenue: number
-    }
-  ]
-
-```
-
-### 2.2 주문/결제 API (예시)
-
-```json
-# 주문 생성
-POST /api/orders
-Request:
-  userId: string
-  items: [
-    {
-      productId: string,
-      quantity: number
-    }
-  ]
-  couponId: string (optional)
-Response:
-  orderId: string
-  items: [
-    {
-      productId: string,
-      name: string,
-      quantity: number,
-      unitPrice: number,
-      subtotal: number
-    }
-  ]
-  subtotalAmount: number
-  discountAmount: number
-  totalAmount: number
-  status: "PENDING" | "COMPLETED"
-
-# 결제 처리
-POST /api/orders/{orderId}/payment
-Request:
-  userId: string
-Response:
-  orderId: string
-  paidAmount: number
-  remainingBalance: number
-  status: "SUCCESS" | "FAILED"
-  dataTransmission: "SUCCESS" | "FAILED"
-
-```
-
-### 2.3 쿠폰 API (예시)
-
-```json
-# 쿠폰 발급 (선착순)
-POST /api/coupons/{couponId}/issue
-Request:
-  userId: string
-Response:
-  userCouponId: string
-  couponName: string
-  discountRate: number
-  expiresAt: string
-  remainingQuantity: number
-
-# 보유 쿠폰 조회
-GET /api/users/{userId}/coupons
-Response:
-  coupons: [
-    {
-      userCouponId: string,
-      couponName: string,
-      discountRate: number,
-      status: "AVAILABLE" | "USED" | "EXPIRED",
-      expiresAt: string
-    }
-  ]
-
-```
+5. 배송 시스템
+    - 주문 시 배송 준비중 상태의 배송 생성
+    - 실패 시 생성 X
