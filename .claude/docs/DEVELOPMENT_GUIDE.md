@@ -8,3 +8,5 @@
 7. Repository (임시 Mock으로 대체), Service, Controller 계층을 분리한다.
 8. Type은 절대로 Any로 지정하지 않는다.
 9. GlobalCustomException을 사용하고 error message는 영어로 한다.
+10. `application.yml` 파일에서 default path를 `/api` 로 설정되어 있어서 API 기본 경로에 `/api`를 붙이지 않아도 됨.
+11. 각 도메인의 pk는 `domainId`가 아니라 `id`로 정의.
