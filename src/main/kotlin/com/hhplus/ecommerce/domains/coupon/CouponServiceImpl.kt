@@ -4,11 +4,15 @@ import com.hhplus.ecommerce.common.exception.CouponNotFoundException
 import com.hhplus.ecommerce.common.exception.CouponAlreadyIssuedException
 import com.hhplus.ecommerce.common.exception.InvalidCouponDateException
 import com.hhplus.ecommerce.common.exception.CouponSoldOutException
+import com.hhplus.ecommerce.common.exception.UserCouponNotFoundException
 import com.hhplus.ecommerce.domains.coupon.dto.*
+import org.springframework.http.HttpStatus
 import org.springframework.stereotype.Service
+import org.springframework.web.server.ResponseStatusException
 import java.time.LocalDate
 import java.time.LocalDateTime
 import java.time.format.DateTimeFormatter
+import java.time.format.DateTimeParseException
 import java.time.temporal.ChronoUnit
 import kotlin.math.max
 
@@ -22,12 +26,12 @@ class CouponServiceImpl(
 
     override fun issueCoupon(couponId: Long, request: IssueCouponRequest): IssueCouponResponse {
         val coupon = couponRepository.findById(couponId)
-            ?: throw CouponNotFoundException(couponId.toString())
+            ?: throw CouponNotFoundException(couponId)
 
         // 1. 중복 발급 검증 (1인 1매 제한)
         val existingUserCoupon = couponRepository.findUserCoupon(request.userId, couponId)
         if (existingUserCoupon != null) {
-            throw CouponAlreadyIssuedException(request.userId.toString(), couponId.toString())
+            throw CouponAlreadyIssuedException(request.userId, couponId)
         }
 
         // 2. 발급 기간 검증
@@ -45,7 +49,7 @@ class CouponServiceImpl(
         // 3. 재고 검증 및 발급 (동시성 처리 시뮬레이션)
         synchronized(coupon) {
             if (coupon.issuedQuantity >= coupon.totalQuantity) {
-                throw CouponSoldOutException(couponId.toString())
+                throw CouponSoldOutException(couponId)
             }
 
             // 발급 수량 증가
@@ -108,7 +112,7 @@ class CouponServiceImpl(
 
     override fun getCouponDetail(couponId: Long): CouponDetailResponse {
         val coupon = couponRepository.findById(couponId)
-            ?: throw CouponNotFoundException(couponId.toString())
+            ?: throw CouponNotFoundException(couponId)
 
         // 발급 가능 여부 판단
         val today = LocalDate.now()
@@ -194,5 +198,58 @@ class CouponServiceImpl(
             coupons = items,
             summary = summary
         )
+    }
+
+    override fun getUserCoupon(userId: Long, userCouponId: Long): UserCouponResponse {
+        val userCoupon = couponRepository.findUserCouponByIdAndUserId(id = userCouponId, userId)
+            ?: throw UserCouponNotFoundException(userId, userCouponId)
+        val coupon = couponRepository.findById(userCoupon.couponId)
+
+        val couponName = coupon?.name
+        val description = coupon?.description ?: ""
+        val discountRate = coupon?.discountRate ?: 0
+
+        val now = LocalDateTime.now()
+        val expiresAtDate = try {
+            parseDateTimeFlexible(userCoupon.expiresAt)
+        } catch (ex: ResponseStatusException) {
+            // 파싱 실패 시 현재시간을 만료로 처리
+            now
+        }
+
+        val isExpired = expiresAtDate.isBefore(now) || expiresAtDate.isEqual(now).not() && expiresAtDate.toLocalDate().isBefore(now.toLocalDate())
+        val canUse = (userCoupon.status == CouponStatus.AVAILABLE) && !isExpired
+
+        return UserCouponResponse(
+            id = userCoupon.id,
+            userId = userCoupon.userId,
+            couponId = userCoupon.couponId,
+            couponName = couponName!!,
+            description = description,
+            discountRate = discountRate,
+            status = userCoupon.status,
+            issuedAt = userCoupon.issuedAt,
+            expiresAt = userCoupon.expiresAt,
+            usedAt = userCoupon.usedAt,
+            isExpired = isExpired,
+            canUse = canUse
+        )
+    }
+
+    private fun parseDateTimeFlexible(dateTimeStr: String): LocalDateTime {
+        // 허용 포맷: "yyyy-MM-dd HH:mm:ss" 또는 ISO "yyyy-MM-dd'T'HH:mm:ss"
+        return try {
+            LocalDateTime.parse(dateTimeStr, DATETIME_FORMATTER)
+        } catch (e1: DateTimeParseException) {
+            try {
+                LocalDateTime.parse(dateTimeStr, DateTimeFormatter.ISO_DATE_TIME)
+            } catch (e2: DateTimeParseException) {
+                try {
+                    LocalDateTime.parse(dateTimeStr.replace('T', ' '), DATETIME_FORMATTER)
+                } catch (e3: DateTimeParseException) {
+                    throw ResponseStatusException(HttpStatus.INTERNAL_SERVER_ERROR, "Invalid date format: $dateTimeStr")
+                }
+            }
+        }
     }
 }

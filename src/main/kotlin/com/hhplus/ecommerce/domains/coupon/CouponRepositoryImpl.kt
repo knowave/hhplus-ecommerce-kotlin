@@ -123,4 +123,8 @@ class CouponRepositoryImpl : CouponRepository {
     override fun findUserCouponsByUserId(userId: Long): List<UserCoupon> {
         return userCoupons.values.filter { it.userId == userId }
     }
+
+    override fun findUserCouponByIdAndUserId(id: Long, userId: Long): UserCoupon? {
+        return userCoupons.values.firstOrNull { it.id == id && it.userId == userId }
+    }
 }

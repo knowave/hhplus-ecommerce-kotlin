@@ -19,4 +19,6 @@ interface CouponRepository {
     fun generateUserCouponId(): Long
 
     fun findUserCouponsByUserId(userId: Long): List<UserCoupon>
+
+    fun findUserCouponByIdAndUserId(id: Long, userId: Long): UserCoupon?
 }

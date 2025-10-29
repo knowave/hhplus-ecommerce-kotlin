@@ -9,13 +9,13 @@ open class BaseException(
 ) : RuntimeException(message)
 
 // Product related
-class ProductNotFoundException(productId: String) : BaseException(
+class ProductNotFoundException(productId: Long) : BaseException(
     errorCode = ErrorCode.PRODUCT_NOT_FOUND,
     message = "Product not found with id: $productId"
 )
 
 class InsufficientStockException(
-    productId: String,
+    productId: Long,
     requested: Int,
     available: Int
 ) : BaseException(
@@ -29,7 +29,7 @@ class InsufficientStockException(
 )
 
 // Order related
-class OrderNotFoundException(orderId: String) : BaseException(
+class OrderNotFoundException(orderId: Long) : BaseException(
     errorCode = ErrorCode.ORDER_NOT_FOUND,
     message = "Order not found with id: $orderId"
 )
@@ -39,7 +39,7 @@ class InvalidQuantityException(quantity: Int) : BaseException(
     message = "Invalid quantity: $quantity"
 )
 
-class OrderAlreadyPaidException(orderId: String) : BaseException(
+class OrderAlreadyPaidException(orderId: Long) : BaseException(
     errorCode = ErrorCode.ORDER_ALREADY_PAID,
     message = "Order already paid. Order id: $orderId"
 )
@@ -63,7 +63,7 @@ class PaymentFailedException(reason: String) : BaseException(
 )
 
 // Coupon related
-class CouponSoldOutException(couponId: String) : BaseException(
+class CouponSoldOutException(couponId: Long) : BaseException(
     errorCode = ErrorCode.COUPON_SOLD_OUT,
     message = "Coupon sold out. Coupon id: $couponId"
 )
@@ -73,24 +73,29 @@ class InvalidCouponException(reason: String) : BaseException(
     message = "Invalid coupon. Reason: $reason"
 )
 
-class ExpiredCouponException(couponId: String) : BaseException(
+class ExpiredCouponException(couponId: Long) : BaseException(
     errorCode = ErrorCode.EXPIRED_COUPON,
     message = "Coupon expired. Coupon id: $couponId"
 )
 
-class AlreadyUsedCouponException(couponId: String) : BaseException(
+class AlreadyUsedCouponException(couponId: Long) : BaseException(
     errorCode = ErrorCode.ALREADY_USED_COUPON,
     message = "Coupon already used. Coupon id: $couponId"
 )
 
-class CouponNotFoundException(couponId: String) : BaseException(
+class CouponNotFoundException(couponId: Long) : BaseException(
     errorCode = ErrorCode.COUPON_NOT_FOUND,
     message = "Coupon not found with id: $couponId"
 )
 
-class CouponAlreadyIssuedException(userId: String, couponId: String) : BaseException(
+class CouponAlreadyIssuedException(userId: Long, couponId: Long) : BaseException(
     errorCode = ErrorCode.COUPON_ALREADY_ISSUED,
     message = "User already has this coupon. User id: $userId, Coupon id: $couponId"
+)
+
+class UserCouponNotFoundException(userId: Long, userCouponId: Long) : BaseException(
+    errorCode = ErrorCode.USER_COUPON_NOT_FOUND,
+    message = "User Coupon Not found userId: $userId, userCouponId: $userCouponId"
 )
 
 class InvalidDiscountRateException(discountRate: Int) : BaseException(
@@ -109,12 +114,12 @@ class InvalidCouponDateException(message: String) : BaseException(
 )
 
 // User related
-class UserNotFoundException(userId: String) : BaseException(
+class UserNotFoundException(userId: Long) : BaseException(
     errorCode = ErrorCode.USER_NOT_FOUND,
     message = "User not found with id: $userId"
 )
 
-class DuplicateEmailException(email: String) : BaseException(
+class DuplicateEmailException(email: Long) : BaseException(
     errorCode = ErrorCode.DUPLICATE_EMAIL,
     message = "Email already exists: $email"
 )

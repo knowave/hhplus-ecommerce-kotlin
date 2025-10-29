@@ -5,6 +5,7 @@ import com.hhplus.ecommerce.domains.coupon.dto.CouponDetailResponse
 import com.hhplus.ecommerce.domains.coupon.dto.IssueCouponRequest
 import com.hhplus.ecommerce.domains.coupon.dto.IssueCouponResponse
 import com.hhplus.ecommerce.domains.coupon.dto.UserCouponListResponse
+import com.hhplus.ecommerce.domains.coupon.dto.UserCouponResponse
 import org.springframework.http.ResponseEntity
 import org.springframework.web.bind.annotation.*
 
@@ -35,12 +36,21 @@ class CouponController(
         return ResponseEntity.ok(response)
     }
 
-    @GetMapping("/{userId}")
+    @GetMapping("/users/{userId}")
     fun getUserCoupons(
         @PathVariable userId: Long,
         @RequestParam(required = false) status: CouponStatus?
     ): ResponseEntity<UserCouponListResponse> {
         val response = couponService.getUserCoupons(userId, status)
+        return ResponseEntity.ok(response)
+    }
+
+    @GetMapping("/users/{userId}/coupons/{userCouponId}")
+    fun getUserCoupon(
+        @PathVariable userId: Long,
+        @PathVariable userCouponId: Long
+    ): ResponseEntity<UserCouponResponse> {
+        val response = couponService.getUserCoupon(userId, userCouponId)
         return ResponseEntity.ok(response)
     }
 }

@@ -31,6 +31,9 @@ enum class ErrorCode(
     INVALID_COUPON_QUANTITY("C008", "Invalid coupon quantity", HttpStatus.BAD_REQUEST),
     INVALID_COUPON_DATE("C009", "Invalid coupon date", HttpStatus.BAD_REQUEST),
 
+    // User Coupon related
+    USER_COUPON_NOT_FOUND("UC001", "User coupon not found", HttpStatus.NOT_FOUND),
+
     // User related
     USER_NOT_FOUND("U001", "User not found", HttpStatus.NOT_FOUND),
     DUPLICATE_EMAIL("U002", "Email already exists", HttpStatus.CONFLICT),
