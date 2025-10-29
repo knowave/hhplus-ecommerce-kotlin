@@ -10,49 +10,75 @@
 erDiagram
     User ||--o{ Order : "places"
     User ||--o{ UserCoupon : "owns"
+    User ||--o{ Cart : "owns"
+    User ||--o{ Payment : "makes"
 
     Product ||--o{ OrderItem : "ordered in"
+    Product ||--o{ CartItem : "added to cart"
+
+    Cart ||--|{ CartItem : "contains"
 
     Order ||--|{ OrderItem : "contains"
+    Order ||--o| Payment : "paid by"
     Order ||--o{ DataTransmission : "triggers"
     Order }o--o| UserCoupon : "may use"
 
     Coupon ||--o{ UserCoupon : "issued as"
 
     User {
-        string id PK "UUID"
+        long id PK "사용자 ID"
+        string email "이메일"
+        string name "사용자명"
         decimal balance "사용자 잔액"
         timestamp created_at
         timestamp updated_at
     }
 
     Product {
-        string id PK "UUID"
+        long id PK "상품 ID"
         string name "상품명"
         text description "상세 설명"
         decimal price "가격"
         int stock "재고 수량"
         string category "카테고리"
+        long version "낙관적 락 버전"
+        timestamp created_at
+        timestamp updated_at
+    }
+
+    Cart {
+        long id PK "장바구니 ID"
+        long user_id FK "사용자 ID"
+        timestamp created_at
+        timestamp updated_at
+    }
+
+    CartItem {
+        long id PK "장바구니 아이템 ID"
+        long cart_id FK "장바구니 ID"
+        long product_id FK "상품 ID"
+        int quantity "수량"
         timestamp created_at
         timestamp updated_at
     }
 
     Order {
-        string id PK "UUID"
-        string user_id FK
+        long id PK "주문 ID"
+        string order_number "주문 번호"
+        long user_id FK "사용자 ID"
+        long user_coupon_id FK "사용한 쿠폰 ID"
         decimal total_amount "상품 총액"
         decimal discount_amount "할인 금액"
         decimal final_amount "최종 결제액"
         string status "PENDING|PAID|CANCELLED"
-        timestamp paid_at "결제 일시"
         timestamp created_at
         timestamp updated_at
     }
 
     OrderItem {
-        string id PK "UUID"
-        string order_id FK
-        string product_id FK
+        long id PK "주문 아이템 ID"
+        long order_id FK "주문 ID"
+        long product_id FK "상품 ID"
         int quantity "주문 수량"
         decimal unit_price "주문시 단가"
         decimal subtotal "소계"
@@ -60,23 +86,36 @@ erDiagram
         timestamp updated_at
     }
 
+    Payment {
+        long id PK "결제 ID"
+        long order_id FK "주문 ID"
+        long user_id FK "사용자 ID"
+        decimal amount "결제 금액"
+        string status "SUCCESS|FAILED"
+        timestamp paid_at "결제 일시"
+        timestamp created_at
+        timestamp updated_at
+    }
+
     Coupon {
-        string id PK "UUID"
+        long id PK "쿠폰 ID"
         string name "쿠폰명"
+        text description "쿠폰 설명"
         int discount_rate "할인율(1-100)"
         int total_quantity "총 발급가능수"
         int issued_quantity "현재 발급수"
         timestamp start_date "사용 시작일"
         timestamp end_date "사용 종료일"
+        int validity_days "유효 기간(일)"
         long version "낙관적 락 버전"
         timestamp created_at
         timestamp updated_at
     }
 
     UserCoupon {
-        string id PK "UUID"
-        string user_id FK
-        string coupon_id FK
+        long id PK "사용자 쿠폰 ID"
+        long user_id FK "사용자 ID"
+        long coupon_id FK "쿠폰 ID"
         string status "AVAILABLE|USED|EXPIRED"
         timestamp issued_at "발급일"
         timestamp used_at "사용일"
@@ -86,12 +125,15 @@ erDiagram
     }
 
     DataTransmission {
-        string id PK "UUID"
-        string order_id FK
+        long id PK "전송 ID"
+        long order_id FK "주문 ID"
         json payload "전송 데이터"
         string status "PENDING|SUCCESS|FAILED"
         int attempts "재시도 횟수"
+        int max_attempts "최대 재시도 횟수"
         timestamp sent_at "전송 일시"
+        timestamp next_retry_at "다음 재시도 시간"
+        text error_message "에러 메시지"
         timestamp created_at
         timestamp updated_at
     }
@@ -106,25 +148,36 @@ erDiagram
 ```mermaid
 erDiagram
     Product ||--o{ OrderItem : "included in"
+    Product ||--o{ CartItem : "added to cart"
 
     Product {
-        string id PK
+        long id PK
         string name "상품명"
         text description
         decimal price
         int stock "재고 수량"
         string category
+        long version "낙관적 락 버전"
         timestamp created_at
         timestamp updated_at
     }
 
     OrderItem {
-        string id PK
-        string order_id FK
-        string product_id FK
+        long id PK
+        long order_id FK
+        long product_id FK
         int quantity
         decimal unit_price
         decimal subtotal
+        timestamp created_at
+        timestamp updated_at
+    }
+
+    CartItem {
+        long id PK
+        long cart_id FK
+        long product_id FK
+        int quantity
         timestamp created_at
         timestamp updated_at
     }
@@ -135,13 +188,80 @@ erDiagram
 - 재고 실시간 확인
 - 인기 상품 통계 (최근 3일, Top 5)
 
+**동시성 제어**:
+- `version`: 재고 차감 시 낙관적 락 사용
+- `stock >= 0` 제약 조건으로 음수 재고 방지
+
 **인덱스**:
 - `idx_category`: (category) - 카테고리별 조회 최적화
 - `idx_created_at`: (created_at) - 신상품 조회 최적화
 
 ---
 
-### 2.2 주문/결제 도메인
+### 2.2 장바구니 도메인
+
+```mermaid
+erDiagram
+    User ||--o| Cart : "owns"
+    Cart ||--|{ CartItem : "contains"
+    Product ||--o{ CartItem : "added to"
+
+    User {
+        long id PK
+        string email
+        string name
+        decimal balance
+        timestamp created_at
+        timestamp updated_at
+    }
+
+    Cart {
+        long id PK
+        long user_id FK
+        timestamp created_at
+        timestamp updated_at
+    }
+
+    CartItem {
+        long id PK
+        long cart_id FK
+        long product_id FK
+        int quantity
+        timestamp created_at
+        timestamp updated_at
+    }
+
+    Product {
+        long id PK
+        string name
+        decimal price
+        int stock
+        string category
+        long version
+        timestamp created_at
+        timestamp updated_at
+    }
+```
+
+**핵심 기능**:
+- 장바구니에 상품 추가
+- 수량 변경
+- 상품 삭제
+- 장바구니 조회 (재고 확인 포함)
+
+**비즈니스 규칙**:
+- 1인 1개의 장바구니
+- 동일 상품 추가 시 수량 합산
+- 최대 수량 제한: 100개/상품
+- 주문 완료 시 장바구니 자동 비우기
+
+**인덱스**:
+- `idx_user_id`: (user_id) - 사용자별 장바구니 조회
+- `idx_cart_product`: (cart_id, product_id) - 중복 상품 체크
+
+---
+
+### 2.3 주문/결제 도메인
 
 ```mermaid
 erDiagram
@@ -346,16 +466,37 @@ flowchart TD
 |------------|------------|----------|
 | User | Order | 한 사용자는 여러 주문을 생성 |
 | User | UserCoupon | 한 사용자는 여러 쿠폰을 보유 |
+| User | Payment | 한 사용자는 여러 결제를 실행 |
+| User | Cart | 한 사용자는 하나의 장바구니를 소유 (1:1) |
+| Cart | CartItem | 한 장바구니는 여러 상품 아이템 포함 |
 | Order | OrderItem | 한 주문은 여러 상품 아이템 포함 |
 | Order | DataTransmission | 한 주문은 여러 전송 이력 보유 (재시도) |
 | Product | OrderItem | 한 상품은 여러 주문에 포함 |
+| Product | CartItem | 한 상품은 여러 장바구니에 추가 |
 | Coupon | UserCoupon | 한 쿠폰은 여러 사용자에게 발급 |
 
-### 4.2 선택적 관계 (Optional)
+### 4.2 1:1 관계
+| 테이블 1 | 테이블 2 | 관계 설명 |
+|---------|---------|----------|
+| User | Cart | 한 사용자는 하나의 장바구니만 소유 |
+| Order | Payment | 한 주문은 하나의 결제만 연결 (선택적) |
+
+### 4.3 선택적 관계 (Optional)
 | 테이블 | 관계 | 설명 |
 |--------|------|------|
 | Order | UserCoupon | 주문 시 쿠폰 사용은 선택사항 |
+| Order | Payment | PAID 상태일 때만 Payment 레코드 생성 |
 | Order | DataTransmission | PAID 상태일 때만 전송 레코드 생성 |
+
+### 4.4 주요 제약 조건
+| 테이블 | 컬럼 | 제약 조건 | 설명 |
+|--------|------|----------|------|
+| Product | stock, version | CHECK(stock >= 0), version 낙관적 락 | 재고는 음수 불가, 동시성 제어 |
+| Coupon | issued_quantity, version | issued_quantity <= total_quantity, version 낙관적 락 | 발급 수량 제한, 동시성 제어 |
+| UserCoupon | user_id, coupon_id | UNIQUE(user_id, coupon_id) | 1인 1매 제한 |
+| CartItem | cart_id, product_id | UNIQUE(cart_id, product_id) | 장바구니 내 중복 상품 방지 |
+| Order | order_number | UNIQUE | 주문 번호 고유성 |
+| DataTransmission | attempts | attempts <= max_attempts | 최대 재시도 횟수 제한 |
 
 ---
 
