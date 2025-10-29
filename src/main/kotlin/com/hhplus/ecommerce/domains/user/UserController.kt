@@ -6,19 +6,11 @@ import org.springframework.http.ResponseEntity
 import org.springframework.web.bind.annotation.*
 
 @RestController
-@RequestMapping("/api/users")
+@RequestMapping("/users")
 class UserController(
     private val userService: UserService
 ) {
 
-    /**
-     * 사용자 생성
-     *
-     * POST /api/users/
-     *
-     * @param request 사용자 생성 요청 (초기 잔액)
-     * @return 생성된 사용자 정보 (201 CREATED)
-     */
     @PostMapping
     fun createUser(@RequestBody request: CreateUserRequest): ResponseEntity<User> {
         val user = userService.createUser(request)
