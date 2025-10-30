@@ -90,7 +90,7 @@ class UserServiceImpl(
 
     private fun findUserById(userId: Long): User {
         return userRepository.findById(userId)
-            ?: throw UserNotFoundException(userId.toString())
+            ?: throw UserNotFoundException(userId)
     }
 
     // 충전 금액의 유효성을 검증

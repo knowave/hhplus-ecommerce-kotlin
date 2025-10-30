@@ -165,6 +165,6 @@ class ProductServiceImpl(
 
     private fun findProductById(productId: Long): Product {
         return productRepository.findById(productId)
-            ?: throw ProductNotFoundException(productId.toString())
+            ?: throw ProductNotFoundException(productId)
     }
 }

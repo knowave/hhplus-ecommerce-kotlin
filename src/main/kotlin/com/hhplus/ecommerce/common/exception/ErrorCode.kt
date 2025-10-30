@@ -11,6 +11,10 @@ enum class ErrorCode(
     PRODUCT_NOT_FOUND("P001", "Product not found", HttpStatus.NOT_FOUND),
     INSUFFICIENT_STOCK("P002", "Insufficient stock", HttpStatus.BAD_REQUEST),
 
+    // Cart related
+    CART_ITEM_NOT_FOUND("CART001", "Cart item not found", HttpStatus.NOT_FOUND),
+    EXCEED_MAX_QUANTITY("CART002", "Exceed max quantity", HttpStatus.BAD_REQUEST),
+
     // Order related
     INVALID_QUANTITY("O001", "Invalid quantity", HttpStatus.BAD_REQUEST),
     ORDER_NOT_FOUND("O002", "Order not found", HttpStatus.NOT_FOUND),

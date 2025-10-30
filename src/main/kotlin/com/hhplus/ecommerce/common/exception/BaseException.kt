@@ -28,6 +28,29 @@ class InsufficientStockException(
     )
 )
 
+// Cart related
+class CartItemNotFoundException(cartItemId: Long) : BaseException(
+    errorCode = ErrorCode.CART_ITEM_NOT_FOUND,
+    message = "Cart item not found with id: $cartItemId"
+)
+
+class ExceedMaxQuantityException(
+    maxQuantity: Int,
+    attempted: Int
+) : BaseException(
+    errorCode = ErrorCode.EXCEED_MAX_QUANTITY,
+    message = "Exceed max quantity. Max: $maxQuantity, Attempted: $attempted",
+    data = mapOf(
+        "maxQuantity" to maxQuantity,
+        "attempted" to attempted
+    )
+)
+
+class ForbiddenException(message: String) : BaseException(
+    errorCode = ErrorCode.FORBIDDEN,
+    message = message
+)
+
 // Order related
 class OrderNotFoundException(orderId: Long) : BaseException(
     errorCode = ErrorCode.ORDER_NOT_FOUND,
