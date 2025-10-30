@@ -25,6 +25,13 @@ enum class ErrorCode(
     // Payment related
     INSUFFICIENT_BALANCE("PAY001", "Insufficient balance", HttpStatus.BAD_REQUEST),
     PAYMENT_FAILED("PAY002", "Payment failed", HttpStatus.INTERNAL_SERVER_ERROR),
+    PAYMENT_NOT_FOUND("PAY003", "Payment not found", HttpStatus.NOT_FOUND),
+    INVALID_ORDER_STATUS("PAY004", "Invalid order status for payment", HttpStatus.BAD_REQUEST),
+    ALREADY_PAID("PAY005", "Order already paid", HttpStatus.BAD_REQUEST),
+
+    // Data Transmission related
+    TRANSMISSION_NOT_FOUND("DT001", "Data transmission not found", HttpStatus.NOT_FOUND),
+    ALREADY_SUCCESS("DT002", "Transmission already successful", HttpStatus.BAD_REQUEST),
 
     // Coupon related
     COUPON_SOLD_OUT("C001", "Coupon sold out", HttpStatus.BAD_REQUEST),

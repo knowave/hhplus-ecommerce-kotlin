@@ -79,8 +79,8 @@ class CannotCancelOrderException(orderId: Long, currentStatus: String) : BaseExc
 
 // Payment related
 class InsufficientBalanceException(
-    required: BigDecimal,
-    available: BigDecimal
+    required: Long,
+    available: Long
 ) : BaseException(
     errorCode = ErrorCode.INSUFFICIENT_BALANCE,
     message = "Insufficient balance. Required: $required, Available: $available",
@@ -93,6 +93,32 @@ class InsufficientBalanceException(
 class PaymentFailedException(reason: String) : BaseException(
     errorCode = ErrorCode.PAYMENT_FAILED,
     message = "Payment failed. Reason: $reason"
+)
+
+class PaymentNotFoundException(paymentId: Long) : BaseException(
+    errorCode = ErrorCode.PAYMENT_NOT_FOUND,
+    message = "Payment not found with id: $paymentId"
+)
+
+class InvalidOrderStatusException(orderId: Long, currentStatus: String) : BaseException(
+    errorCode = ErrorCode.INVALID_ORDER_STATUS,
+    message = "Invalid order status for payment. Order id: $orderId, Status: $currentStatus"
+)
+
+class AlreadyPaidException(orderId: Long) : BaseException(
+    errorCode = ErrorCode.ALREADY_PAID,
+    message = "Order already paid. Order id: $orderId"
+)
+
+// Data Transmission related
+class TransmissionNotFoundException(transmissionId: Long) : BaseException(
+    errorCode = ErrorCode.TRANSMISSION_NOT_FOUND,
+    message = "Data transmission not found with id: $transmissionId"
+)
+
+class AlreadySuccessException(transmissionId: Long) : BaseException(
+    errorCode = ErrorCode.ALREADY_SUCCESS,
+    message = "Transmission already successful. Transmission id: $transmissionId"
 )
 
 // Coupon related
