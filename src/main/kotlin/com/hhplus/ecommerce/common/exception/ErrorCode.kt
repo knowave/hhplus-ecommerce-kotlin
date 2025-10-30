@@ -47,6 +47,15 @@ enum class ErrorCode(
     // User Coupon related
     USER_COUPON_NOT_FOUND("UC001", "User coupon not found", HttpStatus.NOT_FOUND),
 
+    // Shipping related
+    SHIPPING_NOT_FOUND("S001", "Shipping not found", HttpStatus.NOT_FOUND),
+    ORDER_NOT_FOUND_FOR_SHIPPING("S002", "Order not found", HttpStatus.NOT_FOUND),
+    INVALID_ESTIMATED_DATE("S003", "Invalid estimated arrival date", HttpStatus.BAD_REQUEST),
+    DUPLICATE_TRACKING_NUMBER("S004", "Duplicate tracking number", HttpStatus.BAD_REQUEST),
+    SHIPPING_ALREADY_EXISTS("S005", "Shipping already exists for this order", HttpStatus.CONFLICT),
+    INVALID_STATUS_TRANSITION("S006", "Invalid status transition", HttpStatus.BAD_REQUEST),
+    ALREADY_DELIVERED("S007", "Already delivered", HttpStatus.GONE),
+
     // User related
     USER_NOT_FOUND("U001", "User not found", HttpStatus.NOT_FOUND),
     DUPLICATE_EMAIL("U002", "Email already exists", HttpStatus.CONFLICT),

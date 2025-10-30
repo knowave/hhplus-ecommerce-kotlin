@@ -204,3 +204,39 @@ class BalanceLimitExceededException(
         "attempted" to attempted
     )
 )
+
+// Shipping related
+class ShippingNotFoundException(shippingId: Long) : BaseException(
+    errorCode = ErrorCode.SHIPPING_NOT_FOUND,
+    message = "Shipping not found with id: $shippingId"
+)
+
+class OrderNotFoundForShippingException(orderId: Long) : BaseException(
+    errorCode = ErrorCode.ORDER_NOT_FOUND_FOR_SHIPPING,
+    message = "Order not found with id: $orderId"
+)
+
+class InvalidEstimatedDateException(message: String) : BaseException(
+    errorCode = ErrorCode.INVALID_ESTIMATED_DATE,
+    message = message
+)
+
+class DuplicateTrackingNumberException(trackingNumber: String) : BaseException(
+    errorCode = ErrorCode.DUPLICATE_TRACKING_NUMBER,
+    message = "Tracking number already exists: $trackingNumber"
+)
+
+class ShippingAlreadyExistsException(orderId: Long) : BaseException(
+    errorCode = ErrorCode.SHIPPING_ALREADY_EXISTS,
+    message = "Shipping already exists for order id: $orderId"
+)
+
+class InvalidStatusTransitionException(currentStatus: String, newStatus: String) : BaseException(
+    errorCode = ErrorCode.INVALID_STATUS_TRANSITION,
+    message = "Cannot transition from $currentStatus to $newStatus"
+)
+
+class AlreadyDeliveredException(shippingId: Long) : BaseException(
+    errorCode = ErrorCode.ALREADY_DELIVERED,
+    message = "Shipping already delivered. Shipping id: $shippingId"
+)
