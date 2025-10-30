@@ -67,6 +67,16 @@ class OrderAlreadyPaidException(orderId: Long) : BaseException(
     message = "Order already paid. Order id: $orderId"
 )
 
+class InvalidOrderItemsException(message: String) : BaseException(
+    errorCode = ErrorCode.INVALID_ORDER_ITEMS,
+    message = message
+)
+
+class CannotCancelOrderException(orderId: Long, currentStatus: String) : BaseException(
+    errorCode = ErrorCode.CANNOT_CANCEL_ORDER,
+    message = "Cannot cancel order. Order id: $orderId, Current status: $currentStatus"
+)
+
 // Payment related
 class InsufficientBalanceException(
     required: BigDecimal,

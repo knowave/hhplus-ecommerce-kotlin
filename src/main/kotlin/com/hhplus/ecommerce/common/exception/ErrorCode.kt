@@ -19,6 +19,8 @@ enum class ErrorCode(
     INVALID_QUANTITY("O001", "Invalid quantity", HttpStatus.BAD_REQUEST),
     ORDER_NOT_FOUND("O002", "Order not found", HttpStatus.NOT_FOUND),
     ORDER_ALREADY_PAID("O003", "Order already paid", HttpStatus.BAD_REQUEST),
+    INVALID_ORDER_ITEMS("O004", "Invalid order items", HttpStatus.BAD_REQUEST),
+    CANNOT_CANCEL_ORDER("O005", "Cannot cancel order", HttpStatus.BAD_REQUEST),
 
     // Payment related
     INSUFFICIENT_BALANCE("PAY001", "Insufficient balance", HttpStatus.BAD_REQUEST),
