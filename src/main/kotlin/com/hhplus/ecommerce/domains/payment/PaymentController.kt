@@ -1,19 +1,18 @@
 package com.hhplus.ecommerce.domains.payment
 
 import com.hhplus.ecommerce.domains.payment.dto.*
+import io.swagger.v3.oas.annotations.Operation
 import org.springframework.http.ResponseEntity
 import org.springframework.web.bind.annotation.*
 
 @RestController
+@RequestMapping("/payments")
 class PaymentController(
     private val paymentService: PaymentService
 ) {
 
-    /**
-     * 1. 결제 처리
-     * POST /api/orders/{orderId}/payment
-     */
-    @PostMapping("/api/orders/{orderId}/payment")
+    @Operation(summary = "결제 처리", description = "주문 ID로 결제를 처리합니다")
+    @PostMapping("/orders/{orderId}/payment")
     fun processPayment(
         @PathVariable orderId: Long,
         @RequestBody request: ProcessPaymentRequest
@@ -22,11 +21,8 @@ class PaymentController(
         return ResponseEntity.ok(response)
     }
 
-    /**
-     * 2. 결제 정보 조회
-     * GET /api/payments/{paymentId}?userId={userId}
-     */
-    @GetMapping("/api/payments/{paymentId}")
+    @Operation(summary = "결제 정보 조회", description = "결제 ID와 사용자 ID로 결제 정보를 조회합니다")
+    @GetMapping("/{paymentId}")
     fun getPaymentDetail(
         @PathVariable paymentId: Long,
         @RequestParam userId: Long
@@ -35,11 +31,8 @@ class PaymentController(
         return ResponseEntity.ok(response)
     }
 
-    /**
-     * 3. 주문별 결제 내역 조회
-     * GET /api/orders/{orderId}/payment?userId={userId}
-     */
-    @GetMapping("/api/orders/{orderId}/payment")
+    @Operation(summary = "주문별 결제 내역 조회", description = "주문 ID와 사용자 ID로 결제 내역을 조회합니다")
+    @GetMapping("/orders/{orderId}/payment")
     fun getOrderPayment(
         @PathVariable orderId: Long,
         @RequestParam userId: Long
@@ -48,11 +41,8 @@ class PaymentController(
         return ResponseEntity.ok(response)
     }
 
-    /**
-     * 4. 데이터 전송 상태 조회
-     * GET /api/data-transmissions/{transmissionId}
-     */
-    @GetMapping("/api/data-transmissions/{transmissionId}")
+    @Operation(summary = "데이터 전송 상태 조회", description = "전송 ID로 데이터 전송 상태를 조회합니다")
+    @GetMapping("/data-transmissions/{transmissionId}")
     fun getTransmissionDetail(
         @PathVariable transmissionId: Long
     ): ResponseEntity<TransmissionDetailResponse> {
@@ -60,11 +50,8 @@ class PaymentController(
         return ResponseEntity.ok(response)
     }
 
-    /**
-     * 5. 데이터 전송 재시도
-     * POST /api/data-transmissions/{transmissionId}/retry
-     */
-    @PostMapping("/api/data-transmissions/{transmissionId}/retry")
+    @Operation(summary = "데이터 전송 재시도", description = "전송 ID로 실패한 데이터 전송을 재시도합니다")
+    @PostMapping("/data-transmissions/{transmissionId}/retry")
     fun retryTransmission(
         @PathVariable transmissionId: Long
     ): ResponseEntity<RetryTransmissionResponse> {

@@ -36,8 +36,7 @@ class OrderServiceImpl(
         // 1. 요청 검증
         validateOrderRequest(request)
 
-        // 2. 사용자 존재 확인
-        val user = userRepository.findById(request.userId)
+        userRepository.findById(request.userId)
             ?: throw UserNotFoundException(request.userId)
 
         // 3. 상품 검증 및 재고 확인
