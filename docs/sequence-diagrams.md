@@ -862,9 +862,176 @@ sequenceDiagram
 
 ---
 
-## 6. 데이터 연동
+## 6. 배송 관리
 
-### 6.1 데이터 전송 (Outbox Pattern)
+### 6.1 배송 정보 생성 (주문 완료 시 자동 생성)
+
+```mermaid
+sequenceDiagram
+    participant Service as OrderService
+    participant OrderRepo as OrderRepository
+    participant ShippingRepo as ShippingRepository
+    participant DB as Database
+
+    Note over Service: 결제 완료 후 배송 정보 자동 생성
+
+    Service->>Service: order.status == PAID 확인
+
+    Note over Service: 1. 배송 정보 생성
+    Service->>Service: Shipping 생성<br/>(orderId, status = PENDING)
+    Service->>ShippingRepo: save(shipping)
+    ShippingRepo->>DB: INSERT INTO shippings<br/>(order_id, status, created_at)<br/>VALUES (?, 'PENDING', NOW())
+    DB-->>ShippingRepo: Success
+    ShippingRepo-->>Service: Saved Shipping
+
+    Service-->>Service: 배송 정보 생성 완료
+
+    Note over Service,DB: 배송 상태: PENDING<br/>택배사/송장번호: 미입력
+```
+
+**핵심 로직**:
+- 주문 결제 완료 시 자동으로 배송 정보 생성
+- 초기 상태는 PENDING
+- 택배사 및 송장번호는 추후 입력
+
+---
+
+### 6.2 배송 시작 처리
+
+```mermaid
+sequenceDiagram
+    actor Admin as 관리자
+    participant Controller as ShippingController
+    participant Service as ShippingService
+    participant Repository as ShippingRepository
+    participant DB as Database
+
+    Admin->>Controller: PUT /api/shippings/{shippingId}/start<br/>{carrier, trackingNumber, estimatedArrivalAt}
+    Controller->>Service: startShipping(shippingId, request)
+
+    Note over Service: 1. 배송 정보 조회
+    Service->>Repository: findById(shippingId)
+    Repository->>DB: SELECT * FROM shippings WHERE id = ?
+    DB-->>Repository: Shipping (status = PENDING)
+    Repository-->>Service: Shipping
+
+    Note over Service: 2. 상태 검증
+    Service->>Service: shipping.status == PENDING 확인
+
+    alt 상태가 PENDING이 아님
+        Service-->>Controller: InvalidShippingStatusException
+        Controller-->>Admin: 400 Bad Request<br/>배송을 시작할 수 없는 상태입니다
+    end
+
+    Note over Service: 3. 배송 시작 처리
+    Service->>Service: shipping.start()<br/>(carrier, trackingNumber,<br/>shippingStartAt = NOW,<br/>estimatedArrivalAt,<br/>status = IN_TRANSIT)
+    Service->>Repository: save(shipping)
+    Repository->>DB: UPDATE shippings<br/>SET carrier = ?,<br/>tracking_number = ?,<br/>shipping_start_at = NOW(),<br/>estimated_arrival_at = ?,<br/>status = 'IN_TRANSIT'<br/>WHERE id = ?
+    DB-->>Repository: Success
+
+    Service-->>Controller: ShippingResponseDto
+    Controller-->>Admin: 200 OK<br/>{shippingId, orderId, carrier,<br/>trackingNumber, status: "IN_TRANSIT"}
+
+    Note over Admin,DB: 배송 시작 완료<br/>고객이 송장번호로 배송 추적 가능
+```
+
+**핵심 로직**:
+- PENDING 상태의 배송만 시작 가능
+- 택배사, 송장번호, 도착 예정일 입력
+- 배송 시작일 자동 기록
+- 상태를 IN_TRANSIT으로 변경
+
+---
+
+### 6.3 배송 완료 처리
+
+```mermaid
+sequenceDiagram
+    actor System as 시스템/관리자
+    participant Controller as ShippingController
+    participant Service as ShippingService
+    participant Repository as ShippingRepository
+    participant DB as Database
+
+    System->>Controller: PUT /api/shippings/{shippingId}/deliver
+    Controller->>Service: completeDelivery(shippingId)
+
+    Note over Service: 1. 배송 정보 조회
+    Service->>Repository: findById(shippingId)
+    Repository->>DB: SELECT * FROM shippings WHERE id = ?
+    DB-->>Repository: Shipping (status = IN_TRANSIT)
+    Repository-->>Service: Shipping
+
+    Note over Service: 2. 상태 검증
+    Service->>Service: shipping.status == IN_TRANSIT 확인
+
+    alt 상태가 IN_TRANSIT이 아님
+        Service-->>Controller: InvalidShippingStatusException
+        Controller-->>System: 400 Bad Request<br/>배송 완료 처리할 수 없는 상태입니다
+    end
+
+    Note over Service: 3. 배송 완료 처리
+    Service->>Service: shipping.complete()<br/>(deliveredAt = NOW,<br/>status = DELIVERED)
+    Service->>Repository: save(shipping)
+    Repository->>DB: UPDATE shippings<br/>SET delivered_at = NOW(),<br/>status = 'DELIVERED'<br/>WHERE id = ?
+    DB-->>Repository: Success
+
+    Service-->>Controller: ShippingResponseDto
+    Controller-->>System: 200 OK<br/>{shippingId, orderId,<br/>status: "DELIVERED",<br/>deliveredAt}
+
+    Note over System,DB: 배송 완료<br/>실제 도착일 기록됨
+```
+
+**핵심 로직**:
+- IN_TRANSIT 상태의 배송만 완료 처리 가능
+- 실제 도착일 자동 기록
+- 상태를 DELIVERED로 변경
+
+---
+
+### 6.4 배송 조회
+
+```mermaid
+sequenceDiagram
+    actor User as 사용자
+    participant Controller as ShippingController
+    participant Service as ShippingService
+    participant Repository as ShippingRepository
+    participant DB as Database
+
+    User->>Controller: GET /api/orders/{orderId}/shipping
+    Controller->>Service: getShippingByOrderId(orderId)
+
+    Service->>Repository: findByOrderId(orderId)
+    Repository->>DB: SELECT * FROM shippings<br/>WHERE order_id = ?
+
+    alt 배송 정보 존재
+        DB-->>Repository: Shipping
+        Repository-->>Service: Optional<Shipping>
+        Service-->>Controller: ShippingResponseDto
+        Controller-->>User: 200 OK<br/>{shippingId, orderId, carrier,<br/>trackingNumber, status,<br/>shippingStartAt, estimatedArrivalAt,<br/>deliveredAt}
+    else 배송 정보 없음
+        DB-->>Repository: Empty
+        Repository-->>Service: Optional.empty()
+        Service-->>Controller: ShippingNotFoundException
+        Controller-->>User: 404 Not Found<br/>배송 정보가 존재하지 않습니다
+    end
+
+    Note over User,DB: 배송 상태별 정보:<br/>PENDING: 배송 준비 중<br/>IN_TRANSIT: 배송 중 (송장번호 제공)<br/>DELIVERED: 배송 완료 (실제 도착일 제공)
+```
+
+**핵심 로직**:
+- 주문 ID로 배송 정보 조회
+- 배송 상태에 따라 다른 정보 제공
+  - PENDING: 배송 준비 중
+  - IN_TRANSIT: 택배사, 송장번호, 도착 예정일
+  - DELIVERED: 실제 도착일 포함
+
+---
+
+## 7. 데이터 연동
+
+### 7.1 데이터 전송 (Outbox Pattern)
 
 ```mermaid
 sequenceDiagram
@@ -924,7 +1091,7 @@ sequenceDiagram
 
 ---
 
-### 6.2 데이터 전송 재시도 로직
+### 7.2 데이터 전송 재시도 로직
 
 ```mermaid
 flowchart TD
@@ -961,9 +1128,9 @@ flowchart TD
 
 ---
 
-## 7. 주요 예외 처리 시나리오
+## 8. 주요 예외 처리 시나리오
 
-### 7.1 동시성 충돌 (쿠폰 발급)
+### 8.1 동시성 충돌 (쿠폰 발급)
 
 ```mermaid
 sequenceDiagram
