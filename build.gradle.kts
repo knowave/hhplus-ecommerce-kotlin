@@ -6,6 +6,7 @@ plugins {
     id("org.springframework.boot") version "3.5.6"
     id("io.spring.dependency-management") version "1.1.7"
     kotlin("plugin.jpa") version kotlinVersion
+    jacoco
 }
 
 group = "com.hhplus"
@@ -32,6 +33,16 @@ dependencies {
     testImplementation("org.springframework.boot:spring-boot-starter-test")
     testImplementation("org.jetbrains.kotlin:kotlin-test-junit5")
 
+    // Kotest
+    testImplementation("io.kotest:kotest-runner-junit5:5.9.1")
+    testImplementation("io.kotest:kotest-assertions-core:5.9.1")
+    testImplementation("io.kotest:kotest-property:5.9.1")
+    testImplementation("io.kotest.extensions:kotest-extensions-spring:1.3.0")
+
+    // MockK
+    testImplementation("io.mockk:mockk:1.13.12")
+    testImplementation("com.ninja-squad:springmockk:4.0.2")
+
     testRuntimeOnly("org.junit.platform:junit-platform-launcher")
 }
 
@@ -53,4 +64,62 @@ noArg {
 
 tasks.withType<Test> {
     useJUnitPlatform()
+    finalizedBy(tasks.jacocoTestReport) // test 실행 후 자동으로 리포트 생성
+}
+
+tasks.jacocoTestReport {
+    dependsOn(tasks.test) // test가 먼저 실행되도록 설정
+
+    reports {
+        xml.required.set(true)
+        html.required.set(true)
+        csv.required.set(false)
+    }
+
+    classDirectories.setFrom(
+        files(classDirectories.files.map {
+            fileTree(it) {
+                exclude(
+                    "**/EcommerceApplication**",  // main 메서드 제외
+                    "**/dto/**",  // DTO 클래스 제외 (선택사항)
+                    "**/config/**"  // Configuration 클래스 제외 (선택사항)
+                )
+            }
+        })
+    )
+}
+
+tasks.jacocoTestCoverageVerification {
+    dependsOn(tasks.jacocoTestReport)
+
+    violationRules {
+        rule {
+            enabled = true
+            element = "CLASS"
+
+            limit {
+                counter = "LINE"
+                value = "COVEREDRATIO"
+                minimum = "0.70".toBigDecimal()  // 70% 이상 요구
+            }
+
+            limit {
+                counter = "BRANCH"
+                value = "COVEREDRATIO"
+                minimum = "0.70".toBigDecimal()  // 분기 커버리지 70% 이상
+            }
+        }
+    }
+
+    classDirectories.setFrom(
+        files(classDirectories.files.map {
+            fileTree(it) {
+                exclude(
+                    "**/EcommerceApplication**",
+                    "**/dto/**",
+                    "**/config/**"
+                )
+            }
+        })
+    )
 }
