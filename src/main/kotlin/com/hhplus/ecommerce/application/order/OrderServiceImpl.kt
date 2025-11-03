@@ -103,6 +103,7 @@ class OrderServiceImpl(
             OrderItem(
                 id = orderRepository.generateItemId(),
                 productId = product.id,
+                orderId = orderId,
                 productName = product.name,
                 quantity = item.quantity,
                 unitPrice = product.price,
