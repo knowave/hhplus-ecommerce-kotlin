@@ -48,4 +48,8 @@ class UserRepositoryImpl : UserRepository {
     override fun generateId(): Long {
         return nextId++
     }
+
+    override fun clear() {
+        users.clear()
+    }
 }

@@ -11,4 +11,6 @@ interface UserRepository {
     fun findAll(): List<User>
 
     fun generateId(): Long
+
+    fun clear()
 }
