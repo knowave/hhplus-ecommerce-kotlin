@@ -45,7 +45,7 @@ class ProductServiceIntegrationTest : DescribeSpec({
                 )
 
                 // then
-                response.products shouldNotBe emptyList()
+                response.products.isNotEmpty() shouldBe true
                 response.pagination.totalElements shouldNotBe 0
                 response.pagination.currentPage shouldBe 0
             }
@@ -157,6 +157,24 @@ class ProductServiceIntegrationTest : DescribeSpec({
                 // then
                 response.products.isNotEmpty() shouldBe true
                 response.products.all { it.category == "FOOD" } shouldBe true
+
+                // ProductSummary에는 salesCount가 없으므로 단순히 조회만 확인
+            }
+
+            it("카테고리별 인기순 상품을 조회할 수 있다") {
+                // when
+                val response = productService.getProducts(
+                    category = "FASHION",
+                    sort = "popularity",
+                    page = 0,
+                    size = 10
+                )
+
+                // then
+                response.products.isNotEmpty() shouldBe true
+                response.products.all { it.category == "FASHION" } shouldBe true
+
+                // ProductSummary에는 salesCount가 없으므로 단순히 조회만 확인
             }
 
             it("존재하지 않는 카테고리로 조회하면 빈 리스트를 반환한다") {
@@ -332,7 +350,7 @@ class ProductServiceIntegrationTest : DescribeSpec({
                 )
 
                 // then
-                response.products shouldNotBe emptyList()
+                response.products.isNotEmpty() shouldBe true
                 response.products.all { it.category == "FASHION" } shouldBe true
 
                 // 판매량 내림차순 확인
@@ -365,6 +383,7 @@ class ProductServiceIntegrationTest : DescribeSpec({
                     val current = response.products[i]
                     val next = response.products[i + 1]
                     (current.price <= next.price) shouldBe true
+                    (current.salesCount >= next.salesCount) shouldBe true
                 }
             }
         }
@@ -379,7 +398,9 @@ class ProductServiceIntegrationTest : DescribeSpec({
 
                 // then
                 topProducts.products shouldHaveSize 5
-                topProducts.period shouldBe "최근 7일"
+                topProducts.period.days shouldBe 7
+                topProducts.period.startDate shouldNotBe null
+                topProducts.period.endDate shouldNotBe null
             }
 
             it("메인 페이지에 표시할 신상품 10개를 조회한다") {
@@ -407,7 +428,7 @@ class ProductServiceIntegrationTest : DescribeSpec({
                 )
 
                 // then
-                products.products shouldNotBe emptyList()
+                products.products.isNotEmpty() shouldBe true
                 products.products.all { it.category == "ELECTRONICS" } shouldBe true
             }
 

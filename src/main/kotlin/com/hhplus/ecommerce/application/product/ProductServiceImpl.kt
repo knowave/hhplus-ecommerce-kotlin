@@ -69,6 +69,7 @@ class ProductServiceImpl(
                 description = product.description,
                 price = product.price,
                 stock = product.stock,
+                salesCount = product.salesCount,
                 category = product.category.name,
                 createdAt = product.createdAt,
                 updatedAt = product.updatedAt
