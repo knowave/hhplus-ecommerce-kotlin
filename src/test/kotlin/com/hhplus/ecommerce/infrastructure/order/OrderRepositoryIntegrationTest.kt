@@ -35,6 +35,7 @@ class OrderRepositoryIntegrationTest : DescribeSpec({
                     OrderItem(
                         id = orderRepository.generateItemId(),
                         productId = 1L,
+                        orderId = orderId,
                         productName = "노트북",
                         quantity = 2,
                         unitPrice = 100000L,
@@ -81,6 +82,7 @@ class OrderRepositoryIntegrationTest : DescribeSpec({
                     OrderItem(
                         id = orderRepository.generateItemId(),
                         productId = 1L,
+                        orderId = orderId,
                         productName = "노트북",
                         quantity = 1,
                         unitPrice = 100000L,
@@ -89,6 +91,7 @@ class OrderRepositoryIntegrationTest : DescribeSpec({
                     OrderItem(
                         id = orderRepository.generateItemId(),
                         productId = 2L,
+                        orderId = orderId,
                         productName = "마우스",
                         quantity = 2,
                         unitPrice = 30000L,
@@ -97,6 +100,7 @@ class OrderRepositoryIntegrationTest : DescribeSpec({
                     OrderItem(
                         id = orderRepository.generateItemId(),
                         productId = 3L,
+                        orderId = orderId,
                         productName = "키보드",
                         quantity = 1,
                         unitPrice = 50000L,
@@ -141,6 +145,7 @@ class OrderRepositoryIntegrationTest : DescribeSpec({
                     OrderItem(
                         id = orderRepository.generateItemId(),
                         productId = 1L,
+                        orderId = orderId,
                         productName = "노트북",
                         quantity = 1,
                         unitPrice = 100000L,
@@ -183,6 +188,7 @@ class OrderRepositoryIntegrationTest : DescribeSpec({
                     OrderItem(
                         id = orderRepository.generateItemId(),
                         productId = 1L,
+                        orderId = orderId,
                         productName = "노트북",
                         quantity = 1,
                         unitPrice = 100000L,
@@ -528,6 +534,7 @@ class OrderRepositoryIntegrationTest : DescribeSpec({
                 OrderItem(
                     id = orderRepository.generateItemId(),
                     productId = 1L,
+                    orderId = orderId,
                     productName = "테스트 상품",
                     quantity = 1,
                     unitPrice = totalAmount,
