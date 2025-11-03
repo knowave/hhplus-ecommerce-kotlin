@@ -96,9 +96,8 @@ class PaymentServiceImpl(
         user.balance -= paymentAmount
         userRepository.save(user)
 
-        // 5. 주문 상태 변경 (PENDING → PAID)
-        order.status = OrderStatus.PAID
-        order.updatedAt = LocalDateTime.now()
+        // 5. 주문 상태 변경 (PENDING → PAID) - 도메인 메서드 사용
+        order.markAsPaid()
         orderRepository.save(order)
 
         // 6. 결제 레코드 생성
@@ -127,7 +126,7 @@ class PaymentServiceImpl(
         // 8. 응답 생성
         return ProcessPaymentResponse(
             paymentId = payment.paymentId,
-            orderId = order.orderId,
+            orderId = order.id,
             orderNumber = order.orderNumber,
             userId = order.userId,
             amount = paymentAmount,
@@ -280,9 +279,8 @@ class PaymentServiceImpl(
             }
         }
 
-        // 3. 주문 취소
-        order.status = OrderStatus.CANCELLED
-        order.updatedAt = LocalDateTime.now()
+        // 3. 주문 취소 - 도메인 메서드 사용
+        order.cancel()
         orderRepository.save(order)
     }
 }
