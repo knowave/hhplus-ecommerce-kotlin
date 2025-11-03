@@ -101,7 +101,7 @@ class OrderServiceImpl(
         val orderItems = request.items.map { item ->
             val product = products[item.productId]!!
             OrderItem(
-                orderItemId = orderRepository.generateItemId(),
+                id = orderRepository.generateItemId(),
                 productId = product.id,
                 productName = product.name,
                 quantity = item.quantity,
@@ -112,7 +112,7 @@ class OrderServiceImpl(
 
         val now = LocalDateTime.now()
         val order = Order(
-            orderId = orderId,
+            id = orderId,
             userId = request.userId,
             orderNumber = orderNumber,
             items = orderItems,
@@ -129,12 +129,12 @@ class OrderServiceImpl(
 
         // 8. 응답 생성
         return CreateOrderResponse(
-            orderId = order.orderId,
+            orderId = order.id,
             userId = order.userId,
             orderNumber = order.orderNumber,
             items = orderItems.map { item ->
                 OrderItemResponse(
-                    orderItemId = item.orderItemId,
+                    orderItemId = item.id,
                     productId = item.productId,
                     productName = item.productName,
                     quantity = item.quantity,
@@ -175,12 +175,12 @@ class OrderServiceImpl(
         }
 
         return OrderDetailResponse(
-            orderId = order.orderId,
+            orderId = order.id,
             userId = order.userId,
             orderNumber = order.orderNumber,
             items = order.items.map { item ->
                 OrderItemResponse(
-                    orderItemId = item.orderItemId,
+                    orderItemId = item.id,
                     productId = item.productId,
                     productName = item.productName,
                     quantity = item.quantity,
@@ -244,7 +244,7 @@ class OrderServiceImpl(
 
         val orderSummaries = pagedOrders.map { order ->
             OrderSummary(
-                orderId = order.orderId,
+                orderId = order.id,
                 orderNumber = order.orderNumber,
                 totalAmount = order.totalAmount,
                 discountAmount = order.discountAmount,
@@ -294,13 +294,12 @@ class OrderServiceImpl(
             null
         }
 
-        // 주문 상태 변경
-        order.status = OrderStatus.CANCELLED
-        order.updatedAt = LocalDateTime.now()
+        // 주문 상태 변경 (도메인 메서드 사용)
+        order.cancel()
         orderRepository.save(order)
 
         return CancelOrderResponse(
-            orderId = order.orderId,
+            orderId = order.id,
             status = order.status.name,
             cancelledAt = order.updatedAt.format(DATE_FORMATTER),
             refund = RefundInfo(
