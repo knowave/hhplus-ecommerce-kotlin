@@ -18,7 +18,7 @@ class UserServiceImpl(
     companion object {
         private const val MAX_BALANCE = 10_000_000L
         private const val MIN_CHARGE_AMOUNT = 1_000L
-        private const val MAX_CHARGE_AMOUNT = 1_000_000L
+        private const val MAX_CHARGE_AMOUNT = 3_000_000L
         private val DATE_FORMATTER: DateTimeFormatter = DateTimeFormatter.ISO_LOCAL_DATE_TIME
     }
 
