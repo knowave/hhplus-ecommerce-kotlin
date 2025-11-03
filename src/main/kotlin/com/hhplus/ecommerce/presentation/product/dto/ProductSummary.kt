@@ -6,6 +6,7 @@ data class ProductSummary(
     val description: String,
     val price: Long,
     val stock: Int,
+    val salesCount: Int,
     val category: String,
     val createdAt: String,
     val updatedAt: String
