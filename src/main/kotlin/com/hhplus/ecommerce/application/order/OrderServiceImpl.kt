@@ -95,10 +95,6 @@ class OrderServiceImpl(
         val discountAmount = calculateDiscountAmount(totalAmount, coupon)
         val finalAmount = totalAmount - discountAmount
 
-        if (user.balance < totalAmount) {
-            throw InsufficientBalanceException(required = totalAmount, available = user.balance)
-        }
-
         // 7. 주문 생성
         val orderId = orderRepository.generateId()
         val orderNumber = orderRepository.generateOrderNumber(orderId)
