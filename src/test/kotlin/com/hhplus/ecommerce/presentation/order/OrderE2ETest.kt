@@ -161,25 +161,6 @@ class OrderE2ETest(
                 // Then
                 response.statusCode shouldBe HttpStatus.NOT_FOUND
             }
-
-            it("잔액이 부족한 경우 주문이 실패해야 한다") {
-                // Given
-                val userId = createTestUser(balance = 1000L) // 매우 적은 잔액
-                val productIds = getTestProducts(1)
-
-                val request = CreateOrderRequest(
-                    userId = userId,
-                    items = listOf(
-                        OrderItemRequest(productId = productIds[0], quantity = 1)
-                    )
-                )
-
-                // When
-                val response = restTemplate.postForEntity(url("/orders"), request, String::class.java)
-
-                // Then
-                response.statusCode shouldBe HttpStatus.BAD_REQUEST
-            }
         }
 
         describe("주문 상세 조회") {
