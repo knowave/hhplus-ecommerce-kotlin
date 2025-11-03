@@ -4,6 +4,7 @@ import com.hhplus.ecommerce.common.exception.CannotCancelOrderException
 import com.hhplus.ecommerce.common.exception.CouponNotFoundException
 import com.hhplus.ecommerce.common.exception.ExpiredCouponException
 import com.hhplus.ecommerce.common.exception.ForbiddenException
+import com.hhplus.ecommerce.common.exception.InsufficientBalanceException
 import com.hhplus.ecommerce.common.exception.InsufficientStockException
 import com.hhplus.ecommerce.common.exception.InvalidCouponException
 import com.hhplus.ecommerce.common.exception.InvalidOrderItemsException
@@ -66,7 +67,7 @@ class OrderServiceImpl(
         // 1. 요청 검증
         validateOrderRequest(request)
 
-        userRepository.findById(request.userId)
+        val user = userRepository.findById(request.userId)
             ?: throw UserNotFoundException(request.userId)
 
         // 3. 상품 검증 및 재고 확인
@@ -93,6 +94,10 @@ class OrderServiceImpl(
         val totalAmount = calculateTotalAmount(request.items, products)
         val discountAmount = calculateDiscountAmount(totalAmount, coupon)
         val finalAmount = totalAmount - discountAmount
+
+        if (user.balance < totalAmount) {
+            throw InsufficientBalanceException(required = totalAmount, available = user.balance)
+        }
 
         // 7. 주문 생성
         val orderId = orderRepository.generateId()
