@@ -11,6 +11,7 @@ package com.hhplus.ecommerce.model.order
 data class OrderItem(
     val id: Long,
     val productId: Long,
+    val orderId: Long,
     val productName: String,
     val quantity: Int,
     val unitPrice: Long,
