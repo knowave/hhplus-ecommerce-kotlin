@@ -39,7 +39,7 @@ class OrderRepositoryImpl : OrderRepository {
     }
 
     override fun save(order: Order): Order {
-        orders[order.orderId] = order
+        orders[order.id] = order
         return order
     }
 
