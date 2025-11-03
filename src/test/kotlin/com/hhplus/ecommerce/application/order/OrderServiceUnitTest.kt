@@ -354,7 +354,7 @@ class OrderServiceUnitTest : DescribeSpec({
                 val now = LocalDateTime.now()
 
                 val orderItems = listOf(
-                    OrderItem(1L, 1L, "노트북", 1, 100000L, 100000L)
+                    OrderItem(1L, 1L, orderId, "노트북", 1, 100000L, 100000L)
                 )
                 val order = Order(
                     id = orderId,
@@ -407,7 +407,7 @@ class OrderServiceUnitTest : DescribeSpec({
                 val now = LocalDateTime.now()
 
                 val orderItems = listOf(
-                    OrderItem(1L, 1L, "노트북", 1, 100000L, 100000L)
+                    OrderItem(1L, 1L, orderId, "노트북", 1, 100000L, 100000L)
                 )
                 val order = Order(
                     id = orderId,
@@ -445,7 +445,7 @@ class OrderServiceUnitTest : DescribeSpec({
 
                 val product = createProduct(productId, "노트북", 100000L, 5, ProductCategory.ELECTRONICS, 0, nowStr, nowStr)
                 val orderItems = listOf(
-                    OrderItem(1L, productId, "노트북", 2, 100000L, 200000L)
+                    OrderItem(1L, productId, orderId, "노트북", 2, 100000L, 200000L)
                 )
                 val order = Order(
                     id = orderId,
@@ -504,7 +504,7 @@ class OrderServiceUnitTest : DescribeSpec({
                 val now = LocalDateTime.now()
 
                 val orderItems = listOf(
-                    OrderItem(1L, 1L, "노트북", 1, 100000L, 100000L)
+                    OrderItem(1L, 1L, orderId, "노트북", 1, 100000L, 100000L)
                 )
                 val order = Order(
                     id = orderId,
@@ -537,7 +537,7 @@ class OrderServiceUnitTest : DescribeSpec({
                 val now = LocalDateTime.now()
 
                 val orderItems = listOf(
-                    OrderItem(1L, 1L, "노트북", 1, 100000L, 100000L)
+                    OrderItem(1L, 1L, orderId, "노트북", 1, 100000L, 100000L)
                 )
                 val order = Order(
                     id = orderId,
