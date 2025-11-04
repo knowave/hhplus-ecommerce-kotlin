@@ -35,4 +35,6 @@ interface CartService {
      * 장바구니 전체 비우기
      */
     fun clearCart(userId: Long)
+
+    fun deleteCarts(userId: Long, productIds: List<Long>)
 }

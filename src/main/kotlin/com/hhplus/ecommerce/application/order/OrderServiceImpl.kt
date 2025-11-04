@@ -1,5 +1,6 @@
 package com.hhplus.ecommerce.application.order
 
+import com.hhplus.ecommerce.application.cart.CartService
 import com.hhplus.ecommerce.application.coupon.CouponService
 import com.hhplus.ecommerce.application.product.ProductService
 import com.hhplus.ecommerce.application.user.UserService
@@ -21,6 +22,7 @@ class OrderServiceImpl(
     private val productService: ProductService,
     private val couponService: CouponService,
     private val userService: UserService,
+    private val cartService: CartService,
     private val lockManager: LockManager
 ) : OrderService {
 
@@ -91,6 +93,9 @@ class OrderServiceImpl(
         )
 
         orderRepository.save(order)
+
+        val productIds = products.values.map { it.id }
+        cartService.deleteCarts(request.userId, productIds)
 
         // 8. 응답 생성
         return CreateOrderResponse(

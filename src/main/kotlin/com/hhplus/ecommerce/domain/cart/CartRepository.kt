@@ -41,4 +41,8 @@ interface CartRepository {
      * 장바구니 아이템 ID 생성
      */
     fun generateId(): Long
+
+    fun findByUserIdAndProductIds(userId: Long, productIds: List<Long>): List<CartItem>?
+
+    fun deleteManyByIds(cartItemIds: List<Long>)
 }
