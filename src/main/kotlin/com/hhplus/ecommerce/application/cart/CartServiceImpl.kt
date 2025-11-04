@@ -199,6 +199,16 @@ class CartServiceImpl(
         cartRepository.deleteByUserId(userId)
     }
 
+    override fun deleteCarts(userId: Long, productIds: List<Long>) {
+        val cartItems = cartRepository.findByUserIdAndProductIds(userId, productIds)
+            ?: emptyList()
+
+        val cartItemIds = cartItems.map { it.id }
+        if (cartItemIds.isNotEmpty()) {
+            cartRepository.deleteManyByIds(cartItemIds)
+        }
+    }
+
     // --- Private Helper Methods ---
 
     /**

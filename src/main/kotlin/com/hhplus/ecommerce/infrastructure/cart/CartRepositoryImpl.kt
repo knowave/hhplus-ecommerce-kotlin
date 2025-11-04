@@ -76,4 +76,14 @@ class CartRepositoryImpl : CartRepository {
     override fun generateId(): Long {
         return nextId++
     }
+
+    override fun findByUserIdAndProductIds(userId: Long, productIds: List<Long>): List<CartItem>? {
+        return cartItems.values
+            .filter { it.userId == userId && it.productId in productIds }
+            .sortedBy { it.addedAt }
+    }
+
+    override fun deleteManyByIds(cartItemIds: List<Long>) {
+        cartItemIds.forEach { cartItems.remove(it) }
+    }
 }
