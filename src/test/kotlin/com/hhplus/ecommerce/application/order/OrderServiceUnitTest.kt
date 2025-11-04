@@ -1,5 +1,6 @@
 package com.hhplus.ecommerce.application.order
 
+import com.hhplus.ecommerce.application.cart.CartService
 import com.hhplus.ecommerce.application.coupon.CouponService
 import com.hhplus.ecommerce.application.product.ProductService
 import com.hhplus.ecommerce.application.user.UserService
@@ -30,6 +31,7 @@ import com.hhplus.ecommerce.presentation.order.dto.OrderItemRequest
 import com.hhplus.ecommerce.presentation.user.dto.UserInfoResponse
 import io.kotest.assertions.throwables.shouldThrow
 import io.kotest.core.spec.style.DescribeSpec
+import io.kotest.matchers.reflection.beLateInit
 import io.kotest.matchers.shouldBe
 import io.kotest.matchers.shouldNotBe
 import io.mockk.every
@@ -46,6 +48,7 @@ class OrderServiceUnitTest : DescribeSpec({
     lateinit var couponService: CouponService
     lateinit var userService: UserService
     lateinit var orderService: OrderServiceImpl
+    lateinit var cartService: CartService
     lateinit var lockManager: LockManager
 
     val dateFormatter = DateTimeFormatter.ISO_LOCAL_DATE_TIME
@@ -55,6 +58,7 @@ class OrderServiceUnitTest : DescribeSpec({
         productService = mockk(relaxed = true)
         couponService = mockk(relaxed = true)
         userService = mockk(relaxed = true)
+        cartService = mockk(relaxed = true)
         lockManager = LockManager() // 실제 LockManager 인스턴스 사용
 
         orderService = OrderServiceImpl(
@@ -62,6 +66,7 @@ class OrderServiceUnitTest : DescribeSpec({
             productService = productService,
             couponService = couponService,
             userService = userService,
+            cartService = cartService,
             lockManager = lockManager
         )
     }
