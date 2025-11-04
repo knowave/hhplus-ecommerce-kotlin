@@ -5,15 +5,16 @@ import com.hhplus.ecommerce.application.order.OrderServiceImpl
 import com.hhplus.ecommerce.application.user.UserService
 import com.hhplus.ecommerce.application.user.UserServiceImpl
 import com.hhplus.ecommerce.common.exception.*
-import com.hhplus.ecommerce.infrastructure.coupon.CouponRepository
+import com.hhplus.ecommerce.domain.coupon.CouponRepository
 import com.hhplus.ecommerce.infrastructure.coupon.CouponRepositoryImpl
-import com.hhplus.ecommerce.infrastructure.order.OrderRepository
+import com.hhplus.ecommerce.domain.order.OrderRepository
 import com.hhplus.ecommerce.infrastructure.order.OrderRepositoryImpl
-import com.hhplus.ecommerce.infrastructure.payment.PaymentRepository
+import com.hhplus.ecommerce.domain.payment.PaymentRepository
+import com.hhplus.ecommerce.domain.payment.entity.TransmissionStatus
 import com.hhplus.ecommerce.infrastructure.payment.PaymentRepositoryImpl
-import com.hhplus.ecommerce.infrastructure.product.ProductRepository
+import com.hhplus.ecommerce.domain.product.ProductRepository
 import com.hhplus.ecommerce.infrastructure.product.ProductRepositoryImpl
-import com.hhplus.ecommerce.infrastructure.user.UserRepository
+import com.hhplus.ecommerce.domain.user.UserRepository
 import com.hhplus.ecommerce.infrastructure.user.UserRepositoryImpl
 import com.hhplus.ecommerce.presentation.order.dto.CreateOrderRequest
 import com.hhplus.ecommerce.presentation.order.dto.OrderItemRequest
@@ -393,7 +394,7 @@ class PaymentServiceIntegrationTest : DescribeSpec({
                 // 전송을 FAILED 상태로 만들기 (실제로는 외부 시스템 호출 실패로 발생)
                 val transmission = paymentRepository.findTransmissionById(transmissionId)!!
                 val failedTransmission = transmission.copy(
-                    status = com.hhplus.ecommerce.model.payment.TransmissionStatus.FAILED,
+                    status = TransmissionStatus.FAILED,
                     errorMessage = "Test error"
                 )
                 paymentRepository.saveTransmission(failedTransmission)

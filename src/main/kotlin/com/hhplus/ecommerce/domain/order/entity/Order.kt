@@ -1,4 +1,4 @@
-package com.hhplus.ecommerce.model.order
+package com.hhplus.ecommerce.domain.order.entity
 
 import java.time.LocalDateTime
 

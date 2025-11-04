@@ -1,5 +1,8 @@
 package com.hhplus.ecommerce.domain.payment
 
+import com.hhplus.ecommerce.domain.payment.entity.DataTransmission
+import com.hhplus.ecommerce.domain.payment.entity.Payment
+
 /**
  * 결제 데이터 접근 인터페이스
  */

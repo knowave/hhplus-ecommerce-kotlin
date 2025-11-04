@@ -1,7 +1,8 @@
 package com.hhplus.ecommerce.infrastructure.payment
 
-import com.hhplus.ecommerce.model.payment.DataTransmission
-import com.hhplus.ecommerce.model.payment.Payment
+import com.hhplus.ecommerce.domain.payment.entity.DataTransmission
+import com.hhplus.ecommerce.domain.payment.entity.Payment
+import com.hhplus.ecommerce.domain.payment.PaymentRepository
 import org.springframework.stereotype.Repository
 
 /**

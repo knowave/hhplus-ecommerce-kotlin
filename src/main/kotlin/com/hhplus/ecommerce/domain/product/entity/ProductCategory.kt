@@ -1,4 +1,4 @@
-package com.hhplus.ecommerce.domain.product
+package com.hhplus.ecommerce.domain.product.entity
 
 /**
  * 상품 카테고리

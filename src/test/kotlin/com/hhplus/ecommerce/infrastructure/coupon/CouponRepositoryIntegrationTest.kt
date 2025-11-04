@@ -1,7 +1,9 @@
 package com.hhplus.ecommerce.infrastructure.coupon
 
-import com.hhplus.ecommerce.model.coupon.Coupon
-import com.hhplus.ecommerce.model.coupon.UserCoupon
+import com.hhplus.ecommerce.domain.coupon.entity.Coupon
+import com.hhplus.ecommerce.domain.coupon.CouponRepository
+import com.hhplus.ecommerce.domain.coupon.CouponStatus
+import com.hhplus.ecommerce.domain.coupon.entity.UserCoupon
 import io.kotest.core.spec.style.DescribeSpec
 import io.kotest.matchers.collections.shouldBeEmpty
 import io.kotest.matchers.collections.shouldHaveSize

@@ -1,6 +1,7 @@
 package com.hhplus.ecommerce.infrastructure.cart
 
-import com.hhplus.ecommerce.model.cart.CartItem
+import com.hhplus.ecommerce.domain.cart.entity.CartItem
+import com.hhplus.ecommerce.domain.cart.CartRepository
 import org.springframework.stereotype.Repository
 import java.time.LocalDateTime
 
@@ -23,21 +24,21 @@ class CartRepositoryImpl : CartRepository {
     init {
         // 사용자 1의 장바구니에 샘플 아이템 추가
         val item1 = CartItem(
-            cartItemId = generateId(),
+            id = generateId(),
             userId = 1L,
             productId = 15L,
             quantity = 2,
             addedAt = LocalDateTime.now().minusHours(5)
         )
         val item2 = CartItem(
-            cartItemId = generateId(),
+            id = generateId(),
             userId = 1L,
             productId = 7L,
             quantity = 1,
             addedAt = LocalDateTime.now().minusHours(1)
         )
-        cartItems[item1.cartItemId] = item1
-        cartItems[item2.cartItemId] = item2
+        cartItems[item1.id] = item1
+        cartItems[item2.id] = item2
     }
 
     override fun findByUserId(userId: Long): List<CartItem> {
@@ -56,7 +57,7 @@ class CartRepositoryImpl : CartRepository {
     }
 
     override fun save(cartItem: CartItem): CartItem {
-        cartItems[cartItem.cartItemId] = cartItem
+        cartItems[cartItem.id] = cartItem
         return cartItem
     }
 
@@ -67,7 +68,7 @@ class CartRepositoryImpl : CartRepository {
     override fun deleteByUserId(userId: Long) {
         val userCartItems = cartItems.values
             .filter { it.userId == userId }
-            .map { it.cartItemId }
+            .map { it.id }
 
         userCartItems.forEach { cartItems.remove(it) }
     }

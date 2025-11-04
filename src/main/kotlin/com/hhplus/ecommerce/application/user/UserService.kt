@@ -1,7 +1,7 @@
 package com.hhplus.ecommerce.application.user
 
 import com.hhplus.ecommerce.presentation.user.dto.*
-import com.hhplus.ecommerce.model.user.User
+import com.hhplus.ecommerce.domain.user.entity.User
 
 interface UserService {
 

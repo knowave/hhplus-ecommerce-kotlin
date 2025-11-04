@@ -1,7 +1,8 @@
 package com.hhplus.ecommerce.infrastructure.order
 
-import com.hhplus.ecommerce.model.order.Order
-import com.hhplus.ecommerce.model.order.OrderStatus
+import com.hhplus.ecommerce.domain.order.entity.Order
+import com.hhplus.ecommerce.domain.order.OrderRepository
+import com.hhplus.ecommerce.domain.order.entity.OrderStatus
 import org.springframework.stereotype.Repository
 import java.time.LocalDate
 import java.time.format.DateTimeFormatter

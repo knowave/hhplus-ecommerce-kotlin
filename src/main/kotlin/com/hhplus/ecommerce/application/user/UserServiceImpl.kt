@@ -3,9 +3,9 @@ package com.hhplus.ecommerce.application.user
 import com.hhplus.ecommerce.common.exception.BalanceLimitExceededException
 import com.hhplus.ecommerce.common.exception.InvalidAmountException
 import com.hhplus.ecommerce.common.exception.UserNotFoundException
-import com.hhplus.ecommerce.infrastructure.user.UserRepository
+import com.hhplus.ecommerce.domain.user.UserRepository
 import com.hhplus.ecommerce.presentation.user.dto.*
-import com.hhplus.ecommerce.model.user.User
+import com.hhplus.ecommerce.domain.user.entity.User
 import org.springframework.stereotype.Service
 import java.time.LocalDateTime
 import java.time.format.DateTimeFormatter

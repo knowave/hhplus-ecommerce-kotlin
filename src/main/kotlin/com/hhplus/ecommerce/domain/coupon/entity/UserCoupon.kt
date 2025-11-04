@@ -1,6 +1,6 @@
-package com.hhplus.ecommerce.model.coupon
+package com.hhplus.ecommerce.domain.coupon.entity
 
-import com.hhplus.ecommerce.infrastructure.coupon.CouponStatus
+import com.hhplus.ecommerce.domain.coupon.CouponStatus
 
 data class UserCoupon(
     val id: Long,

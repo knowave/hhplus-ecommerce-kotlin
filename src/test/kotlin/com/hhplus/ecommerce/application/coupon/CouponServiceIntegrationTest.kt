@@ -3,9 +3,9 @@ package com.hhplus.ecommerce.application.coupon
 import com.hhplus.ecommerce.common.exception.CouponAlreadyIssuedException
 import com.hhplus.ecommerce.common.exception.CouponNotFoundException
 import com.hhplus.ecommerce.common.exception.UserCouponNotFoundException
-import com.hhplus.ecommerce.infrastructure.coupon.CouponRepository
+import com.hhplus.ecommerce.domain.coupon.CouponRepository
 import com.hhplus.ecommerce.infrastructure.coupon.CouponRepositoryImpl
-import com.hhplus.ecommerce.infrastructure.coupon.CouponStatus
+import com.hhplus.ecommerce.domain.coupon.CouponStatus
 import com.hhplus.ecommerce.presentation.coupon.dto.IssueCouponRequest
 import io.kotest.assertions.throwables.shouldThrow
 import io.kotest.core.spec.style.DescribeSpec

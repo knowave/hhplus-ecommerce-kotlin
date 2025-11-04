@@ -1,9 +1,9 @@
 package com.hhplus.ecommerce.application.product
 
 import com.hhplus.ecommerce.common.exception.ProductNotFoundException
-import com.hhplus.ecommerce.infrastructure.product.ProductCategory
-import com.hhplus.ecommerce.infrastructure.product.ProductRepository
-import com.hhplus.ecommerce.model.product.Product
+import com.hhplus.ecommerce.domain.product.entity.ProductCategory
+import com.hhplus.ecommerce.domain.product.ProductRepository
+import com.hhplus.ecommerce.domain.product.entity.Product
 import io.kotest.assertions.throwables.shouldThrow
 import io.kotest.core.spec.style.DescribeSpec
 import io.kotest.matchers.collections.shouldBeEmpty
