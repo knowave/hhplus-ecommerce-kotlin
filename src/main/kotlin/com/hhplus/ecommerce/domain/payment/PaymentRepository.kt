@@ -1,7 +1,4 @@
-package com.hhplus.ecommerce.infrastructure.payment
-
-import com.hhplus.ecommerce.model.payment.DataTransmission
-import com.hhplus.ecommerce.model.payment.Payment
+package com.hhplus.ecommerce.domain.payment
 
 /**
  * 결제 데이터 접근 인터페이스
