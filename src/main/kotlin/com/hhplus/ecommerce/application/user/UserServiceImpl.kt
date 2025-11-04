@@ -1,8 +1,6 @@
 package com.hhplus.ecommerce.application.user
 
-import com.hhplus.ecommerce.common.exception.BalanceLimitExceededException
-import com.hhplus.ecommerce.common.exception.InvalidAmountException
-import com.hhplus.ecommerce.common.exception.UserNotFoundException
+import com.hhplus.ecommerce.common.exception.*
 import com.hhplus.ecommerce.domain.user.UserRepository
 import com.hhplus.ecommerce.presentation.user.dto.*
 import com.hhplus.ecommerce.domain.user.entity.User
@@ -88,6 +86,15 @@ class UserServiceImpl(
 
         // Repository에 저장
         return userRepository.save(newUser)
+    }
+
+    override fun getUser(id: Long): User {
+        return userRepository.findById(id)
+            ?: throw UserNotFoundException(id)
+    }
+
+    override fun updateUser(user: User): User {
+        return userRepository.save(user)
     }
 
     private fun findUserById(userId: Long): User {

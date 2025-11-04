@@ -87,6 +87,25 @@ data class Order(
     fun isCancelled(): Boolean {
         return status == OrderStatus.CANCELLED
     }
+
+    /**
+     * 환불 처리
+     * PAID → REFUNDED
+     */
+    fun refund() {
+        require(status == OrderStatus.PAID) {
+            "Only PAID orders can be refunded. Current status: $status"
+        }
+        status = OrderStatus.REFUNDED
+        updatedAt = LocalDateTime.now()
+    }
+
+    /**
+     * 환불된 주문인지 확인
+     */
+    fun isRefunded(): Boolean {
+        return status == OrderStatus.REFUNDED
+    }
 }
 
 /**
@@ -95,5 +114,6 @@ data class Order(
 enum class OrderStatus {
     PENDING,    // 결제 대기
     PAID,       // 결제 완료
-    CANCELLED   // 주문 취소
+    CANCELLED,  // 주문 취소 (결제 전)
+    REFUNDED    // 환불 완료 (결제 후 취소)
 }

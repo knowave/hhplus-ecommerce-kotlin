@@ -1,23 +1,12 @@
 package com.hhplus.ecommerce.application.cart
 
-import com.hhplus.ecommerce.common.exception.CartItemNotFoundException
-import com.hhplus.ecommerce.common.exception.ExceedMaxQuantityException
-import com.hhplus.ecommerce.common.exception.ForbiddenException
-import com.hhplus.ecommerce.common.exception.InsufficientStockException
-import com.hhplus.ecommerce.common.exception.InvalidQuantityException
-import com.hhplus.ecommerce.common.exception.ProductNotFoundException
-import com.hhplus.ecommerce.common.exception.UserNotFoundException
+import com.hhplus.ecommerce.application.product.ProductService
+import com.hhplus.ecommerce.application.user.UserService
+import com.hhplus.ecommerce.common.exception.*
 import com.hhplus.ecommerce.domain.cart.CartRepository
-import com.hhplus.ecommerce.domain.product.ProductRepository
 import com.hhplus.ecommerce.domain.user.UserRepository
-import com.hhplus.ecommerce.presentation.cart.dto.AddCartItemRequest
-import com.hhplus.ecommerce.presentation.cart.dto.AddCartItemResponse
+import com.hhplus.ecommerce.presentation.cart.dto.*
 import com.hhplus.ecommerce.domain.cart.entity.CartItem
-import com.hhplus.ecommerce.presentation.cart.dto.CartItemResponse
-import com.hhplus.ecommerce.presentation.cart.dto.CartResponse
-import com.hhplus.ecommerce.presentation.cart.dto.CartSummary
-import com.hhplus.ecommerce.presentation.cart.dto.UpdateCartItemRequest
-import com.hhplus.ecommerce.presentation.cart.dto.UpdateCartItemResponse
 import org.springframework.stereotype.Service
 import java.time.LocalDateTime
 import java.time.format.DateTimeFormatter
@@ -31,8 +20,8 @@ import java.time.format.DateTimeFormatter
 @Service
 class CartServiceImpl(
     private val cartRepository: CartRepository,
-    private val productRepository: ProductRepository,
-    private val userRepository: UserRepository
+    private val productService: ProductService,
+    private val userService: UserService
 ) : CartService {
 
     companion object {
@@ -49,8 +38,7 @@ class CartServiceImpl(
 
         // 상품 정보와 함께 응답 생성
         val itemResponses = cartItems.map { cartItem ->
-            val product = productRepository.findById(cartItem.productId)
-                ?: throw ProductNotFoundException(cartItem.productId)
+            val product = productService.findProductById(cartItem.productId)
 
             val isAvailable = product.stock > 0
             val subtotal = product.price * cartItem.quantity
@@ -86,8 +74,7 @@ class CartServiceImpl(
         validateQuantity(request.quantity)
 
         // 상품 조회 및 검증
-        val product = productRepository.findById(request.productId)
-            ?: throw ProductNotFoundException(request.productId)
+        val product = productService.findProductById(request.productId)
 
         // 품절 상품 확인
         if (product.stock == 0) {
@@ -168,8 +155,7 @@ class CartServiceImpl(
         validateMaxQuantity(request.quantity)
 
         // 상품 조회 및 재고 확인
-        val product = productRepository.findById(cartItem.productId)
-            ?: throw ProductNotFoundException(cartItem.productId)
+        val product = productService.findProductById(cartItem.productId)
 
         validateStock(product.id, request.quantity, product.stock)
 
@@ -219,8 +205,7 @@ class CartServiceImpl(
      * 사용자 존재 여부 확인
      */
     private fun validateUserExists(userId: Long) {
-        userRepository.findById(userId)
-            ?: throw UserNotFoundException(userId)
+        userService.getUser(userId)
     }
 
     /**
