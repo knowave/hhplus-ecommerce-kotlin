@@ -1,5 +1,7 @@
 package com.hhplus.ecommerce.application.order
 
+import com.hhplus.ecommerce.application.cart.CartService
+import com.hhplus.ecommerce.application.cart.CartServiceImpl
 import com.hhplus.ecommerce.application.coupon.CouponService
 import com.hhplus.ecommerce.application.coupon.CouponServiceImpl
 import com.hhplus.ecommerce.application.product.ProductService
@@ -10,6 +12,7 @@ import com.hhplus.ecommerce.common.exception.CannotCancelOrderException
 import com.hhplus.ecommerce.common.exception.InsufficientStockException
 import com.hhplus.ecommerce.common.exception.OrderNotFoundException
 import com.hhplus.ecommerce.common.lock.LockManager
+import com.hhplus.ecommerce.domain.cart.CartRepository
 import com.hhplus.ecommerce.domain.coupon.CouponRepository
 import com.hhplus.ecommerce.infrastructure.coupon.CouponRepositoryImpl
 import com.hhplus.ecommerce.domain.coupon.CouponStatus
@@ -24,6 +27,7 @@ import com.hhplus.ecommerce.domain.coupon.entity.Coupon
 import com.hhplus.ecommerce.domain.coupon.entity.UserCoupon
 import com.hhplus.ecommerce.domain.product.entity.Product
 import com.hhplus.ecommerce.domain.user.entity.User
+import com.hhplus.ecommerce.infrastructure.cart.CartRepositoryImpl
 import com.hhplus.ecommerce.presentation.order.dto.CancelOrderRequest
 import com.hhplus.ecommerce.presentation.order.dto.CreateOrderRequest
 import com.hhplus.ecommerce.presentation.order.dto.OrderItemRequest
@@ -40,10 +44,12 @@ class OrderServiceIntegrationTest : DescribeSpec({
     lateinit var productRepository: ProductRepository
     lateinit var couponRepository: CouponRepository
     lateinit var userRepository: UserRepository
+    lateinit var cartRepository: CartRepository
     lateinit var productService: ProductService
     lateinit var couponService: CouponService
     lateinit var userService: UserService
     lateinit var orderService: OrderService
+    lateinit var cartService: CartService
     lateinit var lockManager: LockManager
 
     val dateFormatter = DateTimeFormatter.ISO_LOCAL_DATE_TIME
@@ -59,18 +65,21 @@ class OrderServiceIntegrationTest : DescribeSpec({
         productRepository = ProductRepositoryImpl()
         couponRepository = CouponRepositoryImpl()
         userRepository = UserRepositoryImpl()
+        cartRepository = CartRepositoryImpl()
         lockManager = LockManager()
 
         productService = ProductServiceImpl(productRepository)
         couponService = CouponServiceImpl(couponRepository, lockManager)
         userService = UserServiceImpl(userRepository)
+        cartService = CartServiceImpl(cartRepository, productService, userService)
 
         orderService = OrderServiceImpl(
             orderRepository = orderRepository,
             productService = productService,
             couponService = couponService,
             userService = userService,
-            lockManager = com.hhplus.ecommerce.common.lock.LockManager()
+            cartService = cartService,
+            lockManager = LockManager()
         )
 
         // 카운터 초기화

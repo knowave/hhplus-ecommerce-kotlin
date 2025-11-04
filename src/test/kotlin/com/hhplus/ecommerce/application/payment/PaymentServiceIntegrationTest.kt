@@ -1,5 +1,7 @@
 package com.hhplus.ecommerce.application.payment
 
+import com.hhplus.ecommerce.application.cart.CartService
+import com.hhplus.ecommerce.application.cart.CartServiceImpl
 import com.hhplus.ecommerce.application.coupon.CouponService
 import com.hhplus.ecommerce.application.coupon.CouponServiceImpl
 import com.hhplus.ecommerce.application.order.OrderService
@@ -10,6 +12,7 @@ import com.hhplus.ecommerce.application.user.UserService
 import com.hhplus.ecommerce.application.user.UserServiceImpl
 import com.hhplus.ecommerce.common.exception.*
 import com.hhplus.ecommerce.common.lock.LockManager
+import com.hhplus.ecommerce.domain.cart.CartRepository
 import com.hhplus.ecommerce.domain.coupon.CouponRepository
 import com.hhplus.ecommerce.infrastructure.coupon.CouponRepositoryImpl
 import com.hhplus.ecommerce.domain.order.OrderRepository
@@ -20,6 +23,7 @@ import com.hhplus.ecommerce.infrastructure.payment.PaymentRepositoryImpl
 import com.hhplus.ecommerce.domain.product.ProductRepository
 import com.hhplus.ecommerce.infrastructure.product.ProductRepositoryImpl
 import com.hhplus.ecommerce.domain.user.UserRepository
+import com.hhplus.ecommerce.infrastructure.cart.CartRepositoryImpl
 import com.hhplus.ecommerce.infrastructure.user.UserRepositoryImpl
 import com.hhplus.ecommerce.presentation.order.dto.CreateOrderRequest
 import com.hhplus.ecommerce.presentation.order.dto.OrderItemRequest
@@ -36,11 +40,13 @@ class PaymentServiceIntegrationTest : DescribeSpec({
     lateinit var userRepository: UserRepository
     lateinit var productRepository: ProductRepository
     lateinit var couponRepository: CouponRepository
+    lateinit var cartRepository: CartRepository
     lateinit var paymentService: PaymentService
     lateinit var orderService: OrderService
     lateinit var productService: ProductService
     lateinit var couponService: CouponService
     lateinit var userService: UserService
+    lateinit var cartService: CartService
     lateinit var lockManager: LockManager
 
     beforeEach {
@@ -50,18 +56,21 @@ class PaymentServiceIntegrationTest : DescribeSpec({
         userRepository = UserRepositoryImpl()
         productRepository = ProductRepositoryImpl()
         couponRepository = CouponRepositoryImpl()
+        cartRepository = CartRepositoryImpl()
 
-        val lockManager = com.hhplus.ecommerce.common.lock.LockManager()
+        val lockManager = LockManager()
 
         productService = ProductServiceImpl(productRepository)
         couponService = CouponServiceImpl(couponRepository, lockManager)
         userService = UserServiceImpl(userRepository)
+        cartService = CartServiceImpl(cartRepository, productService, userService)
 
         orderService = OrderServiceImpl(
             orderRepository,
             productService,
             couponService,
             userService,
+            cartService,
             lockManager
         )
 
