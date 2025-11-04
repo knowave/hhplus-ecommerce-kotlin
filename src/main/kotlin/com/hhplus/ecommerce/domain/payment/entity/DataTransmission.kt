@@ -1,4 +1,4 @@
-package com.hhplus.ecommerce.model.payment
+package com.hhplus.ecommerce.domain.payment
 
 import java.time.LocalDateTime
 

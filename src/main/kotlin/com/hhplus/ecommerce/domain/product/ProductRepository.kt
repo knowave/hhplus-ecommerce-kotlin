@@ -1,6 +1,6 @@
 package com.hhplus.ecommerce.infrastructure.product
 
-import com.hhplus.ecommerce.model.product.Product
+import com.hhplus.ecommerce.domain.product.Product
 
 /**
  * 상품 데이터 접근을 담당하는 Repository 인터페이스

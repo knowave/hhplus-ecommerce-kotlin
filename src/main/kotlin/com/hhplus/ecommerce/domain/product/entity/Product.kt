@@ -1,6 +1,4 @@
-package com.hhplus.ecommerce.model.product
-
-import com.hhplus.ecommerce.infrastructure.product.ProductCategory
+package com.hhplus.ecommerce.domain.product
 
 data class Product(
     val id: Long,

@@ -1,4 +1,4 @@
-package com.hhplus.ecommerce.model.shipping
+package com.hhplus.ecommerce.domain.shipping
 
 import java.time.LocalDateTime
 
