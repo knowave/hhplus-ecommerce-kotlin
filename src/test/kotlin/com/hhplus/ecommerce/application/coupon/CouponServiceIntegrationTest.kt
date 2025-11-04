@@ -21,7 +21,8 @@ class CouponServiceIntegrationTest : DescribeSpec({
     beforeEach {
         // 실제 구현체 사용
         couponRepository = CouponRepositoryImpl()
-        couponService = CouponServiceImpl(couponRepository)
+        val lockManager = com.hhplus.ecommerce.common.lock.LockManager()
+        couponService = CouponServiceImpl(couponRepository, lockManager)
     }
 
     describe("CouponService 통합 테스트 - Service와 Repository 통합") {

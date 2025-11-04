@@ -1,8 +1,15 @@
 package com.hhplus.ecommerce.application.order
 
+import com.hhplus.ecommerce.application.coupon.CouponService
+import com.hhplus.ecommerce.application.coupon.CouponServiceImpl
+import com.hhplus.ecommerce.application.product.ProductService
+import com.hhplus.ecommerce.application.product.ProductServiceImpl
+import com.hhplus.ecommerce.application.user.UserService
+import com.hhplus.ecommerce.application.user.UserServiceImpl
 import com.hhplus.ecommerce.common.exception.CannotCancelOrderException
 import com.hhplus.ecommerce.common.exception.InsufficientStockException
 import com.hhplus.ecommerce.common.exception.OrderNotFoundException
+import com.hhplus.ecommerce.common.lock.LockManager
 import com.hhplus.ecommerce.domain.coupon.CouponRepository
 import com.hhplus.ecommerce.infrastructure.coupon.CouponRepositoryImpl
 import com.hhplus.ecommerce.domain.coupon.CouponStatus
@@ -33,7 +40,11 @@ class OrderServiceIntegrationTest : DescribeSpec({
     lateinit var productRepository: ProductRepository
     lateinit var couponRepository: CouponRepository
     lateinit var userRepository: UserRepository
+    lateinit var productService: ProductService
+    lateinit var couponService: CouponService
+    lateinit var userService: UserService
     lateinit var orderService: OrderService
+    lateinit var lockManager: LockManager
 
     val dateFormatter = DateTimeFormatter.ISO_LOCAL_DATE_TIME
 
@@ -48,12 +59,18 @@ class OrderServiceIntegrationTest : DescribeSpec({
         productRepository = ProductRepositoryImpl()
         couponRepository = CouponRepositoryImpl()
         userRepository = UserRepositoryImpl()
+        lockManager = LockManager()
+
+        productService = ProductServiceImpl(productRepository)
+        couponService = CouponServiceImpl(couponRepository, lockManager)
+        userService = UserServiceImpl(userRepository)
 
         orderService = OrderServiceImpl(
             orderRepository = orderRepository,
-            productRepository = productRepository,
-            couponRepository = couponRepository,
-            userRepository = userRepository
+            productService = productService,
+            couponService = couponService,
+            userService = userService,
+            lockManager = com.hhplus.ecommerce.common.lock.LockManager()
         )
 
         // 카운터 초기화

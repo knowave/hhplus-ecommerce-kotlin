@@ -1,10 +1,15 @@
 package com.hhplus.ecommerce.application.payment
 
+import com.hhplus.ecommerce.application.coupon.CouponService
+import com.hhplus.ecommerce.application.coupon.CouponServiceImpl
 import com.hhplus.ecommerce.application.order.OrderService
 import com.hhplus.ecommerce.application.order.OrderServiceImpl
+import com.hhplus.ecommerce.application.product.ProductService
+import com.hhplus.ecommerce.application.product.ProductServiceImpl
 import com.hhplus.ecommerce.application.user.UserService
 import com.hhplus.ecommerce.application.user.UserServiceImpl
 import com.hhplus.ecommerce.common.exception.*
+import com.hhplus.ecommerce.common.lock.LockManager
 import com.hhplus.ecommerce.domain.coupon.CouponRepository
 import com.hhplus.ecommerce.infrastructure.coupon.CouponRepositoryImpl
 import com.hhplus.ecommerce.domain.order.OrderRepository
@@ -33,7 +38,10 @@ class PaymentServiceIntegrationTest : DescribeSpec({
     lateinit var couponRepository: CouponRepository
     lateinit var paymentService: PaymentService
     lateinit var orderService: OrderService
+    lateinit var productService: ProductService
+    lateinit var couponService: CouponService
     lateinit var userService: UserService
+    lateinit var lockManager: LockManager
 
     beforeEach {
         // 실제 구현체 사용
@@ -43,22 +51,28 @@ class PaymentServiceIntegrationTest : DescribeSpec({
         productRepository = ProductRepositoryImpl()
         couponRepository = CouponRepositoryImpl()
 
-        paymentService = PaymentServiceImpl(
-            paymentRepository,
-            orderRepository,
-            userRepository,
-            productRepository,
-            couponRepository
-        )
+        val lockManager = com.hhplus.ecommerce.common.lock.LockManager()
+
+        productService = ProductServiceImpl(productRepository)
+        couponService = CouponServiceImpl(couponRepository, lockManager)
+        userService = UserServiceImpl(userRepository)
 
         orderService = OrderServiceImpl(
             orderRepository,
-            productRepository,
-            couponRepository,
-            userRepository
+            productService,
+            couponService,
+            userService,
+            lockManager
         )
 
-        userService = UserServiceImpl(userRepository)
+        paymentService = PaymentServiceImpl(
+            paymentRepository,
+            orderService,
+            userService,
+            productService,
+            couponService,
+            lockManager
+        )
     }
 
     describe("PaymentService 통합 테스트 - Service와 Repository 통합") {
