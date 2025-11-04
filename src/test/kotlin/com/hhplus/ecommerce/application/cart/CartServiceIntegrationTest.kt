@@ -1,11 +1,15 @@
 package com.hhplus.ecommerce.application.cart
 
+import com.hhplus.ecommerce.application.product.ProductService
+import com.hhplus.ecommerce.application.product.ProductServiceImpl
+import com.hhplus.ecommerce.application.user.UserService
+import com.hhplus.ecommerce.application.user.UserServiceImpl
 import com.hhplus.ecommerce.common.exception.*
 import com.hhplus.ecommerce.domain.cart.CartRepository
-import com.hhplus.ecommerce.infrastructure.cart.CartRepositoryImpl
 import com.hhplus.ecommerce.domain.product.ProductRepository
-import com.hhplus.ecommerce.infrastructure.product.ProductRepositoryImpl
 import com.hhplus.ecommerce.domain.user.UserRepository
+import com.hhplus.ecommerce.infrastructure.cart.CartRepositoryImpl
+import com.hhplus.ecommerce.infrastructure.product.ProductRepositoryImpl
 import com.hhplus.ecommerce.infrastructure.user.UserRepositoryImpl
 import com.hhplus.ecommerce.presentation.cart.dto.AddCartItemRequest
 import com.hhplus.ecommerce.presentation.cart.dto.UpdateCartItemRequest
@@ -21,14 +25,17 @@ class CartServiceIntegrationTest : DescribeSpec({
     lateinit var cartRepository: CartRepository
     lateinit var productRepository: ProductRepository
     lateinit var userRepository: UserRepository
+    lateinit var productService: ProductService
+    lateinit var userService: UserService
     lateinit var cartService: CartService
 
     beforeEach {
-        // 실제 구현체 사용
         cartRepository = CartRepositoryImpl()
         productRepository = ProductRepositoryImpl()
         userRepository = UserRepositoryImpl()
-        cartService = CartServiceImpl(cartRepository, productRepository, userRepository)
+        productService = ProductServiceImpl(productRepository)
+        userService = UserServiceImpl(userRepository)
+        cartService = CartServiceImpl(cartRepository, productService, userService)
     }
 
     describe("CartService 통합 테스트 - 장바구니 조회") {

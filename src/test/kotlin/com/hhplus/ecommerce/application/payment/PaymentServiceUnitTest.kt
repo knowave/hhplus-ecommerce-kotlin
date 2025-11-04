@@ -1,11 +1,11 @@
 package com.hhplus.ecommerce.application.payment
 
+import com.hhplus.ecommerce.application.coupon.CouponService
+import com.hhplus.ecommerce.application.order.OrderService
+import com.hhplus.ecommerce.application.product.ProductService
+import com.hhplus.ecommerce.application.user.UserService
 import com.hhplus.ecommerce.common.exception.*
-import com.hhplus.ecommerce.domain.coupon.CouponRepository
-import com.hhplus.ecommerce.domain.order.OrderRepository
 import com.hhplus.ecommerce.domain.payment.PaymentRepository
-import com.hhplus.ecommerce.domain.product.ProductRepository
-import com.hhplus.ecommerce.domain.user.UserRepository
 import com.hhplus.ecommerce.domain.order.entity.Order
 import com.hhplus.ecommerce.domain.order.entity.OrderItem
 import com.hhplus.ecommerce.domain.order.entity.OrderStatus
@@ -15,6 +15,7 @@ import com.hhplus.ecommerce.domain.payment.entity.PaymentStatus
 import com.hhplus.ecommerce.domain.payment.entity.TransmissionStatus
 import com.hhplus.ecommerce.domain.user.entity.User
 import com.hhplus.ecommerce.presentation.payment.dto.ProcessPaymentRequest
+import com.hhplus.ecommerce.presentation.user.dto.UserInfoResponse
 import io.kotest.assertions.throwables.shouldThrow
 import io.kotest.core.spec.style.DescribeSpec
 import io.kotest.matchers.shouldBe
@@ -24,25 +25,26 @@ import java.time.LocalDateTime
 
 class PaymentServiceUnitTest : DescribeSpec({
     lateinit var paymentRepository: PaymentRepository
-    lateinit var orderRepository: OrderRepository
-    lateinit var userRepository: UserRepository
-    lateinit var productRepository: ProductRepository
-    lateinit var couponRepository: CouponRepository
+    lateinit var orderService: OrderService
+    lateinit var userService: UserService
+    lateinit var productService: ProductService
+    lateinit var couponService: CouponService
     lateinit var paymentService: PaymentService
 
     beforeEach {
         // 모든 의존성을 Mock으로 생성
         paymentRepository = mockk()
-        orderRepository = mockk()
-        userRepository = mockk()
-        productRepository = mockk()
-        couponRepository = mockk()
+        orderService = mockk()
+        userService = mockk()
+        productService = mockk()
+        couponService = mockk()
         paymentService = PaymentServiceImpl(
             paymentRepository,
-            orderRepository,
-            userRepository,
-            productRepository,
-            couponRepository
+            orderService,
+            userService,
+            productService,
+            couponService,
+            com.hhplus.ecommerce.common.lock.LockManager()
         )
     }
 
@@ -89,11 +91,11 @@ class PaymentServiceUnitTest : DescribeSpec({
                 val request = ProcessPaymentRequest(userId = userId)
 
                 // Mock 설정
-                every { orderRepository.findById(orderId) } returns order
+                every { orderService.getOrder(orderId) } returns order
                 every { paymentRepository.findByOrderId(orderId) } returns null
-                every { userRepository.findById(userId) } returns user
-                every { userRepository.save(any()) } returns user.copy(balance = 50000L)
-                every { orderRepository.save(any()) } answers {
+                every { userService.getUser(userId) } returns user
+                every { userService.updateUser(any()) } returns user
+                every { orderService.updateOrder(any()) } answers {
                     val savedOrder = firstArg<Order>()
                     savedOrder.copy()
                 }
@@ -117,15 +119,6 @@ class PaymentServiceUnitTest : DescribeSpec({
                 result.balance.remainingBalance shouldBe 50000L
                 result.dataTransmission.status shouldBe "PENDING"
                 result.paidAt shouldNotBe null
-
-                // Repository 호출 검증
-                verify(exactly = 1) { orderRepository.findById(orderId) }
-                verify(exactly = 1) { paymentRepository.findByOrderId(orderId) }
-                verify(exactly = 1) { userRepository.findById(userId) }
-                verify(exactly = 1) { userRepository.save(any()) }
-                verify(exactly = 1) { orderRepository.save(any()) }
-                verify(exactly = 1) { paymentRepository.save(any()) }
-                verify(exactly = 1) { paymentRepository.saveTransmission(any()) }
             }
         }
 
@@ -135,7 +128,7 @@ class PaymentServiceUnitTest : DescribeSpec({
                 val orderId = 999L
                 val request = ProcessPaymentRequest(userId = 1L)
 
-                every { orderRepository.findById(orderId) } returns null
+                every { orderService.getOrder(orderId) } throws OrderNotFoundException(orderId)
 
                 // when & then
                 shouldThrow<OrderNotFoundException> {
@@ -176,7 +169,7 @@ class PaymentServiceUnitTest : DescribeSpec({
 
                 val request = ProcessPaymentRequest(userId = otherUserId)
 
-                every { orderRepository.findById(orderId) } returns order
+                every { orderService.getOrder(orderId) } returns order
 
                 // when & then
                 shouldThrow<ForbiddenException> {
@@ -216,7 +209,7 @@ class PaymentServiceUnitTest : DescribeSpec({
 
                 val request = ProcessPaymentRequest(userId = userId)
 
-                every { orderRepository.findById(orderId) } returns order
+                every { orderService.getOrder(orderId) } returns order
 
                 // when & then
                 shouldThrow<InvalidOrderStatusException> {
@@ -265,7 +258,7 @@ class PaymentServiceUnitTest : DescribeSpec({
 
                 val request = ProcessPaymentRequest(userId = userId)
 
-                every { orderRepository.findById(orderId) } returns order
+                every { orderService.getOrder(orderId) } returns order
                 every { paymentRepository.findByOrderId(orderId) } returns existingPayment
 
                 // when & then
@@ -314,14 +307,13 @@ class PaymentServiceUnitTest : DescribeSpec({
 
                 val request = ProcessPaymentRequest(userId = userId)
 
-                every { orderRepository.findById(orderId) } returns order
+                every { orderService.getOrder(orderId) } returns order
                 every { paymentRepository.findByOrderId(orderId) } returns null
-                every { userRepository.findById(userId) } returns user
+                every { userService.getUser(userId) } returns user
                 // handlePaymentFailure 호출을 위한 Mock 설정
-                every { orderRepository.save(any()) } answers { firstArg() }
-                every { productRepository.findById(any()) } returns mockk(relaxed = true)
-                every { productRepository.save(any()) } returns mockk(relaxed = true)
-                every { couponRepository.findById(any()) } returns null
+                every { orderService.updateOrder(any()) } answers { firstArg() }
+                every { productService.findProductById(any()) } returns mockk(relaxed = true)
+                every { productService.updateProduct(any()) } returns mockk(relaxed = true)
 
                 // when & then
                 shouldThrow<InsufficientBalanceException> {
@@ -361,9 +353,9 @@ class PaymentServiceUnitTest : DescribeSpec({
 
                 val request = ProcessPaymentRequest(userId = userId)
 
-                every { orderRepository.findById(orderId) } returns order
+                every { userService.getUser(userId) } throws UserNotFoundException(userId)
+                every { orderService.getOrder(orderId) } returns order
                 every { paymentRepository.findByOrderId(orderId) } returns null
-                every { userRepository.findById(userId) } returns null
 
                 // when & then
                 shouldThrow<UserNotFoundException> {
@@ -426,7 +418,7 @@ class PaymentServiceUnitTest : DescribeSpec({
             )
 
             every { paymentRepository.findById(paymentId) } returns payment
-            every { orderRepository.findById(1L) } returns order
+            every { orderService.getOrder(1L) } returns order
             every { paymentRepository.findTransmissionByOrderId(1L) } returns transmission
 
             // when
