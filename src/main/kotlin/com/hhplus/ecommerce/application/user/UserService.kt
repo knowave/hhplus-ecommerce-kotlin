@@ -16,4 +16,8 @@ interface UserService {
 
     // 사용자 생성
     fun createUser(dto: CreateUserRequest): User
+
+    fun getUser(id: Long): User
+
+    fun updateUser(user: User): User
 }

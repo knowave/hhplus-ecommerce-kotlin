@@ -167,8 +167,12 @@ class ProductServiceImpl(
         )
     }
 
-    private fun findProductById(productId: Long): Product {
-        return productRepository.findById(productId)
-            ?: throw ProductNotFoundException(productId)
+    override fun findProductById(id: Long): Product {
+        return productRepository.findById(id)
+            ?: throw ProductNotFoundException(id)
+    }
+
+    override fun updateProduct(product: Product): Product {
+        return productRepository.save(product)
     }
 }

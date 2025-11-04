@@ -1,5 +1,6 @@
 package com.hhplus.ecommerce.application.product
 
+import com.hhplus.ecommerce.domain.product.entity.Product
 import com.hhplus.ecommerce.presentation.product.dto.*
 
 interface ProductService {
@@ -16,4 +17,8 @@ interface ProductService {
     fun getProductStock(productId: Long): ProductStockResponse
 
     fun getTopProducts(days: Int, limit: Int): TopProductsResponse
+
+    fun findProductById(id: Long): Product
+
+    fun updateProduct(product: Product): Product
 }
