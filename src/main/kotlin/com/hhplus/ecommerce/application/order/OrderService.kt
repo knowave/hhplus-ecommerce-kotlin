@@ -1,5 +1,6 @@
 package com.hhplus.ecommerce.application.order
 
+import com.hhplus.ecommerce.domain.order.entity.Order
 import com.hhplus.ecommerce.presentation.order.dto.CancelOrderRequest
 import com.hhplus.ecommerce.presentation.order.dto.CancelOrderResponse
 import com.hhplus.ecommerce.presentation.order.dto.CreateOrderRequest
@@ -31,4 +32,8 @@ interface OrderService {
      * 주문 취소
      */
     fun cancelOrder(orderId: Long, request: CancelOrderRequest): CancelOrderResponse
+
+    fun getOrder(id: Long): Order
+
+    fun updateOrder(order: Order): Order
 }
