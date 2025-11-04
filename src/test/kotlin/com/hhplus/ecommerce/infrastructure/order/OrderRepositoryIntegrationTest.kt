@@ -1,8 +1,9 @@
 package com.hhplus.ecommerce.infrastructure.order
 
-import com.hhplus.ecommerce.model.order.Order
-import com.hhplus.ecommerce.model.order.OrderItem
-import com.hhplus.ecommerce.model.order.OrderStatus
+import com.hhplus.ecommerce.domain.order.entity.Order
+import com.hhplus.ecommerce.domain.order.entity.OrderItem
+import com.hhplus.ecommerce.domain.order.OrderRepository
+import com.hhplus.ecommerce.domain.order.entity.OrderStatus
 import io.kotest.core.spec.style.DescribeSpec
 import io.kotest.matchers.collections.shouldHaveSize
 import io.kotest.matchers.shouldBe

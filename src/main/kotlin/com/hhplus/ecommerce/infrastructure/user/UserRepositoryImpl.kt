@@ -1,6 +1,7 @@
 package com.hhplus.ecommerce.infrastructure.user
 
-import com.hhplus.ecommerce.model.user.User
+import com.hhplus.ecommerce.domain.user.entity.User
+import com.hhplus.ecommerce.domain.user.UserRepository
 import org.springframework.stereotype.Repository
 
 

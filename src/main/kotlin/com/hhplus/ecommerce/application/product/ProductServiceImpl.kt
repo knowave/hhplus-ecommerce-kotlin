@@ -1,10 +1,10 @@
 package com.hhplus.ecommerce.application.product
 
 import com.hhplus.ecommerce.common.exception.ProductNotFoundException
-import com.hhplus.ecommerce.infrastructure.product.ProductCategory
-import com.hhplus.ecommerce.infrastructure.product.ProductRepository
+import com.hhplus.ecommerce.domain.product.entity.ProductCategory
+import com.hhplus.ecommerce.domain.product.ProductRepository
 import com.hhplus.ecommerce.presentation.product.dto.*
-import com.hhplus.ecommerce.model.product.Product
+import com.hhplus.ecommerce.domain.product.entity.Product
 import org.springframework.stereotype.Service
 import java.time.LocalDateTime
 import java.time.format.DateTimeFormatter

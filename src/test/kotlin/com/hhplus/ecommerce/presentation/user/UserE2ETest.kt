@@ -12,8 +12,8 @@ import com.hhplus.ecommerce.presentation.user.dto.ChargeBalanceRequest
 import com.hhplus.ecommerce.presentation.user.dto.UserBalanceResponse
 import com.hhplus.ecommerce.presentation.user.dto.ChargeBalanceResponse
 import com.hhplus.ecommerce.presentation.user.dto.UserInfoResponse
-import com.hhplus.ecommerce.model.user.User
-import com.hhplus.ecommerce.infrastructure.user.UserRepository
+import com.hhplus.ecommerce.domain.user.entity.User
+import com.hhplus.ecommerce.domain.user.UserRepository
 
 @SpringBootTest(webEnvironment = SpringBootTest.WebEnvironment.RANDOM_PORT)
 class UserE2ETest(

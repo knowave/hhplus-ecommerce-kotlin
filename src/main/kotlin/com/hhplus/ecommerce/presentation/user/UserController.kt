@@ -2,7 +2,7 @@ package com.hhplus.ecommerce.presentation.user
 
 import com.hhplus.ecommerce.application.user.UserService
 import com.hhplus.ecommerce.presentation.user.dto.*
-import com.hhplus.ecommerce.model.user.User
+import com.hhplus.ecommerce.domain.user.entity.User
 import io.swagger.v3.oas.annotations.Operation
 import org.springframework.http.HttpStatus
 import org.springframework.http.ResponseEntity

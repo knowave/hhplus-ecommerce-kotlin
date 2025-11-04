@@ -1,4 +1,4 @@
-package com.hhplus.ecommerce.model.coupon
+package com.hhplus.ecommerce.domain.coupon.entity
 
 data class Coupon(
     val id: Long,

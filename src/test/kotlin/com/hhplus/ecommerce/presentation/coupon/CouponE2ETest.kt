@@ -3,7 +3,6 @@ package com.hhplus.ecommerce.presentation.coupon
 import io.kotest.core.spec.style.DescribeSpec
 import io.kotest.matchers.shouldBe
 import io.kotest.matchers.shouldNotBe
-import io.kotest.matchers.collections.shouldHaveSize
 import io.kotest.matchers.collections.shouldNotBeEmpty
 import org.springframework.boot.test.context.SpringBootTest
 import org.springframework.boot.test.web.client.TestRestTemplate
@@ -11,9 +10,9 @@ import org.springframework.boot.test.web.server.LocalServerPort
 import org.springframework.http.HttpStatus
 import com.hhplus.ecommerce.presentation.coupon.dto.*
 import com.hhplus.ecommerce.presentation.user.dto.CreateUserRequest
-import com.hhplus.ecommerce.model.user.User
-import com.hhplus.ecommerce.infrastructure.user.UserRepository
-import com.hhplus.ecommerce.infrastructure.coupon.CouponStatus
+import com.hhplus.ecommerce.domain.user.entity.User
+import com.hhplus.ecommerce.domain.user.UserRepository
+import com.hhplus.ecommerce.domain.coupon.CouponStatus
 
 @SpringBootTest(webEnvironment = SpringBootTest.WebEnvironment.RANDOM_PORT)
 class CouponE2ETest(

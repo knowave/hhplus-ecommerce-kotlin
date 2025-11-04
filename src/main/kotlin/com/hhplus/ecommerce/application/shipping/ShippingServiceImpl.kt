@@ -5,8 +5,8 @@ import com.hhplus.ecommerce.common.exception.InvalidEstimatedDateException
 import com.hhplus.ecommerce.common.exception.InvalidStatusTransitionException
 import com.hhplus.ecommerce.common.exception.OrderNotFoundForShippingException
 import com.hhplus.ecommerce.common.exception.ShippingNotFoundException
-import com.hhplus.ecommerce.infrastructure.shipping.ShippingRepository
-import com.hhplus.ecommerce.model.shipping.ShippingStatus
+import com.hhplus.ecommerce.domain.shipping.ShippingRepository
+import com.hhplus.ecommerce.domain.shipping.entity.ShippingStatus
 import com.hhplus.ecommerce.presentation.shipping.dto.*
 import org.springframework.stereotype.Service
 import java.time.LocalDateTime

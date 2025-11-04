@@ -1,4 +1,4 @@
-package com.hhplus.ecommerce.model.order
+package com.hhplus.ecommerce.domain.order.entity
 
 /**
  * 주문 아이템 도메인 모델

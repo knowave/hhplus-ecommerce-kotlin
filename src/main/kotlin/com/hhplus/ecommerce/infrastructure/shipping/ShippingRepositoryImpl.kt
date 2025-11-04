@@ -1,8 +1,8 @@
 package com.hhplus.ecommerce.infrastructure.shipping
 
-import com.hhplus.ecommerce.model.shipping.Shipping
-import com.hhplus.ecommerce.model.shipping.ShippingStatus
-import com.hhplus.ecommerce.presentation.shipping.dto.*
+import com.hhplus.ecommerce.domain.shipping.entity.Shipping
+import com.hhplus.ecommerce.domain.shipping.ShippingRepository
+import com.hhplus.ecommerce.domain.shipping.entity.ShippingStatus
 import org.springframework.stereotype.Repository
 import java.time.LocalDateTime
 import kotlin.random.Random

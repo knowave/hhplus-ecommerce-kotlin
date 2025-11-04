@@ -1,6 +1,7 @@
-package com.hhplus.ecommerce.infrastructure.product
+package com.hhplus.ecommerce.domain.product
 
-import com.hhplus.ecommerce.domain.product.Product
+import com.hhplus.ecommerce.domain.product.entity.Product
+import com.hhplus.ecommerce.domain.product.entity.ProductCategory
 
 /**
  * 상품 데이터 접근을 담당하는 Repository 인터페이스

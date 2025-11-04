@@ -1,6 +1,6 @@
 package com.hhplus.ecommerce.application.coupon
 
-import com.hhplus.ecommerce.infrastructure.coupon.CouponStatus
+import com.hhplus.ecommerce.domain.coupon.CouponStatus
 import com.hhplus.ecommerce.presentation.coupon.dto.AvailableCouponResponse
 import com.hhplus.ecommerce.presentation.coupon.dto.CouponDetailResponse
 import com.hhplus.ecommerce.presentation.coupon.dto.IssueCouponRequest

@@ -7,12 +7,12 @@ import com.hhplus.ecommerce.common.exception.InsufficientStockException
 import com.hhplus.ecommerce.common.exception.InvalidQuantityException
 import com.hhplus.ecommerce.common.exception.ProductNotFoundException
 import com.hhplus.ecommerce.common.exception.UserNotFoundException
-import com.hhplus.ecommerce.infrastructure.cart.CartRepository
-import com.hhplus.ecommerce.infrastructure.product.ProductRepository
-import com.hhplus.ecommerce.infrastructure.user.UserRepository
+import com.hhplus.ecommerce.domain.cart.CartRepository
+import com.hhplus.ecommerce.domain.product.ProductRepository
+import com.hhplus.ecommerce.domain.user.UserRepository
 import com.hhplus.ecommerce.presentation.cart.dto.AddCartItemRequest
 import com.hhplus.ecommerce.presentation.cart.dto.AddCartItemResponse
-import com.hhplus.ecommerce.model.cart.CartItem
+import com.hhplus.ecommerce.domain.cart.entity.CartItem
 import com.hhplus.ecommerce.presentation.cart.dto.CartItemResponse
 import com.hhplus.ecommerce.presentation.cart.dto.CartResponse
 import com.hhplus.ecommerce.presentation.cart.dto.CartSummary
@@ -56,7 +56,7 @@ class CartServiceImpl(
             val subtotal = product.price * cartItem.quantity
 
             CartItemResponse(
-                cartItemId = cartItem.cartItemId,
+                cartItemId = cartItem.id,
                 productId = product.id,
                 productName = product.name,
                 price = product.price,
@@ -121,7 +121,7 @@ class CartServiceImpl(
             validateStock(product.id, request.quantity, product.stock)
 
             val newItem = CartItem(
-                cartItemId = cartRepository.generateId(),
+                id = cartRepository.generateId(),
                 userId = userId,
                 productId = request.productId,
                 quantity = request.quantity,
@@ -133,7 +133,7 @@ class CartServiceImpl(
         val subtotal = product.price * cartItem.quantity
 
         return AddCartItemResponse(
-            cartItemId = cartItem.cartItemId,
+            cartItemId = cartItem.id,
             productId = product.id,
             productName = product.name,
             price = product.price,
@@ -181,7 +181,7 @@ class CartServiceImpl(
         val subtotal = product.price * cartItem.quantity
 
         return UpdateCartItemResponse(
-            cartItemId = cartItem.cartItemId,
+            cartItemId = cartItem.id,
             productId = product.id,
             productName = product.name,
             price = product.price,
