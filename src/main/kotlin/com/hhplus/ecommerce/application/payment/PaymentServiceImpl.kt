@@ -1,36 +1,16 @@
 package com.hhplus.ecommerce.application.payment
 
-import com.hhplus.ecommerce.common.exception.AlreadyPaidException
-import com.hhplus.ecommerce.common.exception.AlreadySuccessException
-import com.hhplus.ecommerce.common.exception.ForbiddenException
-import com.hhplus.ecommerce.common.exception.InsufficientBalanceException
-import com.hhplus.ecommerce.common.exception.InvalidOrderStatusException
-import com.hhplus.ecommerce.common.exception.OrderNotFoundException
-import com.hhplus.ecommerce.common.exception.PaymentNotFoundException
-import com.hhplus.ecommerce.common.exception.TransmissionNotFoundException
-import com.hhplus.ecommerce.common.exception.UserNotFoundException
-import com.hhplus.ecommerce.domain.coupon.CouponRepository
-import com.hhplus.ecommerce.domain.coupon.CouponStatus
-import com.hhplus.ecommerce.domain.order.OrderRepository
+import com.hhplus.ecommerce.application.coupon.CouponService
+import com.hhplus.ecommerce.application.order.OrderService
+import com.hhplus.ecommerce.application.product.ProductService
+import com.hhplus.ecommerce.application.user.UserService
+import com.hhplus.ecommerce.common.exception.*
+import com.hhplus.ecommerce.common.lock.LockManager
+import com.hhplus.ecommerce.domain.coupon.*
 import com.hhplus.ecommerce.domain.payment.PaymentRepository
-import com.hhplus.ecommerce.domain.product.ProductRepository
-import com.hhplus.ecommerce.domain.user.UserRepository
-import com.hhplus.ecommerce.domain.order.entity.Order
-import com.hhplus.ecommerce.domain.order.entity.OrderStatus
-import com.hhplus.ecommerce.presentation.payment.dto.BalanceInfo
-import com.hhplus.ecommerce.domain.payment.entity.DataTransmission
-import com.hhplus.ecommerce.presentation.payment.dto.DataTransmissionDetailInfo
-import com.hhplus.ecommerce.presentation.payment.dto.DataTransmissionInfo
-import com.hhplus.ecommerce.presentation.payment.dto.OrderPaymentResponse
-import com.hhplus.ecommerce.domain.payment.entity.Payment
-import com.hhplus.ecommerce.presentation.payment.dto.PaymentDetailResponse
-import com.hhplus.ecommerce.presentation.payment.dto.PaymentInfo
-import com.hhplus.ecommerce.domain.payment.entity.PaymentStatus
-import com.hhplus.ecommerce.presentation.payment.dto.ProcessPaymentRequest
-import com.hhplus.ecommerce.presentation.payment.dto.ProcessPaymentResponse
-import com.hhplus.ecommerce.presentation.payment.dto.RetryTransmissionResponse
-import com.hhplus.ecommerce.presentation.payment.dto.TransmissionDetailResponse
-import com.hhplus.ecommerce.domain.payment.entity.TransmissionStatus
+import com.hhplus.ecommerce.domain.order.entity.*
+import com.hhplus.ecommerce.presentation.payment.dto.*
+import com.hhplus.ecommerce.domain.payment.entity.*
 import org.springframework.stereotype.Service
 import java.time.LocalDateTime
 import java.time.format.DateTimeFormatter
@@ -45,10 +25,11 @@ import java.time.format.DateTimeFormatter
 @Service
 class PaymentServiceImpl(
     private val paymentRepository: PaymentRepository,
-    private val orderRepository: OrderRepository,
-    private val userRepository: UserRepository,
-    private val productRepository: ProductRepository,
-    private val couponRepository: CouponRepository
+    private val orderService: OrderService,
+    private val userService: UserService,
+    private val productService: ProductService,
+    private val couponService: CouponService,
+    private val lockManager: LockManager
 ) : PaymentService {
 
     companion object {
@@ -57,8 +38,7 @@ class PaymentServiceImpl(
 
     override fun processPayment(orderId: Long, request: ProcessPaymentRequest): ProcessPaymentResponse {
         // 1. 주문 조회 및 검증
-        val order = orderRepository.findById(orderId)
-            ?: throw OrderNotFoundException(orderId)
+        val order = orderService.getOrder(orderId)
 
         // 권한 확인
         if (order.userId != request.userId) {
@@ -76,29 +56,27 @@ class PaymentServiceImpl(
             throw AlreadyPaidException(orderId)
         }
 
-        // 2. 사용자 조회
-        val user = userRepository.findById(request.userId)
-            ?: throw UserNotFoundException(request.userId)
-
-        // 3. 잔액 확인
+        // 2. 잔액 차감 (User Lock 사용)
         val paymentAmount = order.finalAmount
-        if (user.balance < paymentAmount) {
-            // 결제 실패 시 보상 트랜잭션
-            handlePaymentFailure(order)
-            throw InsufficientBalanceException(
-                required = paymentAmount,
-                available = user.balance
-            )
-        }
+        val (previousBalance, currentBalance) = lockManager.executeWithUserLock(request.userId) {
+            val user = userService.getUser(request.userId)
+            val previousBalance = user.balance
 
-        // 4. 잔액 차감
-        val previousBalance = user.balance
-        user.balance -= paymentAmount
-        userRepository.save(user)
+            // 잔액 차감 (User 도메인 메서드 사용)
+            try {
+                user.deduct(paymentAmount)  // 도메인 메서드 사용 (검증 포함)
+                userService.updateUser(user)
+                Pair(previousBalance, user.balance)
+            } catch (e: InsufficientBalanceException) {
+                // 결제 실패 시 보상 트랜잭션
+                handlePaymentFailure(order)
+                throw e
+            }
+        }
 
         // 5. 주문 상태 변경 (PENDING → PAID) - 도메인 메서드 사용
         order.markAsPaid()
-        orderRepository.save(order)
+        orderService.updateOrder(order)
 
         // 6. 결제 레코드 생성
         val now = LocalDateTime.now()
@@ -135,7 +113,7 @@ class PaymentServiceImpl(
             balance = BalanceInfo(
                 previousBalance = previousBalance,
                 paidAmount = paymentAmount,
-                remainingBalance = user.balance
+                remainingBalance = currentBalance
             ),
             dataTransmission = DataTransmissionInfo(
                 transmissionId = transmission.transmissionId,
@@ -155,9 +133,7 @@ class PaymentServiceImpl(
             throw ForbiddenException("다른 사용자의 결제 정보입니다.")
         }
 
-        val order = orderRepository.findById(payment.orderId)
-            ?: throw OrderNotFoundException(payment.orderId)
-
+        val order = orderService.getOrder(payment.orderId)
         val transmission = paymentRepository.findTransmissionByOrderId(payment.orderId)
 
         return PaymentDetailResponse(
@@ -178,8 +154,7 @@ class PaymentServiceImpl(
     }
 
     override fun getOrderPayment(orderId: Long, userId: Long): OrderPaymentResponse {
-        val order = orderRepository.findById(orderId)
-            ?: throw OrderNotFoundException(orderId)
+        val order = orderService.getOrder(orderId)
 
         // 권한 확인
         if (order.userId != userId) {
@@ -206,8 +181,7 @@ class PaymentServiceImpl(
         val transmission = paymentRepository.findTransmissionById(transmissionId)
             ?: throw TransmissionNotFoundException(transmissionId)
 
-        val order = orderRepository.findById(transmission.orderId)
-            ?: throw OrderNotFoundException(transmission.orderId)
+        val order = orderService.getOrder(transmission.orderId)
 
         return TransmissionDetailResponse(
             transmissionId = transmission.transmissionId,
@@ -252,35 +226,105 @@ class PaymentServiceImpl(
     }
 
     /**
+     * 결제 취소
+     *
+     * 단일 책임 원칙에 따라 결제 도메인의 책임만 수행:
+     * 1. 결제 상태 변경 (SUCCESS → CANCELLED)
+     * 2. 사용자 잔액 환불
+     *
+     * 주문 상태 변경, 재고 복구, 쿠폰 복구는 OrderService의 책임입니다.
+     */
+    override fun cancelPayment(paymentId: Long, request: com.hhplus.ecommerce.presentation.payment.dto.CancelPaymentRequest): com.hhplus.ecommerce.presentation.payment.dto.CancelPaymentResponse {
+        // 1. 결제 조회 및 검증
+        val payment = paymentRepository.findById(paymentId)
+            ?: throw PaymentNotFoundException(paymentId)
+
+        // 권한 확인
+        if (payment.userId != request.userId) {
+            throw ForbiddenException("다른 사용자의 결제입니다.")
+        }
+
+        // 이미 취소된 결제인지 확인
+        if (payment.status == PaymentStatus.CANCELLED) {
+            throw AlreadyCancelledException(paymentId)
+        }
+
+        // 결제 성공 상태가 아니면 취소 불가
+        if (payment.status != PaymentStatus.SUCCESS) {
+            throw InvalidPaymentStatusException(paymentId, payment.status.name)
+        }
+
+        // 2. 주문 조회 (응답에만 사용)
+        val order = orderService.getOrder(payment.orderId)
+
+        // 3. 잔액 환불 (User Lock 사용)
+        val refundAmount = payment.amount
+        val (previousBalance, currentBalance) = lockManager.executeWithUserLock(request.userId) {
+            val user = userService.getUser(request.userId)
+
+            val previousBalance = user.balance
+            user.refund(refundAmount)  // User 도메인 메서드 사용
+            userService.updateUser(user)
+
+            Pair(previousBalance, user.balance)
+        }
+
+        // 4. 결제 상태 변경 (SUCCESS → CANCELLED)
+        val now = LocalDateTime.now()
+        val cancelledPayment = payment.copy(
+            status = PaymentStatus.CANCELLED
+        )
+        paymentRepository.save(cancelledPayment)
+
+        // 5. 응답 생성 (주문 상태는 변경하지 않음)
+        return CancelPaymentResponse(
+            paymentId = payment.paymentId,
+            orderId = order.id,
+            orderNumber = order.orderNumber,
+            userId = request.userId,
+            refundedAmount = refundAmount,
+            paymentStatus = cancelledPayment.status.name,
+            orderStatus = order.status.name,  // 현재 주문 상태만 반환
+            balance = RefundBalanceInfo(
+                previousBalance = previousBalance,
+                refundedAmount = refundAmount,
+                currentBalance = currentBalance
+            ),
+            cancelledAt = now.format(DATE_FORMATTER)
+        )
+    }
+
+    /**
      * 결제 실패 시 보상 트랜잭션 처리
      * 비즈니스 정책: 재고 복원 → 쿠폰 복원 → 주문 취소
+     *
+     * Product Lock을 사용하여 재고 복원의 동시성을 제어합니다.
+     * 각 도메인 엔티티의 비즈니스 로직 메서드를 사용합니다.
      */
     private fun handlePaymentFailure(order: Order) {
-        // 1. 재고 복원
-        order.items.forEach { item ->
-            val product = productRepository.findById(item.productId)
-            if (product != null) {
-                product.stock += item.quantity
-                productRepository.save(product)
+        // 1. 재고 복원 (Product Lock 사용, 도메인 메서드 사용)
+        val productIds = order.items.map { it.productId }
+        lockManager.executeWithProductLocks(productIds) {
+            order.items.forEach { item ->
+                val product = productService.findProductById(item.productId)
+                product.restoreStock(item.quantity)  // 도메인 메서드 사용
+                productService.updateProduct(product)
             }
         }
 
-        // 2. 쿠폰 복원
+        // 2. 쿠폰 복원 (도메인 메서드 사용)
         if (order.appliedCouponId != null) {
-            val userCoupon = couponRepository.findUserCoupon(order.userId, order.appliedCouponId)
-            if (userCoupon != null && userCoupon.status == CouponStatus.USED) {
-                // 만료되지 않은 경우만 복원
-                val expiresAt = LocalDateTime.parse(userCoupon.expiresAt, DATE_FORMATTER)
-                if (expiresAt.isAfter(LocalDateTime.now())) {
-                    userCoupon.status = CouponStatus.AVAILABLE
-                    userCoupon.usedAt = null
-                    couponRepository.saveUserCoupon(userCoupon)
+            val userCoupon = couponService.findUserCoupon(order.userId, order.appliedCouponId)
+            if (userCoupon.status == CouponStatus.USED) {
+                lockManager.executeWithCouponLock(order.appliedCouponId) {
+                    userCoupon.restore()  // 도메인 메서드 사용 (만료 체크 포함)
+                    couponService.updateUserCoupon(userCoupon)
                 }
             }
         }
 
         // 3. 주문 취소 - 도메인 메서드 사용
         order.cancel()
-        orderRepository.save(order)
+        orderService.updateOrder(order)
     }
 }

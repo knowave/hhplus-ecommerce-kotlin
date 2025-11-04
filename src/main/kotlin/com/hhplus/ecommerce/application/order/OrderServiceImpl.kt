@@ -1,61 +1,27 @@
 package com.hhplus.ecommerce.application.order
 
-import com.hhplus.ecommerce.common.exception.CannotCancelOrderException
-import com.hhplus.ecommerce.common.exception.CouponNotFoundException
-import com.hhplus.ecommerce.common.exception.ExpiredCouponException
-import com.hhplus.ecommerce.common.exception.ForbiddenException
-import com.hhplus.ecommerce.common.exception.InsufficientStockException
-import com.hhplus.ecommerce.common.exception.InvalidCouponException
-import com.hhplus.ecommerce.common.exception.InvalidOrderItemsException
-import com.hhplus.ecommerce.common.exception.InvalidQuantityException
-import com.hhplus.ecommerce.common.exception.OrderNotFoundException
-import com.hhplus.ecommerce.common.exception.ProductNotFoundException
-import com.hhplus.ecommerce.common.exception.UserNotFoundException
-import com.hhplus.ecommerce.domain.coupon.CouponRepository
-import com.hhplus.ecommerce.domain.coupon.CouponStatus
+import com.hhplus.ecommerce.application.coupon.CouponService
+import com.hhplus.ecommerce.application.product.ProductService
+import com.hhplus.ecommerce.application.user.UserService
+import com.hhplus.ecommerce.common.exception.*
+import com.hhplus.ecommerce.common.lock.LockManager
 import com.hhplus.ecommerce.domain.order.OrderRepository
-import com.hhplus.ecommerce.domain.product.ProductRepository
 import com.hhplus.ecommerce.domain.product.entity.Product
-import com.hhplus.ecommerce.domain.user.UserRepository
-import com.hhplus.ecommerce.domain.coupon.entity.Coupon
-import com.hhplus.ecommerce.domain.coupon.entity.UserCoupon
-import com.hhplus.ecommerce.presentation.order.dto.AppliedCouponInfo
-import com.hhplus.ecommerce.presentation.order.dto.CancelOrderRequest
-import com.hhplus.ecommerce.presentation.order.dto.CancelOrderResponse
-import com.hhplus.ecommerce.presentation.order.dto.CreateOrderRequest
-import com.hhplus.ecommerce.presentation.order.dto.CreateOrderResponse
-import com.hhplus.ecommerce.domain.order.entity.Order
-import com.hhplus.ecommerce.presentation.order.dto.OrderDetailResponse
-import com.hhplus.ecommerce.domain.order.entity.OrderItem
-import com.hhplus.ecommerce.presentation.order.dto.OrderItemRequest
-import com.hhplus.ecommerce.presentation.order.dto.OrderItemResponse
-import com.hhplus.ecommerce.presentation.order.dto.OrderListResponse
-import com.hhplus.ecommerce.domain.order.entity.OrderStatus
-import com.hhplus.ecommerce.presentation.order.dto.OrderSummary
-import com.hhplus.ecommerce.presentation.order.dto.PaginationInfo
-import com.hhplus.ecommerce.presentation.order.dto.PaymentInfo
-import com.hhplus.ecommerce.presentation.order.dto.PricingInfo
-import com.hhplus.ecommerce.presentation.order.dto.RefundInfo
-import com.hhplus.ecommerce.presentation.order.dto.RestoredCouponInfo
-import com.hhplus.ecommerce.presentation.order.dto.RestoredStockItem
+import com.hhplus.ecommerce.domain.coupon.entity.*
+import com.hhplus.ecommerce.presentation.order.dto.*
+import com.hhplus.ecommerce.domain.order.entity.*
 import org.springframework.stereotype.Service
 import java.time.LocalDateTime
 import java.time.format.DateTimeFormatter
 import kotlin.math.ceil
 
-/**
- * 주문 서비스 구현체
- *
- * 비즈니스 정책에 따른 주문 처리:
- * 1. 주문 생성 시: 상품 검증 → 재고 차감 → 쿠폰 사용 → 주문 생성(PENDING)
- * 2. 주문 취소 시: 재고 복원 → 쿠폰 복원 → 주문 상태 변경(CANCELLED)
- */
 @Service
 class OrderServiceImpl(
     private val orderRepository: OrderRepository,
-    private val productRepository: ProductRepository,
-    private val couponRepository: CouponRepository,
-    private val userRepository: UserRepository
+    private val productService: ProductService,
+    private val couponService: CouponService,
+    private val userService: UserService,
+    private val lockManager: LockManager
 ) : OrderService {
 
     companion object {
@@ -65,9 +31,7 @@ class OrderServiceImpl(
     override fun createOrder(request: CreateOrderRequest): CreateOrderResponse {
         // 1. 요청 검증
         validateOrderRequest(request)
-
-        val user = userRepository.findById(request.userId)
-            ?: throw UserNotFoundException(request.userId)
+        userService.getUserInfo(request.userId)
 
         // 3. 상품 검증 및 재고 확인
         val products = validateAndGetProducts(request.items)
@@ -84,7 +48,7 @@ class OrderServiceImpl(
         }
 
         val coupon = if (userCoupon != null) {
-            couponRepository.findById(userCoupon.couponId)
+            couponService.findCouponById(userCoupon.couponId)
         } else {
             null
         }
@@ -170,7 +134,7 @@ class OrderServiceImpl(
         }
 
         val coupon = if (order.appliedCouponId != null) {
-            couponRepository.findById(order.appliedCouponId)
+            couponService.findCouponById(order.appliedCouponId)
         } else {
             null
         }
@@ -217,8 +181,7 @@ class OrderServiceImpl(
 
     override fun getOrders(userId: Long, status: String?, page: Int, size: Int): OrderListResponse {
         // 사용자 존재 확인
-        userRepository.findById(userId)
-            ?: throw UserNotFoundException(userId)
+        userService.getUserInfo(userId)
 
         val orders = if (status != null) {
             val orderStatus = try {
@@ -310,6 +273,15 @@ class OrderServiceImpl(
         )
     }
 
+    override fun getOrder(id: Long): Order {
+        return orderRepository.findById(id)
+            ?: throw OrderNotFoundException(id)
+    }
+
+    override fun updateOrder(order: Order): Order {
+        return orderRepository.save(order)
+    }
+
     // --- Private Helper Methods ---
 
     /**
@@ -317,7 +289,7 @@ class OrderServiceImpl(
      */
     private fun validateOrderRequest(request: CreateOrderRequest) {
         if (request.items.isEmpty()) {
-            throw InvalidOrderItemsException("주문 상품 목록이 비어있습니다.")
+            throw InvalidOrderItemsException("empty order items")
         }
 
         request.items.forEach { item ->
@@ -334,8 +306,7 @@ class OrderServiceImpl(
         val products = mutableMapOf<Long, Product>()
 
         items.forEach { item ->
-            val product = productRepository.findById(item.productId)
-                ?: throw ProductNotFoundException(item.productId)
+            val product = productService.findProductById(item.productId)
 
             // 재고 확인
             if (product.stock < item.quantity) {
@@ -354,38 +325,34 @@ class OrderServiceImpl(
 
     /**
      * 재고 차감 (비즈니스 정책: 주문 생성 시점에 즉시 차감)
+     *
+     * Product Lock을 사용하여 동시성을 제어합니다.
+     * 데드락 방지를 위해 productId를 정렬하여 항상 동일한 순서로 Lock을 획득합니다.
+     * Product 도메인 엔티티의 deductStock() 메서드를 사용하여 재고를 차감합니다.
      */
     private fun deductStock(items: List<OrderItemRequest>, products: Map<Long, Product>) {
-        items.forEach { item ->
-            val product = products[item.productId]!!
-            product.stock -= item.quantity
-            productRepository.save(product)
+        val productIds = items.map { it.productId }
+
+        lockManager.executeWithProductLocks(productIds) {
+            items.forEach { item ->
+                val product = products[item.productId]!!
+                product.deductStock(item.quantity)
+                productService.updateProduct(product)
+            }
         }
     }
 
     /**
      * 쿠폰 검증 및 사용 처리
+     * UserCoupon 도메인 엔티티의 use() 메서드를 사용하여 쿠폰을 사용합니다.
      */
     private fun validateAndUseCoupon(couponId: Long, userId: Long): UserCoupon {
         // 사용자의 쿠폰 조회
-        val userCoupon = couponRepository.findUserCoupon(userId, couponId)
-            ?: throw CouponNotFoundException(couponId)
+        val userCoupon = couponService.findUserCoupon(userId, couponId)
 
-        // 쿠폰 상태 확인
-        if (userCoupon.status != CouponStatus.AVAILABLE) {
-            throw InvalidCouponException("쿠폰을 사용할 수 없습니다. 상태: ${userCoupon.status}")
-        }
-
-        // 쿠폰 만료 확인
-        val expiresAt = LocalDateTime.parse(userCoupon.expiresAt, DATE_FORMATTER)
-        if (expiresAt.isBefore(LocalDateTime.now())) {
-            throw ExpiredCouponException(couponId)
-        }
-
-        // 쿠폰 사용 처리
-        userCoupon.status = CouponStatus.USED
-        userCoupon.usedAt = LocalDateTime.now().format(DATE_FORMATTER)
-        couponRepository.saveUserCoupon(userCoupon)
+        // 쿠폰 사용 처리 (검증 로직 포함)
+        userCoupon.use()  // 도메인 메서드 사용
+        couponService.updateUserCoupon(userCoupon)
 
         return userCoupon
     }
@@ -410,46 +377,44 @@ class OrderServiceImpl(
 
     /**
      * 재고 복원
+     *
+     * Product Lock을 사용하여 동시성을 제어합니다.
+     * Product 도메인 엔티티의 restoreStock() 메서드를 사용하여 재고를 복원합니다.
      */
     private fun restoreStock(items: List<OrderItem>): List<RestoredStockItem> {
-        return items.map { item ->
-            val product = productRepository.findById(item.productId)
-                ?: throw ProductNotFoundException(item.productId)
+        val productIds = items.map { it.productId }
 
-            product.stock += item.quantity
-            productRepository.save(product)
+        return lockManager.executeWithProductLocks(productIds) {
+            items.map { item ->
+                val product = productService.findProductById(item.productId)
 
-            RestoredStockItem(
-                productId = item.productId,
-                quantity = item.quantity
-            )
+                product.restoreStock(item.quantity)  // 도메인 메서드 사용
+                productService.updateProduct(product)
+
+                RestoredStockItem(
+                    productId = item.productId,
+                    quantity = item.quantity
+                )
+            }
         }
     }
 
     /**
      * 쿠폰 복원 (만료되지 않은 경우만)
+     * UserCoupon 도메인 엔티티의 restore() 메서드를 사용하여 쿠폰을 복원합니다.
      */
     private fun restoreCoupon(couponId: Long, userId: Long): RestoredCouponInfo? {
-        val userCoupon = couponRepository.findUserCoupon(userId, couponId)
-            ?: return null
+        val userCoupon = couponService.findUserCoupon(userId, couponId)
 
-        // 만료된 쿠폰은 복원하지 않음
-        val expiresAt = LocalDateTime.parse(userCoupon.expiresAt, DATE_FORMATTER)
-        if (expiresAt.isBefore(LocalDateTime.now())) {
-            return RestoredCouponInfo(
+        return lockManager.executeWithCouponLock(couponId) {
+            // 쿠폰 복원 처리 (만료 체크 포함)
+            userCoupon.restore()
+            couponService.updateUserCoupon(userCoupon)
+
+            RestoredCouponInfo(
                 couponId = couponId,
-                status = CouponStatus.EXPIRED.name
+                status = userCoupon.status.name
             )
         }
-
-        // USED → AVAILABLE로 복원
-        userCoupon.status = CouponStatus.AVAILABLE
-        userCoupon.usedAt = null
-        couponRepository.saveUserCoupon(userCoupon)
-
-        return RestoredCouponInfo(
-            couponId = couponId,
-            status = CouponStatus.AVAILABLE.name
-        )
     }
 }

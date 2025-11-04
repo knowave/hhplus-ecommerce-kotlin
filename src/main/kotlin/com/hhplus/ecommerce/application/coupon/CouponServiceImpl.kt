@@ -1,23 +1,9 @@
 package com.hhplus.ecommerce.application.coupon
 
-import com.hhplus.ecommerce.common.exception.CouponAlreadyIssuedException
-import com.hhplus.ecommerce.common.exception.CouponNotFoundException
-import com.hhplus.ecommerce.common.exception.CouponSoldOutException
-import com.hhplus.ecommerce.common.exception.InvalidCouponDateException
-import com.hhplus.ecommerce.common.exception.UserCouponNotFoundException
-import com.hhplus.ecommerce.domain.coupon.CouponRepository
-import com.hhplus.ecommerce.domain.coupon.CouponStatus
-import com.hhplus.ecommerce.presentation.coupon.dto.AvailableCouponItem
-import com.hhplus.ecommerce.presentation.coupon.dto.AvailableCouponResponse
-import com.hhplus.ecommerce.presentation.coupon.dto.CouponDetailResponse
-import com.hhplus.ecommerce.presentation.coupon.dto.IssueCouponRequest
-import com.hhplus.ecommerce.presentation.coupon.dto.IssueCouponResponse
-import com.hhplus.ecommerce.presentation.coupon.dto.IssuePeriod
-import com.hhplus.ecommerce.domain.coupon.entity.UserCoupon
-import com.hhplus.ecommerce.presentation.coupon.dto.UserCouponItem
-import com.hhplus.ecommerce.presentation.coupon.dto.UserCouponListResponse
-import com.hhplus.ecommerce.presentation.coupon.dto.UserCouponResponse
-import com.hhplus.ecommerce.presentation.coupon.dto.UserCouponSummary
+import com.hhplus.ecommerce.common.exception.*
+import com.hhplus.ecommerce.domain.coupon.*
+import com.hhplus.ecommerce.domain.coupon.entity.*
+import com.hhplus.ecommerce.presentation.coupon.dto.*
 import org.springframework.http.HttpStatus
 import org.springframework.stereotype.Service
 import org.springframework.web.server.ResponseStatusException
@@ -26,51 +12,20 @@ import java.time.LocalDateTime
 import java.time.format.DateTimeFormatter
 import java.time.format.DateTimeParseException
 import java.time.temporal.ChronoUnit
-import java.util.concurrent.ConcurrentHashMap
-import java.util.concurrent.TimeUnit
-import java.util.concurrent.locks.ReentrantLock
 import kotlin.math.max
 
 @Service
 class CouponServiceImpl(
-    private val couponRepository: CouponRepository
+    private val couponRepository: CouponRepository,
+    private val lockManager: com.hhplus.ecommerce.common.lock.LockManager
 ) : CouponService {
 
     private val DATE_FORMATTER = DateTimeFormatter.ofPattern("yyyy-MM-dd")
     private val DATETIME_FORMATTER = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss")
-    private val couponLocks = ConcurrentHashMap<Long, ReentrantLock>()
-    private val LOCK_TIMEOUT_SECONDS = 5L
 
     override fun issueCoupon(couponId: Long, request: IssueCouponRequest): IssueCouponResponse {
-        // 1. 해당 쿠폰 ID에 대한 락 획득 (없으면 새로 생성)
-        // computeIfAbsent: 원자적으로 락 생성 - 여러 스레드가 동시에 호출해도 하나만 생성됨
-        val lock = couponLocks.computeIfAbsent(couponId) { ReentrantLock(false) }
-
-        // 2. tryLock으로 타임아웃 내에 락 획득 시도
-        // - lock()과 달리 무한 대기하지 않음
-        // - InterruptedException 처리 필요
-        val lockAcquired = try {
-            lock.tryLock(LOCK_TIMEOUT_SECONDS, TimeUnit.SECONDS)
-        } catch (e: InterruptedException) {
-            // 스레드가 중단된 경우 인터럽트 상태 복원
-            Thread.currentThread().interrupt()
-            throw ResponseStatusException(
-                HttpStatus.SERVICE_UNAVAILABLE,
-                "Coupon issuance processing has been suspended."
-            )
-        }
-
-        // 3. 락 획득 실패 시 (타임아웃)
-        if (!lockAcquired) {
-            throw ResponseStatusException(
-                HttpStatus.TOO_MANY_REQUESTS,
-                "We are currently experiencing a high volume of coupon requests. Please try again later."
-            )
-        }
-
-        // 4. 락을 획득한 상태에서만 실행
-        // try-finally로 반드시 락 해제 보장 (데드락 방지)
-        try {
+        // Coupon Lock을 사용하여 동시 발급을 제어합니다.
+        return lockManager.executeWithCouponLock(couponId) {
             // 쿠폰 조회
             val coupon = couponRepository.findById(couponId)
                 ?: throw CouponNotFoundException(couponId)
@@ -120,7 +75,7 @@ class CouponServiceImpl(
             couponRepository.saveUserCoupon(userCoupon)
 
             // 6) 응답 생성
-            return IssueCouponResponse(
+            IssueCouponResponse(
                 userCouponId = userCoupon.id,
                 userId = userCoupon.userId,
                 couponId = coupon.id,
@@ -132,9 +87,6 @@ class CouponServiceImpl(
                 remainingQuantity = coupon.totalQuantity - coupon.issuedQuantity,
                 totalQuantity = coupon.totalQuantity
             )
-        } finally {
-            // lock 해제 (필수)
-            lock.unlock()
         }
     }
 
@@ -286,6 +238,20 @@ class CouponServiceImpl(
             isExpired = isExpired,
             canUse = canUse
         )
+    }
+
+    override fun findCouponById(id: Long): Coupon {
+        return couponRepository.findById(id)
+            ?: throw CouponNotFoundException(id)
+    }
+
+    override fun findUserCoupon(userId: Long, couponId: Long): UserCoupon {
+        return couponRepository.findUserCoupon(userId, couponId)
+            ?: throw UserCouponNotFoundException(userId, couponId)
+    }
+
+    override fun updateUserCoupon(userCoupon: UserCoupon): UserCoupon {
+        return couponRepository.saveUserCoupon(userCoupon)
     }
 
     private fun parseDateTimeFlexible(dateTimeStr: String): LocalDateTime {

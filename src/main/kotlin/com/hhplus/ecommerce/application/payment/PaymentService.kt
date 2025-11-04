@@ -1,5 +1,7 @@
 package com.hhplus.ecommerce.application.payment
 
+import com.hhplus.ecommerce.presentation.payment.dto.CancelPaymentRequest
+import com.hhplus.ecommerce.presentation.payment.dto.CancelPaymentResponse
 import com.hhplus.ecommerce.presentation.payment.dto.OrderPaymentResponse
 import com.hhplus.ecommerce.presentation.payment.dto.PaymentDetailResponse
 import com.hhplus.ecommerce.presentation.payment.dto.ProcessPaymentRequest
@@ -16,6 +18,11 @@ interface PaymentService {
      * 결제 처리
      */
     fun processPayment(orderId: Long, request: ProcessPaymentRequest): ProcessPaymentResponse
+
+    /**
+     * 결제 취소 (환불)
+     */
+    fun cancelPayment(paymentId: Long, request: CancelPaymentRequest): CancelPaymentResponse
 
     /**
      * 결제 정보 조회
