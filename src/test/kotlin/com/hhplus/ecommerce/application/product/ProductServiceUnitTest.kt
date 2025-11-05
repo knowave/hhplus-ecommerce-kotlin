@@ -81,7 +81,7 @@ class ProductServiceUnitTest : DescribeSpec({
 
                 // then
                 result.products shouldHaveSize 2
-                result.products.all { it.category == "ELECTRONICS" } shouldBe true
+                result.products.all { it.category == ProductCategory.ELECTRONICS } shouldBe true
 
                 verify(exactly = 1) { productRepository.findByCategory(ProductCategory.ELECTRONICS) }
                 verify(exactly = 0) { productRepository.findAll() }
@@ -106,7 +106,7 @@ class ProductServiceUnitTest : DescribeSpec({
 
                 // then
                 result.products shouldHaveSize 1
-                result.products[0].category shouldBe "FASHION"
+                result.products[0].category shouldBe ProductCategory.FASHION
 
                 verify(exactly = 1) { productRepository.findByCategory(ProductCategory.FASHION) }
             }

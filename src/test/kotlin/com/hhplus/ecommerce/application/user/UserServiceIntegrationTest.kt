@@ -1,11 +1,11 @@
 package com.hhplus.ecommerce.application.user
 
+import com.hhplus.ecommerce.application.user.dto.CreateUserCommand
 import com.hhplus.ecommerce.common.exception.BalanceLimitExceededException
 import com.hhplus.ecommerce.common.exception.InvalidAmountException
 import com.hhplus.ecommerce.common.exception.UserNotFoundException
 import com.hhplus.ecommerce.domain.user.UserRepository
 import com.hhplus.ecommerce.infrastructure.user.UserRepositoryImpl
-import com.hhplus.ecommerce.presentation.user.dto.CreateUserRequest
 import io.kotest.assertions.throwables.shouldThrow
 import io.kotest.core.spec.style.DescribeSpec
 import io.kotest.matchers.shouldBe
@@ -25,7 +25,7 @@ class UserServiceIntegrationTest : DescribeSpec({
         context("사용자 생성 및 조회 통합 시나리오") {
             it("사용자를 생성하고 조회할 수 있다") {
                 // given
-                val request = CreateUserRequest(balance = 50000L)
+                val request = CreateUserCommand(balance = 50000L)
 
                 // when - 사용자 생성
                 val createdUser = userService.createUser(request)
@@ -35,25 +35,25 @@ class UserServiceIntegrationTest : DescribeSpec({
                 createdUser.balance shouldBe 50000L
 
                 // when - 생성된 사용자 조회
-                val userInfo = userService.getUserInfo(createdUser.id)
+                val userInfo = userService.getUser(createdUser.id)
 
                 // then - 조회 결과 검증
-                userInfo.userId shouldBe createdUser.id
+                userInfo.id shouldBe createdUser.id
                 userInfo.balance shouldBe 50000L
             }
 
             it("사용자를 생성하고 잔액을 조회할 수 있다") {
                 // given
-                val request = CreateUserRequest(balance = 30000L)
+                val request = CreateUserCommand(balance =30000L)
 
                 // when - 사용자 생성
                 val createdUser = userService.createUser(request)
 
                 // when - 잔액 조회
-                val balanceResponse = userService.getUserBalance(createdUser.id)
+                val balanceResponse = userService.getUser(createdUser.id)
 
                 // then
-                balanceResponse.userId shouldBe createdUser.id
+                balanceResponse.id shouldBe createdUser.id
                 balanceResponse.balance shouldBe 30000L
             }
         }
@@ -61,7 +61,7 @@ class UserServiceIntegrationTest : DescribeSpec({
         context("잔액 충전 통합 시나리오") {
             it("사용자를 생성하고 잔액을 충전할 수 있다") {
                 // given - 사용자 생성
-                val request = CreateUserRequest(balance = 10000L)
+                val request = CreateUserCommand(balance = 10000L)
                 val createdUser = userService.createUser(request)
 
                 // when - 잔액 충전
@@ -75,7 +75,7 @@ class UserServiceIntegrationTest : DescribeSpec({
                 chargeResponse.currentBalance shouldBe 60000L
 
                 // when - 충전 후 잔액 재조회
-                val updatedBalance = userService.getUserBalance(createdUser.id)
+                val updatedBalance = userService.getUser(createdUser.id)
 
                 // then - 잔액이 실제로 증가했는지 확인
                 updatedBalance.balance shouldBe 60000L
@@ -83,7 +83,7 @@ class UserServiceIntegrationTest : DescribeSpec({
 
             it("여러 번 충전할 수 있다") {
                 // given - 사용자 생성
-                val request = CreateUserRequest(balance = 10000L)
+                val request = CreateUserCommand(balance = 10000L)
                 val createdUser = userService.createUser(request)
 
                 // when - 첫 번째 충전
@@ -99,7 +99,7 @@ class UserServiceIntegrationTest : DescribeSpec({
                 finalCharge.currentBalance shouldBe 100000L
 
                 // when - 최종 잔액 조회
-                val finalBalance = userService.getUserBalance(createdUser.id)
+                val finalBalance = userService.getUser(createdUser.id)
 
                 // then
                 finalBalance.balance shouldBe 100000L
@@ -111,16 +111,16 @@ class UserServiceIntegrationTest : DescribeSpec({
                 // given - UserRepositoryImpl에 초기 데이터로 id=1 사용자가 있음
 
                 // when
-                val userBalance = userService.getUserBalance(1L)
+                val userBalance = userService.getUser(1L)
 
                 // then
-                userBalance.userId shouldBe 1L
+                userBalance.id shouldBe 1L
                 userBalance.balance shouldBe 50000L
             }
 
             it("초기 데이터 사용자의 잔액을 충전할 수 있다") {
                 // given - UserRepositoryImpl에 초기 데이터로 id=1 사용자가 있음
-                val initialBalance = userService.getUserBalance(1L).balance
+                val initialBalance = userService.getUser(1L).balance
 
                 // when - 잔액 충전
                 val chargeResponse = userService.chargeBalance(1L, 100000L)
@@ -130,7 +130,7 @@ class UserServiceIntegrationTest : DescribeSpec({
                 chargeResponse.currentBalance shouldBe (initialBalance + 100000L)
 
                 // when - 재조회
-                val updatedBalance = userService.getUserBalance(1L)
+                val updatedBalance = userService.getUser(1L)
 
                 // then - 잔액이 영구적으로 변경되었는지 확인
                 updatedBalance.balance shouldBe (initialBalance + 100000L)
@@ -144,11 +144,11 @@ class UserServiceIntegrationTest : DescribeSpec({
 
                 // when & then
                 shouldThrow<UserNotFoundException> {
-                    userService.getUserBalance(nonExistentId)
+                    userService.getUser(nonExistentId)
                 }
 
                 shouldThrow<UserNotFoundException> {
-                    userService.getUserInfo(nonExistentId)
+                    userService.getUser(nonExistentId)
                 }
 
                 shouldThrow<UserNotFoundException> {
@@ -158,7 +158,7 @@ class UserServiceIntegrationTest : DescribeSpec({
 
             it("잘못된 금액으로 사용자 생성 시 예외가 발생한다") {
                 // given
-                val invalidRequest = CreateUserRequest(balance = 500L)
+                val invalidRequest = CreateUserCommand(balance = 500L)
 
                 // when & then
                 shouldThrow<InvalidAmountException> {
@@ -172,9 +172,9 @@ class UserServiceIntegrationTest : DescribeSpec({
 
             it("잘못된 금액으로 충전 시 예외가 발생하고 잔액이 변하지 않는다") {
                 // given - 사용자 생성
-                val request = CreateUserRequest(balance = 50000L)
+                val request = CreateUserCommand(balance = 50000L)
                 val createdUser = userService.createUser(request)
-                val initialBalance = userService.getUserBalance(createdUser.id).balance
+                val initialBalance = userService.getUser(createdUser.id).balance
 
                 // when & then - 잘못된 충전 시도
                 shouldThrow<InvalidAmountException> {
@@ -182,13 +182,13 @@ class UserServiceIntegrationTest : DescribeSpec({
                 }
 
                 // then - 잔액이 변하지 않았는지 확인
-                val unchangedBalance = userService.getUserBalance(createdUser.id)
+                val unchangedBalance = userService.getUser(createdUser.id)
                 unchangedBalance.balance shouldBe initialBalance
             }
 
             it("잔액 한도 초과 시 예외가 발생하고 잔액이 변하지 않는다") {
                 // given - 높은 초기 잔액으로 사용자 생성
-                val request = CreateUserRequest(balance = 1_000_000L)
+                val request = CreateUserCommand(balance =1_000_000L)
                 val createdUser = userService.createUser(request)
 
                 // when - 한도 내에서 충전
@@ -202,7 +202,7 @@ class UserServiceIntegrationTest : DescribeSpec({
                 userService.chargeBalance(createdUser.id, 1_000_000L) // 총 9,000,000
                 userService.chargeBalance(createdUser.id, 500_000L) // 총 9,500,000
 
-                val currentBalance = userService.getUserBalance(createdUser.id).balance
+                val currentBalance = userService.getUser(createdUser.id).balance
                 currentBalance shouldBe 9_500_000L
 
                 // when & then - 한도 초과 충전 시도 (9,500,000 + 1,000,000 = 10,500,000 > 10,000,000)
@@ -211,13 +211,13 @@ class UserServiceIntegrationTest : DescribeSpec({
                 }
 
                 // then - 잔액이 변하지 않았는지 확인
-                val unchangedBalance = userService.getUserBalance(createdUser.id)
+                val unchangedBalance = userService.getUser(createdUser.id)
                 unchangedBalance.balance shouldBe 9_500_000L
             }
 
             it("최대 한도까지는 충전이 가능하다") {
                 // given - 사용자 생성
-                val request = CreateUserRequest(balance = 1_000_000L)
+                val request = CreateUserCommand(balance =1_000_000L)
                 val createdUser = userService.createUser(request)
 
                 // when - 최대 한도(10,000,000)까지 충전
@@ -234,7 +234,7 @@ class UserServiceIntegrationTest : DescribeSpec({
                 // then
                 finalCharge.currentBalance shouldBe 10_000_000L
 
-                val finalBalance = userService.getUserBalance(createdUser.id)
+                val finalBalance = userService.getUser(createdUser.id)
                 finalBalance.balance shouldBe 10_000_000L
             }
         }

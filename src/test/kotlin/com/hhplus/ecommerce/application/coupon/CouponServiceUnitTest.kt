@@ -1,19 +1,15 @@
 package com.hhplus.ecommerce.application.coupon
 
+import com.hhplus.ecommerce.application.coupon.dto.*
 import com.hhplus.ecommerce.common.exception.CouponAlreadyIssuedException
-import com.hhplus.ecommerce.common.exception.CouponNotFoundException
 import com.hhplus.ecommerce.common.exception.CouponSoldOutException
 import com.hhplus.ecommerce.common.exception.InvalidCouponDateException
-import com.hhplus.ecommerce.common.exception.UserCouponNotFoundException
 import com.hhplus.ecommerce.domain.coupon.CouponRepository
 import com.hhplus.ecommerce.domain.coupon.CouponStatus
 import com.hhplus.ecommerce.domain.coupon.entity.Coupon
 import com.hhplus.ecommerce.domain.coupon.entity.UserCoupon
-import com.hhplus.ecommerce.presentation.coupon.dto.IssueCouponRequest
 import io.kotest.assertions.throwables.shouldThrow
 import io.kotest.core.spec.style.DescribeSpec
-import io.kotest.matchers.collections.shouldBeEmpty
-import io.kotest.matchers.collections.shouldHaveSize
 import io.kotest.matchers.shouldBe
 import io.kotest.matchers.shouldNotBe
 import io.kotest.matchers.string.shouldContain
@@ -21,7 +17,6 @@ import io.mockk.every
 import io.mockk.mockk
 import io.mockk.verify
 import java.time.LocalDate
-import java.time.LocalDateTime
 import java.time.format.DateTimeFormatter
 
 class CouponServiceUnitTest : DescribeSpec({
@@ -57,7 +52,7 @@ class CouponServiceUnitTest : DescribeSpec({
                     validityDays = 30,
                     createdAt = "2025-10-01 00:00:00"
                 )
-                val request = IssueCouponRequest(userId = userId)
+                val command = IssueCouponCommand(userId = userId)
 
                 every { couponRepository.findById(couponId) } returns coupon
                 every { couponRepository.findUserCoupon(userId, couponId) } returns null
@@ -66,7 +61,7 @@ class CouponServiceUnitTest : DescribeSpec({
                 every { couponRepository.saveUserCoupon(any()) } answers { firstArg() }
 
                 // when
-                val result = couponService.issueCoupon(couponId, request)
+                val result = couponService.issueCoupon(couponId, command)
 
                 // then
                 result.userCouponId shouldBe userCouponId
@@ -104,7 +99,7 @@ class CouponServiceUnitTest : DescribeSpec({
                     validityDays = 30,
                     createdAt = "2025-10-01 00:00:00"
                 )
-                val request = IssueCouponRequest(userId = userId)
+                val command = IssueCouponCommand(userId = userId)
 
                 every { couponRepository.findById(couponId) } returns coupon
                 every { couponRepository.findUserCoupon(userId, couponId) } returns null
@@ -113,7 +108,7 @@ class CouponServiceUnitTest : DescribeSpec({
                 every { couponRepository.saveUserCoupon(any()) } answers { firstArg() }
 
                 // when
-                val result = couponService.issueCoupon(couponId, request)
+                val result = couponService.issueCoupon(couponId, command)
 
                 // then
                 result.remainingQuantity shouldBe 0 // 100 - 100
@@ -139,7 +134,7 @@ class CouponServiceUnitTest : DescribeSpec({
                     validityDays = 30,
                     createdAt = "2025-10-01 00:00:00"
                 )
-                val request = IssueCouponRequest(userId = userId)
+                val command = IssueCouponCommand(userId = userId)
 
                 every { couponRepository.findById(couponId) } returns coupon
                 every { couponRepository.findUserCoupon(userId, couponId) } returns null
@@ -148,7 +143,7 @@ class CouponServiceUnitTest : DescribeSpec({
                 every { couponRepository.saveUserCoupon(any()) } answers { firstArg() }
 
                 // when
-                val result = couponService.issueCoupon(couponId, request)
+                val result = couponService.issueCoupon(couponId, command)
 
                 // then
                 result.couponId shouldBe couponId
@@ -173,7 +168,7 @@ class CouponServiceUnitTest : DescribeSpec({
                     validityDays = 30,
                     createdAt = "2025-10-01 00:00:00"
                 )
-                val request = IssueCouponRequest(userId = userId)
+                val command = IssueCouponCommand(userId = userId)
 
                 every { couponRepository.findById(couponId) } returns coupon
                 every { couponRepository.findUserCoupon(userId, couponId) } returns null
@@ -182,7 +177,7 @@ class CouponServiceUnitTest : DescribeSpec({
                 every { couponRepository.saveUserCoupon(any()) } answers { firstArg() }
 
                 // when
-                val result = couponService.issueCoupon(couponId, request)
+                val result = couponService.issueCoupon(couponId, command)
 
                 // then
                 result.couponId shouldBe couponId
@@ -217,14 +212,14 @@ class CouponServiceUnitTest : DescribeSpec({
                     issuedAt = "2025-11-01 10:00:00",
                     expiresAt = "2025-12-01 10:00:00"
                 )
-                val request = IssueCouponRequest(userId = userId)
+                val command = IssueCouponCommand(userId = userId)
 
                 every { couponRepository.findById(couponId) } returns coupon
                 every { couponRepository.findUserCoupon(userId, couponId) } returns existingUserCoupon
 
                 // when & then
                 val exception = shouldThrow<CouponAlreadyIssuedException> {
-                    couponService.issueCoupon(couponId, request)
+                    couponService.issueCoupon(couponId, command)
                 }
                 exception.message shouldContain "User already has this coupon"
 
@@ -252,14 +247,14 @@ class CouponServiceUnitTest : DescribeSpec({
                     validityDays = 30,
                     createdAt = "2025-10-01 00:00:00"
                 )
-                val request = IssueCouponRequest(userId = userId)
+                val command = IssueCouponCommand(userId = userId)
 
                 every { couponRepository.findById(couponId) } returns coupon
                 every { couponRepository.findUserCoupon(userId, couponId) } returns null
 
                 // when & then
                 val exception = shouldThrow<InvalidCouponDateException> {
-                    couponService.issueCoupon(couponId, request)
+                    couponService.issueCoupon(couponId, command)
                 }
                 exception.message shouldContain "The coupon issuance period has not started."
 
@@ -284,14 +279,14 @@ class CouponServiceUnitTest : DescribeSpec({
                     validityDays = 30,
                     createdAt = "2025-10-01 00:00:00"
                 )
-                val request = IssueCouponRequest(userId = userId)
+                val command = IssueCouponCommand(userId = userId)
 
                 every { couponRepository.findById(couponId) } returns coupon
                 every { couponRepository.findUserCoupon(userId, couponId) } returns null
 
                 // when & then
                 val exception = shouldThrow<InvalidCouponDateException> {
-                    couponService.issueCoupon(couponId, request)
+                    couponService.issueCoupon(couponId, command)
                 }
                 exception.message shouldContain "The coupon issuance period has ended."
 
@@ -318,14 +313,14 @@ class CouponServiceUnitTest : DescribeSpec({
                     validityDays = 30,
                     createdAt = "2025-10-01 00:00:00"
                 )
-                val request = IssueCouponRequest(userId = userId)
+                val command = IssueCouponCommand(userId = userId)
 
                 every { couponRepository.findById(couponId) } returns coupon
                 every { couponRepository.findUserCoupon(userId, couponId) } returns null
 
                 // when & then
                 val exception = shouldThrow<CouponSoldOutException> {
-                    couponService.issueCoupon(couponId, request)
+                    couponService.issueCoupon(couponId, command)
                 }
                 exception.message shouldContain "Coupon sold out"
 

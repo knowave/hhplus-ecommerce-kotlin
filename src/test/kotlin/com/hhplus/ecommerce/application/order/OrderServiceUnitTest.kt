@@ -25,10 +25,8 @@ import com.hhplus.ecommerce.domain.order.entity.Order
 import com.hhplus.ecommerce.domain.order.entity.OrderItem
 import com.hhplus.ecommerce.domain.order.entity.OrderStatus
 import com.hhplus.ecommerce.domain.product.entity.Product
-import com.hhplus.ecommerce.presentation.order.dto.CancelOrderRequest
-import com.hhplus.ecommerce.presentation.order.dto.CreateOrderRequest
-import com.hhplus.ecommerce.presentation.order.dto.OrderItemRequest
-import com.hhplus.ecommerce.presentation.user.dto.UserInfoResponse
+import com.hhplus.ecommerce.domain.user.entity.User
+import com.hhplus.ecommerce.application.order.dto.*
 import io.kotest.assertions.throwables.shouldThrow
 import io.kotest.core.spec.style.DescribeSpec
 import io.kotest.matchers.reflection.beLateInit
@@ -82,17 +80,16 @@ class OrderServiceUnitTest : DescribeSpec({
                 val unitPrice = 10000L
                 val now = LocalDateTime.now().format(dateFormatter)
 
-                val userInfo = createUserInfoResponse(userId, 100000L, now, now)
+                val user = createUser(userId, 100000L, now, now)
                 val product = createProduct(productId, "노트북", unitPrice, 10, ProductCategory.ELECTRONICS, 0, now, now)
 
-                val orderItemRequest = OrderItemRequest(productId, quantity)
-                val request = CreateOrderRequest(
+                val command = CreateOrderCommand(
                     userId = userId,
-                    items = listOf(orderItemRequest),
+                    items = listOf(OrderItemCommand(productId, quantity)),
                     couponId = null
                 )
 
-                every { userService.getUserInfo(userId) } returns userInfo
+                every { userService.getUser(userId) } returns user
                 every { productService.findProductById(productId) } returns product
                 every { productService.updateProduct(any()) } returns product
                 every { orderRepository.generateId() } returns 1001L
@@ -103,7 +100,7 @@ class OrderServiceUnitTest : DescribeSpec({
                 every { orderRepository.save(capture(orderSlot)) } answers { orderSlot.captured }
 
                 // when
-                val response = orderService.createOrder(request)
+                val response = orderService.createOrder(command)
 
                 // then
                 response.orderId shouldBe 1001L
@@ -133,20 +130,19 @@ class OrderServiceUnitTest : DescribeSpec({
                 val discountRate = 10
                 val now = LocalDateTime.now().format(dateFormatter)
 
-                val userInfo = createUserInfoResponse(userId, 100000L, now, now)
+                val user = createUser(userId, 100000L, now, now)
                 val product = createProduct(productId, "노트북", unitPrice, 10, ProductCategory.ELECTRONICS, 0, now, now)
                 val coupon = createCoupon(couponId, "10% 할인 쿠폰", discountRate, 100, 50, "2025-01-01", "2025-12-31", 30, now)
                 val expiresAt = LocalDateTime.now().plusDays(30).format(dateFormatter)
                 val userCoupon = createUserCoupon(1L, userId, couponId, CouponStatus.AVAILABLE, now, expiresAt, null)
 
-                val orderItemRequest = OrderItemRequest(productId, quantity)
-                val request = CreateOrderRequest(
+                val command = CreateOrderCommand(
                     userId = userId,
-                    items = listOf(orderItemRequest),
+                    items = listOf(OrderItemCommand(productId, quantity)),
                     couponId = couponId
                 )
 
-                every { userService.getUserInfo(userId) } returns userInfo
+                every { userService.getUser(userId) } returns user
                 every { productService.findProductById(productId) } returns product
                 every { couponService.findUserCoupon(userId, couponId) } returns userCoupon
                 every { couponService.findCouponById(couponId) } returns coupon
@@ -158,7 +154,7 @@ class OrderServiceUnitTest : DescribeSpec({
                 every { orderRepository.save(capture(orderSlot)) } answers { orderSlot.captured }
 
                 // when
-                val response = orderService.createOrder(request)
+                val response = orderService.createOrder(command)
 
                 // then
                 response.pricing.totalAmount shouldBe 100000L
@@ -178,33 +174,33 @@ class OrderServiceUnitTest : DescribeSpec({
         context("주문 생성 실패 - 검증 오류") {
             it("수량이 0 이하이면 예외가 발생한다") {
                 // given
-                val request = CreateOrderRequest(
+                val command = CreateOrderCommand(
                     userId = 100L,
-                    items = listOf(OrderItemRequest(1L, 0)),
+                    items = listOf(OrderItemCommand(1L, 0)),
                     couponId = null
                 )
 
                 // when & then
                 shouldThrow<InvalidQuantityException> {
-                    orderService.createOrder(request)
+                    orderService.createOrder(command)
                 }
             }
 
             it("존재하지 않는 사용자는 주문할 수 없다") {
                 // given
                 val userId = 999L
-                val request = CreateOrderRequest(
+                val command = CreateOrderCommand(
                     userId = userId,
-                    items = listOf(OrderItemRequest(1L, 1)),
+                    items = listOf(OrderItemCommand(1L, 1)),
                     couponId = null
                 )
 
-                // userService.getUserInfo가 UserNotFoundException을 던지도록 모킹
-                every { userService.getUserInfo(userId) } throws UserNotFoundException(userId)
+                // userService.getUser가 UserNotFoundException을 던지도록 모킹
+                every { userService.getUser(userId) } throws UserNotFoundException(userId)
 
                 // when & then
                 shouldThrow<UserNotFoundException> {
-                    orderService.createOrder(request)
+                    orderService.createOrder(command)
                 }
             }
 
@@ -213,21 +209,21 @@ class OrderServiceUnitTest : DescribeSpec({
                 val userId = 100L
                 val productId = 999L
                 val now = LocalDateTime.now().format(dateFormatter)
-                val request = CreateOrderRequest(
+                val command = CreateOrderCommand(
                     userId = userId,
-                    items = listOf(OrderItemRequest(productId, 1)),
+                    items = listOf(OrderItemCommand(productId, 1)),
                     couponId = null
                 )
 
-                val userInfo = createUserInfoResponse(userId, 100000L, now, now)
-                every { userService.getUserInfo(userId) } returns userInfo
+                val user = createUser(userId, 100000L, now, now)
+                every { userService.getUser(userId) } returns user
 
                 // productService.findProductById가 ProductNotFoundException을 던지도록 모킹
                 every { productService.findProductById(productId) } throws ProductNotFoundException(productId)
 
                 // when & then
                 shouldThrow<ProductNotFoundException> {
-                    orderService.createOrder(request)
+                    orderService.createOrder(command)
                 }
             }
 
@@ -236,21 +232,21 @@ class OrderServiceUnitTest : DescribeSpec({
                 val userId = 100L
                 val productId = 1L
                 val now = LocalDateTime.now().format(dateFormatter)
-                val request = CreateOrderRequest(
+                val command = CreateOrderCommand(
                     userId = userId,
-                    items = listOf(OrderItemRequest(productId, 10)),
+                    items = listOf(OrderItemCommand(productId, 10)),
                     couponId = null
                 )
 
-                val userInfo = createUserInfoResponse(userId, 100000L, now, now)
+                val user = createUser(userId, 100000L, now, now)
                 val product = createProduct(productId, "노트북", 100000L, 5, ProductCategory.ELECTRONICS, 0, now, now) // 재고 5개만 있음
 
-                every { userService.getUserInfo(userId) } returns userInfo
+                every { userService.getUser(userId) } returns user
                 every { productService.findProductById(productId) } returns product
 
                 // when & then
                 shouldThrow<InsufficientStockException> {
-                    orderService.createOrder(request)
+                    orderService.createOrder(command)
                 }
             }
         }
@@ -263,16 +259,16 @@ class OrderServiceUnitTest : DescribeSpec({
                 val couponId = 999L
                 val now = LocalDateTime.now().format(dateFormatter)
 
-                val userInfo = createUserInfoResponse(userId, 100000L, now, now)
+                val user = createUser(userId, 100000L, now, now)
                 val product = createProduct(productId, "노트북", 100000L, 10, ProductCategory.ELECTRONICS, 0, now, now)
 
-                val request = CreateOrderRequest(
+                val command = CreateOrderCommand(
                     userId = userId,
-                    items = listOf(OrderItemRequest(productId, 1)),
+                    items = listOf(OrderItemCommand(productId, 1)),
                     couponId = couponId
                 )
 
-                every { userService.getUserInfo(userId) } returns userInfo
+                every { userService.getUser(userId) } returns user
                 every { productService.findProductById(productId) } returns product
 
                 // couponService.findUserCoupon이 CouponNotFoundException을 던지도록 모킹
@@ -280,7 +276,7 @@ class OrderServiceUnitTest : DescribeSpec({
 
                 // when & then
                 shouldThrow<CouponNotFoundException> {
-                    orderService.createOrder(request)
+                    orderService.createOrder(command)
                 }
             }
 
@@ -291,26 +287,26 @@ class OrderServiceUnitTest : DescribeSpec({
                 val couponId = 10L
                 val now = LocalDateTime.now().format(dateFormatter)
 
-                val userInfo = createUserInfoResponse(userId, 100000L, now, now)
+                val user = createUser(userId, 100000L, now, now)
                 val product = createProduct(productId, "노트북", 100000L, 10, ProductCategory.ELECTRONICS, 0, now, now)
                 val userCoupon = createUserCoupon(
                     1L, userId, couponId, CouponStatus.USED,
                     now, LocalDateTime.now().plusDays(30).format(dateFormatter), now
                 )
 
-                val request = CreateOrderRequest(
+                val command = CreateOrderCommand(
                     userId = userId,
-                    items = listOf(OrderItemRequest(productId, 1)),
+                    items = listOf(OrderItemCommand(productId, 1)),
                     couponId = couponId
                 )
 
-                every { userService.getUserInfo(userId) } returns userInfo
+                every { userService.getUser(userId) } returns user
                 every { productService.findProductById(productId) } returns product
                 every { couponService.findUserCoupon(userId, couponId) } returns userCoupon
 
                 // when & then
                 shouldThrow<InvalidCouponException> {
-                    orderService.createOrder(request)
+                    orderService.createOrder(command)
                 }
             }
 
@@ -321,7 +317,7 @@ class OrderServiceUnitTest : DescribeSpec({
                 val couponId = 10L
                 val now = LocalDateTime.now().format(dateFormatter)
 
-                val userInfo = createUserInfoResponse(userId, 100000L, now, now)
+                val user = createUser(userId, 100000L, now, now)
                 val product = createProduct(productId, "노트북", 100000L, 10, ProductCategory.ELECTRONICS, 0, now, now)
                 val userCoupon = createUserCoupon(
                     1L, userId, couponId, CouponStatus.AVAILABLE,
@@ -330,19 +326,19 @@ class OrderServiceUnitTest : DescribeSpec({
                     null
                 )
 
-                val request = CreateOrderRequest(
+                val command = CreateOrderCommand(
                     userId = userId,
-                    items = listOf(OrderItemRequest(productId, 1)),
+                    items = listOf(OrderItemCommand(productId, 1)),
                     couponId = couponId
                 )
 
-                every { userService.getUserInfo(userId) } returns userInfo
+                every { userService.getUser(userId) } returns user
                 every { productService.findProductById(productId) } returns product
                 every { couponService.findUserCoupon(userId, couponId) } returns userCoupon
 
                 // when & then
                 shouldThrow<ExpiredCouponException> {
-                    orderService.createOrder(request)
+                    orderService.createOrder(command)
                 }
             }
         }
@@ -376,14 +372,14 @@ class OrderServiceUnitTest : DescribeSpec({
                     updatedAt = now
                 )
 
-                val request = CancelOrderRequest(userId)
+                val command = CancelOrderCommand(userId)
 
                 every { orderRepository.findById(orderId) } returns order
                 every { productService.findProductById(productId) } returns product
                 every { productService.updateProduct(any()) } returns product
 
                 // when
-                val response = orderService.cancelOrder(orderId, request)
+                val response = orderService.cancelOrder(orderId, command)
 
                 // then
                 response.orderId shouldBe orderId
@@ -402,13 +398,13 @@ class OrderServiceUnitTest : DescribeSpec({
             it("존재하지 않는 주문은 취소할 수 없다") {
                 // given
                 val orderId = 999L
-                val request = CancelOrderRequest(100L)
+                val command = CancelOrderCommand(100L)
 
                 every { orderRepository.findById(orderId) } returns null
 
                 // when & then
                 shouldThrow<OrderNotFoundException> {
-                    orderService.cancelOrder(orderId, request)
+                    orderService.cancelOrder(orderId, command)
                 }
             }
 
@@ -436,27 +432,27 @@ class OrderServiceUnitTest : DescribeSpec({
                     updatedAt = now
                 )
 
-                val request = CancelOrderRequest(otherUserId)
+                val command = CancelOrderCommand(otherUserId)
 
                 every { orderRepository.findById(orderId) } returns order
 
                 // when & then
                 shouldThrow<ForbiddenException> {
-                    orderService.cancelOrder(orderId, request)
+                    orderService.cancelOrder(orderId, command)
                 }
             }
         }
     }
 }) {
     companion object {
-        fun createUserInfoResponse(
+        fun createUser(
             userId: Long,
             balance: Long,
             createdAt: String,
             updatedAt: String
-        ): UserInfoResponse {
-            return UserInfoResponse(
-                userId = userId,
+        ): User {
+            return User(
+                id = userId,
                 balance = balance,
                 createdAt = createdAt,
                 updatedAt = updatedAt

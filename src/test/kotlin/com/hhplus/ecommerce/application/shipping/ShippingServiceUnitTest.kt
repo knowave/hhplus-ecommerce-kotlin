@@ -1,5 +1,6 @@
 package com.hhplus.ecommerce.application.shipping
 
+import com.hhplus.ecommerce.application.shipping.dto.UpdateShippingStatusCommand
 import com.hhplus.ecommerce.common.exception.AlreadyDeliveredException
 import com.hhplus.ecommerce.common.exception.InvalidStatusTransitionException
 import com.hhplus.ecommerce.common.exception.OrderNotFoundForShippingException
@@ -7,7 +8,6 @@ import com.hhplus.ecommerce.common.exception.ShippingNotFoundException
 import com.hhplus.ecommerce.domain.shipping.ShippingRepository
 import com.hhplus.ecommerce.domain.shipping.entity.Shipping
 import com.hhplus.ecommerce.domain.shipping.entity.ShippingStatus
-import com.hhplus.ecommerce.presentation.shipping.dto.UpdateShippingStatusRequest
 import io.kotest.assertions.throwables.shouldThrow
 import io.kotest.core.spec.style.DescribeSpec
 import io.kotest.matchers.shouldBe
@@ -40,7 +40,7 @@ class ShippingServiceUnitTest : DescribeSpec({
                 val result = shippingService.getShipping(orderId)
 
                 // Then
-                result.shippingId shouldBe 1L
+                result.id shouldBe 1L
                 result.orderId shouldBe orderId
                 result.status shouldBe "PENDING"
                 result.carrier shouldBe "CJ대한통운"
@@ -68,7 +68,7 @@ class ShippingServiceUnitTest : DescribeSpec({
                 val now = LocalDateTime.now()
                 val shippingId = 1L
                 val shipping = createShipping(shippingId, 100L, ShippingStatus.PENDING, now)
-                val request = UpdateShippingStatusRequest(
+                val command = UpdateShippingStatusCommand(
                     status = "IN_TRANSIT",
                     deliveredAt = null
                 )
@@ -77,7 +77,7 @@ class ShippingServiceUnitTest : DescribeSpec({
                 every { shippingRepository.save(any()) } answers { firstArg() }
 
                 // When
-                val result = shippingService.updateShippingStatus(shippingId, request)
+                val result = shippingService.updateShippingStatus(shippingId, command)
 
                 // Then
                 result.shippingId shouldBe shippingId
@@ -96,7 +96,7 @@ class ShippingServiceUnitTest : DescribeSpec({
                     .copy(estimatedArrivalAt = estimatedArrivalAt)
 
                 val deliveredAt = estimatedArrivalAt.minusHours(1) // 예상보다 1시간 빨리 도착
-                val request = UpdateShippingStatusRequest(
+                val command = UpdateShippingStatusCommand(
                     status = "DELIVERED",
                     deliveredAt = deliveredAt
                 )
@@ -105,7 +105,7 @@ class ShippingServiceUnitTest : DescribeSpec({
                 every { shippingRepository.save(any()) } answers { firstArg() }
 
                 // When
-                val result = shippingService.updateShippingStatus(shippingId, request)
+                val result = shippingService.updateShippingStatus(shippingId, command)
 
                 // Then
                 result.status shouldBe "DELIVERED"
@@ -125,7 +125,7 @@ class ShippingServiceUnitTest : DescribeSpec({
                     .copy(estimatedArrivalAt = estimatedArrivalAt)
 
                 val deliveredAt = estimatedArrivalAt.plusDays(2) // 예상보다 2일 늦게 도착
-                val request = UpdateShippingStatusRequest(
+                val command = UpdateShippingStatusCommand(
                     status = "DELIVERED",
                     deliveredAt = deliveredAt
                 )
@@ -134,7 +134,7 @@ class ShippingServiceUnitTest : DescribeSpec({
                 every { shippingRepository.save(any()) } answers { firstArg() }
 
                 // When
-                val result = shippingService.updateShippingStatus(shippingId, request)
+                val result = shippingService.updateShippingStatus(shippingId, command)
 
                 // Then
                 result.status shouldBe "DELIVERED"
@@ -150,7 +150,7 @@ class ShippingServiceUnitTest : DescribeSpec({
                 val now = LocalDateTime.now()
                 val shippingId = 1L
                 val shipping = createShipping(shippingId, 100L, ShippingStatus.PENDING, now)
-                val request = UpdateShippingStatusRequest(
+                val command = UpdateShippingStatusCommand(
                     status = "DELIVERED",
                     deliveredAt = now
                 )
@@ -159,7 +159,7 @@ class ShippingServiceUnitTest : DescribeSpec({
 
                 // When & Then
                 shouldThrow<InvalidStatusTransitionException> {
-                    shippingService.updateShippingStatus(shippingId, request)
+                    shippingService.updateShippingStatus(shippingId, command)
                 }
                 verify(exactly = 1) { shippingRepository.findById(shippingId) }
                 verify(exactly = 0) { shippingRepository.save(any()) }
@@ -171,7 +171,7 @@ class ShippingServiceUnitTest : DescribeSpec({
                 val shippingId = 1L
                 val shipping = createShipping(shippingId, 100L, ShippingStatus.DELIVERED, now)
                     .copy(deliveredAt = now)
-                val request = UpdateShippingStatusRequest(
+                val command = UpdateShippingStatusCommand(
                     status = "IN_TRANSIT",
                     deliveredAt = null
                 )
@@ -180,7 +180,7 @@ class ShippingServiceUnitTest : DescribeSpec({
 
                 // When & Then
                 shouldThrow<AlreadyDeliveredException> {
-                    shippingService.updateShippingStatus(shippingId, request)
+                    shippingService.updateShippingStatus(shippingId, command)
                 }
                 verify(exactly = 1) { shippingRepository.findById(shippingId) }
                 verify(exactly = 0) { shippingRepository.save(any()) }
@@ -189,7 +189,7 @@ class ShippingServiceUnitTest : DescribeSpec({
             it("존재하지 않는 배송 ID로 변경하려 하면 ShippingNotFoundException을 발생시킨다") {
                 // Given
                 val shippingId = 999L
-                val request = UpdateShippingStatusRequest(
+                val command = UpdateShippingStatusCommand(
                     status = "IN_TRANSIT",
                     deliveredAt = null
                 )
@@ -198,7 +198,7 @@ class ShippingServiceUnitTest : DescribeSpec({
 
                 // When & Then
                 shouldThrow<ShippingNotFoundException> {
-                    shippingService.updateShippingStatus(shippingId, request)
+                    shippingService.updateShippingStatus(shippingId, command)
                 }
                 verify(exactly = 1) { shippingRepository.findById(shippingId) }
             }
@@ -340,10 +340,10 @@ class ShippingServiceUnitTest : DescribeSpec({
                 page2.page.number shouldBe 1
 
                 // 다른 데이터 확인
-                page1.items[0].shippingId shouldBe 1L
-                page1.items[1].shippingId shouldBe 2L
-                page2.items[0].shippingId shouldBe 3L
-                page2.items[1].shippingId shouldBe 4L
+                page1.items[0].id shouldBe 1L
+                page1.items[1].id shouldBe 2L
+                page2.items[0].id shouldBe 3L
+                page2.items[1].id shouldBe 4L
             }
 
             it("빈 페이지를 조회하면 빈 결과를 반환한다") {

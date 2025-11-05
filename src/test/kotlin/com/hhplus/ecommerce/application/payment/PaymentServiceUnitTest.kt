@@ -15,9 +15,8 @@ import com.hhplus.ecommerce.domain.payment.entity.Payment
 import com.hhplus.ecommerce.domain.payment.entity.PaymentStatus
 import com.hhplus.ecommerce.domain.payment.entity.TransmissionStatus
 import com.hhplus.ecommerce.domain.user.entity.User
-import com.hhplus.ecommerce.presentation.payment.dto.CancelPaymentRequest
-import com.hhplus.ecommerce.presentation.payment.dto.ProcessPaymentRequest
-import com.hhplus.ecommerce.presentation.user.dto.UserInfoResponse
+import com.hhplus.ecommerce.application.payment.dto.CancelPaymentCommand
+import com.hhplus.ecommerce.application.payment.dto.ProcessPaymentCommand
 import io.kotest.assertions.throwables.shouldThrow
 import io.kotest.core.spec.style.DescribeSpec
 import io.kotest.matchers.shouldBe
@@ -92,7 +91,7 @@ class PaymentServiceUnitTest : DescribeSpec({
                     updatedAt = now
                 )
 
-                val request = ProcessPaymentRequest(userId = userId)
+                val command = ProcessPaymentCommand(userId = userId)
 
                 // Mock 설정
                 every { orderService.getOrder(orderId) } returns order
@@ -109,7 +108,7 @@ class PaymentServiceUnitTest : DescribeSpec({
                 every { paymentRepository.saveTransmission(any()) } answers { firstArg() }
 
                 // when
-                val result = paymentService.processPayment(orderId, request)
+                val result = paymentService.processPayment(orderId, command)
 
                 // then
                 result.paymentId shouldBe 1L
@@ -130,13 +129,13 @@ class PaymentServiceUnitTest : DescribeSpec({
             it("존재하지 않는 주문에 대한 결제 시 OrderNotFoundException 발생") {
                 // given
                 val orderId = 999L
-                val request = ProcessPaymentRequest(userId = 1L)
+                val command = ProcessPaymentCommand(userId = 1L)
 
                 every { orderService.getOrder(orderId) } throws OrderNotFoundException(orderId)
 
                 // when & then
                 shouldThrow<OrderNotFoundException> {
-                    paymentService.processPayment(orderId, request)
+                    paymentService.processPayment(orderId, command)
                 }
             }
 
@@ -171,13 +170,13 @@ class PaymentServiceUnitTest : DescribeSpec({
                     updatedAt = now
                 )
 
-                val request = ProcessPaymentRequest(userId = otherUserId)
+                val command = ProcessPaymentCommand(userId = otherUserId)
 
                 every { orderService.getOrder(orderId) } returns order
 
                 // when & then
                 shouldThrow<ForbiddenException> {
-                    paymentService.processPayment(orderId, request)
+                    paymentService.processPayment(orderId, command)
                 }
             }
 
@@ -211,13 +210,13 @@ class PaymentServiceUnitTest : DescribeSpec({
                     updatedAt = now
                 )
 
-                val request = ProcessPaymentRequest(userId = userId)
+                val command = ProcessPaymentCommand(userId = userId)
 
                 every { orderService.getOrder(orderId) } returns order
 
                 // when & then
                 shouldThrow<InvalidOrderStatusException> {
-                    paymentService.processPayment(orderId, request)
+                    paymentService.processPayment(orderId, command)
                 }
             }
 
@@ -260,14 +259,14 @@ class PaymentServiceUnitTest : DescribeSpec({
                     paidAt = now
                 )
 
-                val request = ProcessPaymentRequest(userId = userId)
+                val command = ProcessPaymentCommand(userId = userId)
 
                 every { orderService.getOrder(orderId) } returns order
                 every { paymentRepository.findByOrderId(orderId) } returns existingPayment
 
                 // when & then
                 shouldThrow<AlreadyPaidException> {
-                    paymentService.processPayment(orderId, request)
+                    paymentService.processPayment(orderId, command)
                 }
             }
 
@@ -309,7 +308,7 @@ class PaymentServiceUnitTest : DescribeSpec({
                     updatedAt = now
                 )
 
-                val request = ProcessPaymentRequest(userId = userId)
+                val command = ProcessPaymentCommand(userId = userId)
 
                 every { orderService.getOrder(orderId) } returns order
                 every { paymentRepository.findByOrderId(orderId) } returns null
@@ -321,7 +320,7 @@ class PaymentServiceUnitTest : DescribeSpec({
 
                 // when & then
                 shouldThrow<InsufficientBalanceException> {
-                    paymentService.processPayment(orderId, request)
+                    paymentService.processPayment(orderId, command)
                 }
             }
 
@@ -355,7 +354,7 @@ class PaymentServiceUnitTest : DescribeSpec({
                     updatedAt = now
                 )
 
-                val request = ProcessPaymentRequest(userId = userId)
+                val command = ProcessPaymentCommand(userId = userId)
 
                 every { userService.getUser(userId) } throws UserNotFoundException(userId)
                 every { orderService.getOrder(orderId) } returns order
@@ -363,7 +362,7 @@ class PaymentServiceUnitTest : DescribeSpec({
 
                 // when & then
                 shouldThrow<UserNotFoundException> {
-                    paymentService.processPayment(orderId, request)
+                    paymentService.processPayment(orderId, command)
                 }
             }
         }
@@ -526,7 +525,7 @@ class PaymentServiceUnitTest : DescribeSpec({
                 )
 
                 val refundedUser = user.copy(balance = 100000L)
-                val request = CancelPaymentRequest(userId)
+                val command = CancelPaymentCommand(userId)
 
                 // mock
                 every { paymentRepository.findById(paymentId) } returns payment
@@ -535,7 +534,7 @@ class PaymentServiceUnitTest : DescribeSpec({
                 every { userService.updateUser(any()) } returns refundedUser
                 every { paymentRepository.save(any()) } answers { firstArg() }
 
-                val result = paymentService.cancelPayment(paymentId, request)
+                val result = paymentService.cancelPayment(paymentId, command)
 
                 result.paymentId shouldBe paymentId
                 result.orderId shouldBe orderId
@@ -572,13 +571,13 @@ class PaymentServiceUnitTest : DescribeSpec({
                     paidAt = now
                 )
 
-                val request = CancelPaymentRequest(userId = userId)
+                val command = CancelPaymentCommand(userId = userId)
 
                 every { paymentRepository.findById(paymentId) } returns payment
 
                 // when & then
                 shouldThrow<AlreadyCancelledException> {
-                    paymentService.cancelPayment(paymentId, request)
+                    paymentService.cancelPayment(paymentId, command)
                 }
 
                 verify(exactly = 1) { paymentRepository.findById(paymentId) }
@@ -600,13 +599,13 @@ class PaymentServiceUnitTest : DescribeSpec({
                     paidAt = now
                 )
 
-                val request = CancelPaymentRequest(userId = userId)
+                val command = CancelPaymentCommand(userId = userId)
 
                 every { paymentRepository.findById(paymentId) } returns payment
 
                 // when & then
                 shouldThrow<InvalidPaymentStatusException> {
-                    paymentService.cancelPayment(paymentId, request)
+                    paymentService.cancelPayment(paymentId, command)
                 }
 
                 verify(exactly = 1) { paymentRepository.findById(paymentId) }
@@ -663,7 +662,7 @@ class PaymentServiceUnitTest : DescribeSpec({
                 )
 
                 val refundedUser = user.copy(balance = 100000L)
-                val request = CancelPaymentRequest(userId)
+                val command = CancelPaymentCommand(userId)
 
                 // Mock 설정
                 every { paymentRepository.findById(paymentId) } returns payment
@@ -673,7 +672,7 @@ class PaymentServiceUnitTest : DescribeSpec({
                 every { paymentRepository.save(any()) } answers { firstArg() }
 
                 // when
-                val result = paymentService.cancelPayment(paymentId, request)
+                val result = paymentService.cancelPayment(paymentId, command)
 
                 // then
                 result.balance.previousBalance shouldBe 25000L
@@ -730,7 +729,7 @@ class PaymentServiceUnitTest : DescribeSpec({
                     updatedAt = "2025-11-03T00:00:00"
                 )
 
-                val request = CancelPaymentRequest(userId = userId)
+                val command = CancelPaymentCommand(userId = userId)
 
                 // Mock 설정
                 every { paymentRepository.findById(paymentId) } returns payment
@@ -743,7 +742,7 @@ class PaymentServiceUnitTest : DescribeSpec({
                 every { paymentRepository.save(capture(savedPaymentSlot)) } answers { firstArg() }
 
                 // when
-                val result = paymentService.cancelPayment(paymentId, request)
+                val result = paymentService.cancelPayment(paymentId, command)
 
                 // then
                 result.paymentStatus shouldBe "CANCELLED"
