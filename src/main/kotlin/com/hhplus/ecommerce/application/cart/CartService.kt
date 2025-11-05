@@ -1,9 +1,6 @@
 package com.hhplus.ecommerce.application.cart
 
 import com.hhplus.ecommerce.application.cart.dto.*
-import com.hhplus.ecommerce.domain.cart.entity.CartItem
-import com.hhplus.ecommerce.presentation.cart.dto.UpdateCartItemRequest
-import com.hhplus.ecommerce.presentation.cart.dto.UpdateCartItemResponse
 
 /**
  * 장바구니 비즈니스 로직 인터페이스
