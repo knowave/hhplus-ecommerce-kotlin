@@ -5,6 +5,7 @@ import com.hhplus.ecommerce.application.order.OrderService
 import com.hhplus.ecommerce.application.product.ProductService
 import com.hhplus.ecommerce.application.user.UserService
 import com.hhplus.ecommerce.common.exception.*
+import com.hhplus.ecommerce.common.lock.LockManager
 import com.hhplus.ecommerce.domain.payment.PaymentRepository
 import com.hhplus.ecommerce.domain.order.entity.Order
 import com.hhplus.ecommerce.domain.order.entity.OrderItem
@@ -31,6 +32,7 @@ class PaymentServiceUnitTest : DescribeSpec({
     lateinit var productService: ProductService
     lateinit var couponService: CouponService
     lateinit var paymentService: PaymentService
+    lateinit var lockManager: LockManager
 
     beforeEach {
         // 모든 의존성을 Mock으로 생성
@@ -39,13 +41,14 @@ class PaymentServiceUnitTest : DescribeSpec({
         userService = mockk()
         productService = mockk()
         couponService = mockk()
+        lockManager = LockManager()
         paymentService = PaymentServiceImpl(
             paymentRepository,
             orderService,
             userService,
             productService,
             couponService,
-            com.hhplus.ecommerce.common.lock.LockManager()
+            lockManager
         )
     }
 
@@ -608,6 +611,149 @@ class PaymentServiceUnitTest : DescribeSpec({
 
                 verify(exactly = 1) { paymentRepository.findById(paymentId) }
                 verify(exactly = 0) { paymentRepository.save(any()) }
+            }
+        }
+
+        context("환불 검증") {
+            it("환불 후 사용자의 잔액이 정확하게 증가한다.") {
+                val paymentId = 1L
+                val userId = 10L
+                val orderId = 5L
+                val paymentAmount = 80000L
+                val now = LocalDateTime.now()
+
+                val payment = Payment(
+                    paymentId = paymentId,
+                    orderId = orderId,
+                    userId = userId,
+                    amount = paymentAmount,
+                    status = PaymentStatus.SUCCESS,
+                    paidAt = now
+                )
+
+                val order = Order(
+                    id = orderId,
+                    userId = userId,
+                    orderNumber = "ORD-20251103-001",
+                    items = listOf(
+                        OrderItem(
+                            id = 1L,
+                            productId = 1L,
+                            orderId = orderId,
+                            productName = "Test Product",
+                            quantity = 1,
+                            unitPrice = 75000L,
+                            subtotal = 75000L
+                        )
+                    ),
+                    totalAmount = paymentAmount,
+                    discountAmount = 0L,
+                    finalAmount = paymentAmount,
+                    appliedCouponId = null,
+                    status = OrderStatus.PAID,
+                    createdAt = now,
+                    updatedAt = now
+                )
+
+                val user = User(
+                    id = userId,
+                    balance = 25000L,  // 현재 잔액
+                    createdAt = "2025-11-03T00:00:00",
+                    updatedAt = "2025-11-03T00:00:00"
+                )
+
+                val refundedUser = user.copy(balance = 100000L)
+                val request = CancelPaymentRequest(userId)
+
+                // Mock 설정
+                every { paymentRepository.findById(paymentId) } returns payment
+                every { orderService.getOrder(orderId) } returns order
+                every { userService.getUser(userId) } returns user
+                every { userService.updateUser(any()) } returns refundedUser
+                every { paymentRepository.save(any()) } answers { firstArg() }
+
+                // when
+                val result = paymentService.cancelPayment(paymentId, request)
+
+                // then
+                result.balance.previousBalance shouldBe 25000L
+                result.balance.refundedAmount shouldBe 80000L
+                result.balance.currentBalance shouldBe 105000L
+
+                verify(exactly = 1) { userService.updateUser(any()) }
+            }
+
+            it("결제 상태가 SUCCESS에서 CANCELLED로 변경된다") {
+                // given
+                val paymentId = 1L
+                val userId = 100L
+                val orderId = 1L
+                val now = LocalDateTime.now()
+
+                val payment = Payment(
+                    paymentId = paymentId,
+                    orderId = orderId,
+                    userId = userId,
+                    amount = 50000L,
+                    status = PaymentStatus.SUCCESS,
+                    paidAt = now
+                )
+
+                val order = Order(
+                    id = orderId,
+                    userId = userId,
+                    orderNumber = "ORD-001",
+                    items = listOf(
+                        OrderItem(
+                            id = 1L,
+                            productId = 1L,
+                            orderId = orderId,
+                            productName = "Test Product",
+                            quantity = 1,
+                            unitPrice = 50000L,
+                            subtotal = 50000L
+                        )
+                    ),
+                    totalAmount = 50000L,
+                    discountAmount = 0L,
+                    finalAmount = 50000L,
+                    appliedCouponId = null,
+                    status = OrderStatus.PAID,
+                    createdAt = now,
+                    updatedAt = now
+                )
+
+                val user = User(
+                    id = userId,
+                    balance = 50000L,
+                    createdAt = "2025-11-03T00:00:00",
+                    updatedAt = "2025-11-03T00:00:00"
+                )
+
+                val request = CancelPaymentRequest(userId = userId)
+
+                // Mock 설정
+                every { paymentRepository.findById(paymentId) } returns payment
+                every { orderService.getOrder(orderId) } returns order
+                every { userService.getUser(userId) } returns user
+                every { userService.updateUser(any()) } returns user
+
+                // save 호출 시 상태 변경 확인을 위한 slot
+                val savedPaymentSlot = slot<Payment>()
+                every { paymentRepository.save(capture(savedPaymentSlot)) } answers { firstArg() }
+
+                // when
+                val result = paymentService.cancelPayment(paymentId, request)
+
+                // then
+                result.paymentStatus shouldBe "CANCELLED"
+                savedPaymentSlot.captured.status shouldBe PaymentStatus.CANCELLED
+
+                verify(exactly = 1) {
+                    paymentRepository.save(match {
+                        it.status == PaymentStatus.CANCELLED
+                    })
+                }
             }
         }
     }
