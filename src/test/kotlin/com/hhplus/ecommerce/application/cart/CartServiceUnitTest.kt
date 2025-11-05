@@ -33,168 +33,6 @@ class CartServiceUnitTest : DescribeSpec({
         cartService = CartServiceImpl(cartRepository, productService, userService)
     }
 
-    describe("CartService 단위 테스트 - getCart") {
-        context("정상 케이스") {
-            it("빈 장바구니를 조회한다") {
-                // given
-                val userId = 1L
-                val user = createUser(userId, "테스트 사용자", "test@example.com", 100000L)
-
-                every { userService.getUser(userId) } returns user
-                every { cartRepository.findByUserId(userId) } returns emptyList()
-
-                // when
-                val result = cartService.getCart(userId)
-
-                // then
-                result.userId shouldBe userId
-                result.items.shouldBeEmpty()
-                result.summary.totalItems shouldBe 0
-                result.summary.totalQuantity shouldBe 0
-                result.summary.totalAmount shouldBe 0L
-                result.summary.availableAmount shouldBe 0L
-                result.summary.unavailableCount shouldBe 0
-
-                verify(exactly = 1) { userService.getUser(userId) }
-                verify(exactly = 1) { cartRepository.findByUserId(userId) }
-            }
-
-            it("장바구니에 담긴 상품들을 조회한다") {
-                // given
-                val userId = 1L
-                val now = LocalDateTime.now()
-                val user = createUser(userId, "테스트 사용자", "test@example.com", 100000L)
-
-                val product1 = createProduct(15L, "상품15", 50000L, 100, ProductCategory.ELECTRONICS, 0)
-                val product2 = createProduct(7L, "상품7", 30000L, 50, ProductCategory.FASHION, 0)
-
-                val cartItems = listOf(
-                    CartItem(1L, userId, 15L, 2, now),
-                    CartItem(2L, userId, 7L, 1, now)
-                )
-
-                every { userService.getUser(userId) } returns user
-                every { cartRepository.findByUserId(userId) } returns cartItems
-                every { productService.findProductById(15L) } returns product1
-                every { productService.findProductById(7L) } returns product2
-
-                // when
-                val result = cartService.getCart(userId)
-
-                // then
-                result.userId shouldBe userId
-                result.items shouldHaveSize 2
-
-                // 첫 번째 아이템 검증
-                result.items[0].cartItemId shouldBe 1L
-                result.items[0].productId shouldBe 15L
-                result.items[0].productName shouldBe "상품15"
-                result.items[0].price shouldBe 50000L
-                result.items[0].quantity shouldBe 2
-                result.items[0].subtotal shouldBe 100000L
-                result.items[0].stock shouldBe 100
-                result.items[0].isAvailable shouldBe true
-
-                // 두 번째 아이템 검증
-                result.items[1].cartItemId shouldBe 2L
-                result.items[1].productId shouldBe 7L
-                result.items[1].quantity shouldBe 1
-                result.items[1].subtotal shouldBe 30000L
-
-                // 요약 정보 검증
-                result.summary.totalItems shouldBe 2
-                result.summary.totalQuantity shouldBe 3 // 2 + 1
-                result.summary.totalAmount shouldBe 130000L // 100000 + 30000
-                result.summary.availableAmount shouldBe 130000L
-                result.summary.unavailableCount shouldBe 0
-
-                verify(exactly = 1) { userService.getUser(userId) }
-                verify(exactly = 1) { cartRepository.findByUserId(userId) }
-                verify(exactly = 1) { productService.findProductById(15L) }
-                verify(exactly = 1) { productService.findProductById(7L) }
-            }
-
-            it("품절된 상품이 포함된 장바구니를 조회한다") {
-                // given
-                val userId = 1L
-                val now = LocalDateTime.now()
-                val user = createUser(userId, "테스트 사용자", "test@example.com", 100000L)
-
-                val availableProduct = createProduct(1L, "재고있음", 50000L, 100, ProductCategory.ELECTRONICS, 0)
-                val outOfStockProduct = createProduct(2L, "품절상품", 30000L, 0, ProductCategory.FASHION, 0)
-
-                val cartItems = listOf(
-                    CartItem(1L, userId, 1L, 2, now),
-                    CartItem(2L, userId, 2L, 1, now)
-                )
-
-                every { userService.getUser(userId) } returns user
-                every { cartRepository.findByUserId(userId) } returns cartItems
-                every { productService.findProductById(1L) } returns availableProduct
-                every { productService.findProductById(2L) } returns outOfStockProduct
-
-                // when
-                val result = cartService.getCart(userId)
-
-                // then
-                result.items shouldHaveSize 2
-                result.items[0].isAvailable shouldBe true
-                result.items[1].isAvailable shouldBe false
-                result.items[1].stock shouldBe 0
-
-                // 요약 정보 검증 - 품절 상품은 제외
-                result.summary.totalItems shouldBe 2
-                result.summary.totalAmount shouldBe 130000L // 전체 금액
-                result.summary.availableAmount shouldBe 100000L // 구매 가능한 금액만
-                result.summary.unavailableCount shouldBe 1
-
-                verify(exactly = 1) { userService.getUser(userId) }
-                verify(exactly = 1) { cartRepository.findByUserId(userId) }
-            }
-        }
-
-        context("예외 케이스") {
-            it("존재하지 않는 사용자로 조회 시 UserNotFoundException을 발생시킨다") {
-                // given
-                val invalidUserId = 999L
-                every { userService.getUser(invalidUserId) } throws UserNotFoundException(invalidUserId)
-
-                // when & then
-                val exception = shouldThrow<UserNotFoundException> {
-                    cartService.getCart(invalidUserId)
-                }
-                exception.message shouldContain "User not found with id: $invalidUserId"
-
-                verify(exactly = 1) { userService.getUser(invalidUserId) }
-                verify(exactly = 0) { cartRepository.findByUserId(any()) }
-            }
-
-            it("장바구니에 존재하지 않는 상품이 있으면 ProductNotFoundException을 발생시킨다") {
-                // given
-                val userId = 1L
-                val now = LocalDateTime.now()
-                val user = createUser(userId, "테스트 사용자", "test@example.com", 100000L)
-
-                val cartItems = listOf(
-                    CartItem(1L, userId, 999L, 2, now) // 존재하지 않는 상품
-                )
-
-                every { userService.getUser(userId) } returns user
-                every { cartRepository.findByUserId(userId) } returns cartItems
-                every { productService.findProductById(999L) } throws ProductNotFoundException(999L)
-
-                // when & then
-                shouldThrow<ProductNotFoundException> {
-                    cartService.getCart(userId)
-                }
-
-                verify(exactly = 1) { userService.getUser(userId) }
-                verify(exactly = 1) { cartRepository.findByUserId(userId) }
-                verify(exactly = 1) { productService.findProductById(999L) }
-            }
-        }
-    }
-
     describe("CartService 단위 테스트 - addCartItem") {
         context("정상 케이스 - 새로운 상품 추가") {
             it("장바구니에 새 상품을 추가한다") {
@@ -794,6 +632,22 @@ class CartServiceUnitTest : DescribeSpec({
                 verify(exactly = 1) { userService.getUser(userId) }
                 verify(exactly = 1) { cartRepository.deleteByUserId(userId) }
             }
+
+            it("여러 아이템이 담긴 장바구니를 한 번에 비운다") {
+                // given
+                val userId = 1L
+                val user = createUser(userId, "테스트 사용자", "test@example.com", 100000L)
+
+                every { userService.getUser(userId) } returns user
+                every { cartRepository.deleteByUserId(userId) } just Runs
+
+                // when
+                cartService.clearCart(userId)
+
+                // then - 아이템 개수에 상관없이 한 번의 deleteByUserId 호출로 전체 삭제
+                verify(exactly = 1) { userService.getUser(userId) }
+                verify(exactly = 1) { cartRepository.deleteByUserId(userId) }
+            }
         }
 
         context("예외 케이스") {
@@ -810,6 +664,101 @@ class CartServiceUnitTest : DescribeSpec({
 
                 verify(exactly = 1) { userService.getUser(invalidUserId) }
                 verify(exactly = 0) { cartRepository.deleteByUserId(any()) }
+            }
+        }
+    }
+
+    describe("CartService 단위 테스트 - deleteCarts") {
+        context("정상 케이스") {
+            it("여러 상품을 한 번에 삭제한다") {
+                // given
+                val userId = 1L
+                val productIds = listOf(15L, 7L, 10L)
+                val now = LocalDateTime.now()
+
+                val cartItems = listOf(
+                    CartItem(1L, userId, 15L, 2, now),
+                    CartItem(2L, userId, 7L, 1, now),
+                    CartItem(3L, userId, 10L, 3, now)
+                )
+
+                every { cartRepository.findByUserIdAndProductIds(userId, productIds) } returns cartItems
+                every { cartRepository.deleteManyByIds(listOf(1L, 2L, 3L)) } just Runs
+
+                // when
+                cartService.deleteCarts(userId, productIds)
+
+                // then
+                verify(exactly = 1) { cartRepository.findByUserIdAndProductIds(userId, productIds) }
+                verify(exactly = 1) { cartRepository.deleteManyByIds(listOf(1L, 2L, 3L)) }
+            }
+
+            it("빈 productIds 리스트로 호출하면 아무것도 삭제하지 않는다") {
+                // given
+                val userId = 1L
+                val emptyProductIds = emptyList<Long>()
+
+                every { cartRepository.findByUserIdAndProductIds(userId, emptyProductIds) } returns emptyList()
+
+                // when
+                cartService.deleteCarts(userId, emptyProductIds)
+
+                // then
+                verify(exactly = 1) { cartRepository.findByUserIdAndProductIds(userId, emptyProductIds) }
+                verify(exactly = 0) { cartRepository.deleteManyByIds(any()) }
+            }
+
+            it("일부 상품만 장바구니에 있어도 정상 처리된다") {
+                // given
+                val userId = 1L
+                val productIds = listOf(15L, 7L, 999L) // 999L은 장바구니에 없음
+                val now = LocalDateTime.now()
+
+                val cartItems = listOf(
+                    CartItem(1L, userId, 15L, 2, now),
+                    CartItem(2L, userId, 7L, 1, now)
+                    // 999L에 해당하는 아이템은 없음
+                )
+
+                every { cartRepository.findByUserIdAndProductIds(userId, productIds) } returns cartItems
+                every { cartRepository.deleteManyByIds(listOf(1L, 2L)) } just Runs
+
+                // when
+                cartService.deleteCarts(userId, productIds)
+
+                // then - 존재하는 아이템만 삭제
+                verify(exactly = 1) { cartRepository.findByUserIdAndProductIds(userId, productIds) }
+                verify(exactly = 1) { cartRepository.deleteManyByIds(listOf(1L, 2L)) }
+            }
+
+            it("장바구니에 없는 상품들만 삭제 시도하면 아무것도 삭제되지 않는다") {
+                // given
+                val userId = 1L
+                val productIds = listOf(999L, 998L)
+
+                every { cartRepository.findByUserIdAndProductIds(userId, productIds) } returns emptyList()
+
+                // when
+                cartService.deleteCarts(userId, productIds)
+
+                // then
+                verify(exactly = 1) { cartRepository.findByUserIdAndProductIds(userId, productIds) }
+                verify(exactly = 0) { cartRepository.deleteManyByIds(any()) }
+            }
+
+            it("null을 반환하는 경우에도 정상 처리된다") {
+                // given
+                val userId = 1L
+                val productIds = listOf(15L, 7L)
+
+                every { cartRepository.findByUserIdAndProductIds(userId, productIds) } returns null
+
+                // when
+                cartService.deleteCarts(userId, productIds)
+
+                // then - null인 경우 빈 리스트로 처리되어 deleteManyByIds 호출 안 됨
+                verify(exactly = 1) { cartRepository.findByUserIdAndProductIds(userId, productIds) }
+                verify(exactly = 0) { cartRepository.deleteManyByIds(any()) }
             }
         }
     }

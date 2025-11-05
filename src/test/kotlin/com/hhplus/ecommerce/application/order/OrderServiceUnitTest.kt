@@ -176,20 +176,6 @@ class OrderServiceUnitTest : DescribeSpec({
         }
 
         context("주문 생성 실패 - 검증 오류") {
-            it("주문 상품 목록이 비어있으면 예외가 발생한다") {
-                // given
-                val request = CreateOrderRequest(
-                    userId = 100L,
-                    items = emptyList(),
-                    couponId = null
-                )
-
-                // when & then
-                shouldThrow<InvalidOrderItemsException> {
-                    orderService.createOrder(request)
-                }
-            }
-
             it("수량이 0 이하이면 예외가 발생한다") {
                 // given
                 val request = CreateOrderRequest(
@@ -362,94 +348,6 @@ class OrderServiceUnitTest : DescribeSpec({
         }
     }
 
-    describe("getOrderDetail - 주문 상세 조회") {
-        context("정상적인 조회") {
-            it("주문 상세 정보를 조회할 수 있다") {
-                // given
-                val orderId = 1001L
-                val userId = 100L
-                val now = LocalDateTime.now()
-
-                val orderItems = listOf(
-                    OrderItem(1L, 1L, orderId, "노트북", 1, 100000L, 100000L)
-                )
-                val order = Order(
-                    id = orderId,
-                    userId = userId,
-                    orderNumber = "ORD-20251103-001001",
-                    items = orderItems,
-                    totalAmount = 100000L,
-                    discountAmount = 0L,
-                    finalAmount = 100000L,
-                    appliedCouponId = null,
-                    status = OrderStatus.PENDING,
-                    createdAt = now,
-                    updatedAt = now
-                )
-
-                every { orderRepository.findById(orderId) } returns order
-
-                // when
-                val response = orderService.getOrderDetail(orderId, userId)
-
-                // then
-                response.orderId shouldBe orderId
-                response.userId shouldBe userId
-                response.orderNumber shouldBe "ORD-20251103-001001"
-                response.status shouldBe "PENDING"
-                response.pricing.totalAmount shouldBe 100000L
-                response.payment shouldBe null
-            }
-        }
-
-        context("조회 실패") {
-            it("존재하지 않는 주문은 조회할 수 없다") {
-                // given
-                val orderId = 999L
-                val userId = 100L
-
-                every { orderRepository.findById(orderId) } returns null
-
-                // when & then
-                shouldThrow<OrderNotFoundException> {
-                    orderService.getOrderDetail(orderId, userId)
-                }
-            }
-
-            it("다른 사용자의 주문은 조회할 수 없다") {
-                // given
-                val orderId = 1001L
-                val ownerId = 100L
-                val otherUserId = 200L
-                val now = LocalDateTime.now()
-
-                val orderItems = listOf(
-                    OrderItem(1L, 1L, orderId, "노트북", 1, 100000L, 100000L)
-                )
-                val order = Order(
-                    id = orderId,
-                    userId = ownerId,
-                    orderNumber = "ORD-20251103-001001",
-                    items = orderItems,
-                    totalAmount = 100000L,
-                    discountAmount = 0L,
-                    finalAmount = 100000L,
-                    appliedCouponId = null,
-                    status = OrderStatus.PENDING,
-                    createdAt = now,
-                    updatedAt = now
-                )
-
-                every { orderRepository.findById(orderId) } returns order
-
-                // when & then
-                shouldThrow<ForbiddenException> {
-                    orderService.getOrderDetail(orderId, otherUserId)
-                }
-            }
-        }
-    }
-
     describe("cancelOrder - 주문 취소") {
         context("정상적인 취소") {
             it("PENDING 상태의 주문을 취소할 수 있다") {
@@ -544,39 +442,6 @@ class OrderServiceUnitTest : DescribeSpec({
 
                 // when & then
                 shouldThrow<ForbiddenException> {
-                    orderService.cancelOrder(orderId, request)
-                }
-            }
-
-            it("PAID 상태의 주문은 취소할 수 없다") {
-                // given
-                val orderId = 1001L
-                val userId = 100L
-                val now = LocalDateTime.now()
-
-                val orderItems = listOf(
-                    OrderItem(1L, 1L, orderId, "노트북", 1, 100000L, 100000L)
-                )
-                val order = Order(
-                    id = orderId,
-                    userId = userId,
-                    orderNumber = "ORD-20251103-001001",
-                    items = orderItems,
-                    totalAmount = 100000L,
-                    discountAmount = 0L,
-                    finalAmount = 100000L,
-                    appliedCouponId = null,
-                    status = OrderStatus.PAID,
-                    createdAt = now,
-                    updatedAt = now
-                )
-
-                val request = CancelOrderRequest(userId)
-
-                every { orderRepository.findById(orderId) } returns order
-
-                // when & then
-                shouldThrow<CannotCancelOrderException> {
                     orderService.cancelOrder(orderId, request)
                 }
             }

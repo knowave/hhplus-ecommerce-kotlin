@@ -47,7 +47,6 @@ class PaymentServiceIntegrationTest : DescribeSpec({
     lateinit var couponService: CouponService
     lateinit var userService: UserService
     lateinit var cartService: CartService
-    lateinit var lockManager: LockManager
 
     beforeEach {
         // 실제 구현체 사용
