@@ -1,5 +1,6 @@
 package com.hhplus.ecommerce.application.coupon
 
+import com.hhplus.ecommerce.application.coupon.dto.*
 import com.hhplus.ecommerce.common.exception.*
 import com.hhplus.ecommerce.domain.coupon.*
 import com.hhplus.ecommerce.domain.coupon.entity.*
@@ -23,7 +24,7 @@ class CouponServiceImpl(
     private val DATE_FORMATTER = DateTimeFormatter.ofPattern("yyyy-MM-dd")
     private val DATETIME_FORMATTER = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss")
 
-    override fun issueCoupon(couponId: Long, request: IssueCouponRequest): IssueCouponResponse {
+    override fun issueCoupon(couponId: Long, request: IssueCouponCommand): IssueCouponResult {
         // Coupon Lock을 사용하여 동시 발급을 제어합니다.
         return lockManager.executeWithCouponLock(couponId) {
             // 쿠폰 조회
@@ -75,7 +76,7 @@ class CouponServiceImpl(
             couponRepository.saveUserCoupon(userCoupon)
 
             // 6) 응답 생성
-            IssueCouponResponse(
+            IssueCouponResult(
                 userCouponId = userCoupon.id,
                 userId = userCoupon.userId,
                 couponId = coupon.id,
@@ -90,18 +91,18 @@ class CouponServiceImpl(
         }
     }
 
-    override fun getAvailableCoupons(): AvailableCouponResponse {
+    override fun getAvailableCoupons(): AvailableCouponItemResult {
         val availableCoupons = couponRepository.findAvailableCoupons()
 
         val couponItems = availableCoupons.map { coupon ->
-            AvailableCouponItem(
+            AvailableCouponItemDto(
                 id = coupon.id,
                 couponName = coupon.name,
                 description = coupon.description,
                 discountRate = coupon.discountRate,
                 remainingQuantity = coupon.totalQuantity - coupon.issuedQuantity,
                 totalQuantity = coupon.totalQuantity,
-                issuePeriod = IssuePeriod(
+                issuePeriod = IssuePeriodDto(
                     startDate = coupon.startDate,
                     endDate = coupon.endDate
                 ),
@@ -109,10 +110,10 @@ class CouponServiceImpl(
             )
         }
 
-        return AvailableCouponResponse(coupons = couponItems)
+        return AvailableCouponItemResult(coupons = couponItems)
     }
 
-    override fun getCouponDetail(couponId: Long): CouponDetailResponse {
+    override fun getCouponDetail(couponId: Long): CouponDetailResult {
         val coupon = couponRepository.findById(couponId)
             ?: throw CouponNotFoundException(couponId)
 
@@ -124,7 +125,7 @@ class CouponServiceImpl(
         val hasStock = coupon.issuedQuantity < coupon.totalQuantity
         val isAvailable = isInPeriod && hasStock
 
-        return CouponDetailResponse(
+        return CouponDetailResult(
             id = coupon.id,
             couponName = coupon.name,
             description = coupon.description,
@@ -132,7 +133,7 @@ class CouponServiceImpl(
             totalQuantity = coupon.totalQuantity,
             issuedQuantity = coupon.issuedQuantity,
             remainingQuantity = coupon.totalQuantity - coupon.issuedQuantity,
-            issuePeriod = IssuePeriod(
+            issuePeriod = IssuePeriodDto(
                 startDate = coupon.startDate,
                 endDate = coupon.endDate
             ),
@@ -142,7 +143,7 @@ class CouponServiceImpl(
         )
     }
 
-    override fun getUserCoupons(userId: Long, status: CouponStatus?): UserCouponListResponse {
+    override fun getUserCoupons(userId: Long, status: CouponStatus?): UserCouponListResult {
         val userCoupons = couponRepository.findUserCouponsByUserId(userId)
 
         // 필터 적용 (status가 null이면 전체)
@@ -176,7 +177,7 @@ class CouponServiceImpl(
                 0
             }
 
-            UserCouponItem(
+            UserCouponItemDto(
                 userCouponId = uc.id,
                 couponId = uc.couponId,
                 couponName = couponName,
@@ -190,21 +191,21 @@ class CouponServiceImpl(
             )
         }
 
-        val summary = UserCouponSummary(
+        val summary = UserCouponSummaryDto(
             totalCount = userCoupons.size,
             availableCount = userCoupons.count { it.status == CouponStatus.AVAILABLE },
             usedCount = userCoupons.count { it.status == CouponStatus.USED },
             expiredCount = userCoupons.count { it.status == CouponStatus.EXPIRED }
         )
 
-        return UserCouponListResponse(
+        return UserCouponListResult(
             userId = userId,
             coupons = items,
             summary = summary
         )
     }
 
-    override fun getUserCoupon(userId: Long, userCouponId: Long): UserCouponResponse {
+    override fun getUserCoupon(userId: Long, userCouponId: Long): UserCouponResult {
         val userCoupon = couponRepository.findUserCouponByIdAndUserId(id = userCouponId, userId)
             ?: throw UserCouponNotFoundException(userId, userCouponId)
         val coupon = couponRepository.findById(userCoupon.couponId)
@@ -224,7 +225,7 @@ class CouponServiceImpl(
         val isExpired = expiresAtDate.isBefore(now) || expiresAtDate.isEqual(now).not() && expiresAtDate.toLocalDate().isBefore(now.toLocalDate())
         val canUse = (userCoupon.status == CouponStatus.AVAILABLE) && !isExpired
 
-        return UserCouponResponse(
+        return UserCouponResult(
             id = userCoupon.id,
             userId = userCoupon.userId,
             couponId = userCoupon.couponId,
