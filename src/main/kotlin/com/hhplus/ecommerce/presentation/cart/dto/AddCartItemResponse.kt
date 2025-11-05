@@ -1,9 +1,7 @@
 package com.hhplus.ecommerce.presentation.cart.dto
 
-/**
- * 장바구니 상품 추가 응답 DTO
- * POST /api/carts/{userId}/items 엔드포인트의 응답 모델
- */
+import com.hhplus.ecommerce.application.cart.dto.AddCartItemResult
+
 data class AddCartItemResponse(
     val cartItemId: Long,
     val productId: Long,
@@ -12,4 +10,18 @@ data class AddCartItemResponse(
     val quantity: Int,
     val subtotal: Long,
     val addedAt: String
-)
+) {
+    companion object {
+        fun from(result: AddCartItemResult): AddCartItemResponse {
+            return AddCartItemResponse(
+                cartItemId = result.cartItemId,
+                productId = result.productId,
+                productName = result.productName,
+                price = result.price,
+                quantity = result.quantity,
+                subtotal = result.subtotal,
+                addedAt = result.addedAt
+            )
+        }
+    }
+}

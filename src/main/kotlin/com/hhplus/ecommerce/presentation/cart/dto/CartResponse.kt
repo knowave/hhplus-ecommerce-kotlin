@@ -1,11 +1,20 @@
 package com.hhplus.ecommerce.presentation.cart.dto
 
-/**
- * 장바구니 조회 응답 DTO
- * GET /api/carts/{userId} 엔드포인트의 응답 모델
- */
+import com.hhplus.ecommerce.application.cart.dto.CartResult
+import com.hhplus.ecommerce.domain.cart.entity.CartItem
+
 data class CartResponse(
     val userId: Long,
     val items: List<CartItemResponse>,
     val summary: CartSummary
-)
+) {
+    companion object {
+        fun from(result: CartResult): CartResponse {
+            return CartResponse(
+                userId = result.userId,
+                items = result.items.map { CartItemResponse.from(it) },
+                summary = CartSummary.from(result.summary)
+            )
+        }
+    }
+}

@@ -1,9 +1,7 @@
 package com.hhplus.ecommerce.presentation.cart.dto
 
-/**
- * 장바구니 아이템 수량 변경 응답 DTO
- * PATCH /api/carts/{userId}/items/{cartItemId} 엔드포인트의 응답 모델
- */
+import com.hhplus.ecommerce.application.cart.dto.UpdateCartItemResult
+
 data class UpdateCartItemResponse(
     val cartItemId: Long,
     val productId: Long,
@@ -12,4 +10,18 @@ data class UpdateCartItemResponse(
     val quantity: Int,
     val subtotal: Long,
     val updatedAt: String
-)
+) {
+    companion object {
+        fun from(result: UpdateCartItemResult): UpdateCartItemResponse {
+            return UpdateCartItemResponse(
+                cartItemId = result.cartItemId,
+                productId = result.productId,
+                productName = result.productName,
+                price = result.price,
+                quantity = result.quantity,
+                subtotal = result.subtotal,
+                updatedAt = result.updatedAt
+            )
+        }
+    }
+}

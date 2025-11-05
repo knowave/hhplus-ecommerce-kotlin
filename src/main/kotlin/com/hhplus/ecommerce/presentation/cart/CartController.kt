@@ -1,6 +1,8 @@
 package com.hhplus.ecommerce.presentation.cart
 
 import com.hhplus.ecommerce.application.cart.CartService
+import com.hhplus.ecommerce.application.cart.dto.AddCartItemCommand
+import com.hhplus.ecommerce.application.cart.dto.UpdateCartItemCommand
 import com.hhplus.ecommerce.presentation.cart.dto.AddCartItemRequest
 import com.hhplus.ecommerce.presentation.cart.dto.AddCartItemResponse
 import com.hhplus.ecommerce.presentation.cart.dto.CartResponse
@@ -26,8 +28,8 @@ class CartController(
     @Operation(summary = "장바구니 조회", description = "사용자 ID로 장바구니 정보를 조회합니다")
     @GetMapping("/{userId}")
     fun getCart(@PathVariable userId: Long): ResponseEntity<CartResponse> {
-        val response = cartService.getCart(userId)
-        return ResponseEntity.ok(response)
+        val result = cartService.getCart(userId)
+        return ResponseEntity.ok(CartResponse.from(result))
     }
 
     @Operation(summary = "장바구니 상품 추가", description = "사용자의 장바구니에 상품을 추가합니다")
@@ -36,8 +38,10 @@ class CartController(
         @PathVariable userId: Long,
         @RequestBody request: AddCartItemRequest
     ): ResponseEntity<AddCartItemResponse> {
-        val response = cartService.addCartItem(userId, request)
-        return ResponseEntity.ok(response)
+        val command = AddCartItemCommand.command(request)
+        val result = cartService.addCartItem(userId, command)
+
+        return ResponseEntity.ok(AddCartItemResponse.from(result))
     }
 
     @Operation(summary = "장바구니 상품 수정", description = "장바구니에 담긴 상품의 수량을 수정합니다")
@@ -47,8 +51,10 @@ class CartController(
         @PathVariable cartItemId: Long,
         @RequestBody request: UpdateCartItemRequest
     ): ResponseEntity<UpdateCartItemResponse> {
-        val response = cartService.updateCartItem(userId, cartItemId, request)
-        return ResponseEntity.ok(response)
+        val command = UpdateCartItemCommand.command(request)
+        val result = cartService.updateCartItem(userId, cartItemId, command)
+
+        return ResponseEntity.ok(UpdateCartItemResponse.from(result))
     }
 
     @Operation(summary = "장바구니 상품 삭제", description = "장바구니에서 특정 상품을 삭제합니다")

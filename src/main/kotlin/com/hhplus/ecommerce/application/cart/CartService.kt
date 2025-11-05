@@ -1,8 +1,7 @@
 package com.hhplus.ecommerce.application.cart
 
-import com.hhplus.ecommerce.presentation.cart.dto.AddCartItemRequest
-import com.hhplus.ecommerce.presentation.cart.dto.AddCartItemResponse
-import com.hhplus.ecommerce.presentation.cart.dto.CartResponse
+import com.hhplus.ecommerce.application.cart.dto.*
+import com.hhplus.ecommerce.domain.cart.entity.CartItem
 import com.hhplus.ecommerce.presentation.cart.dto.UpdateCartItemRequest
 import com.hhplus.ecommerce.presentation.cart.dto.UpdateCartItemResponse
 
@@ -14,17 +13,17 @@ interface CartService {
     /**
      * 사용자의 장바구니 조회
      */
-    fun getCart(userId: Long): CartResponse
+    fun getCart(userId: Long): CartResult
 
     /**
      * 장바구니에 상품 추가
      */
-    fun addCartItem(userId: Long, request: AddCartItemRequest): AddCartItemResponse
+    fun addCartItem(userId: Long, request: AddCartItemCommand): AddCartItemResult
 
     /**
      * 장바구니 아이템 수량 변경
      */
-    fun updateCartItem(userId: Long, cartItemId: Long, request: UpdateCartItemRequest): UpdateCartItemResponse
+    fun updateCartItem(userId: Long, cartItemId: Long, request: UpdateCartItemCommand): UpdateCartItemResult
 
     /**
      * 장바구니 아이템 삭제

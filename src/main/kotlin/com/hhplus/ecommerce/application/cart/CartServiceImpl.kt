@@ -1,22 +1,16 @@
 package com.hhplus.ecommerce.application.cart
 
+import com.hhplus.ecommerce.application.cart.dto.*
 import com.hhplus.ecommerce.application.product.ProductService
 import com.hhplus.ecommerce.application.user.UserService
 import com.hhplus.ecommerce.common.exception.*
 import com.hhplus.ecommerce.domain.cart.CartRepository
-import com.hhplus.ecommerce.domain.user.UserRepository
 import com.hhplus.ecommerce.presentation.cart.dto.*
 import com.hhplus.ecommerce.domain.cart.entity.CartItem
 import org.springframework.stereotype.Service
 import java.time.LocalDateTime
 import java.time.format.DateTimeFormatter
 
-/**
- * 장바구니 서비스 구현체
- *
- * 이유: Cart API 문서에 정의된 비즈니스 로직을 구현합니다.
- * UserServiceImpl과 동일한 패턴을 따라 구현하여 일관성을 유지합니다.
- */
 @Service
 class CartServiceImpl(
     private val cartRepository: CartRepository,
@@ -29,7 +23,7 @@ class CartServiceImpl(
         private val DATE_FORMATTER: DateTimeFormatter = DateTimeFormatter.ISO_LOCAL_DATE_TIME
     }
 
-    override fun getCart(userId: Long): CartResponse {
+    override fun getCart(userId: Long): CartResult {
         // 사용자 존재 확인
         validateUserExists(userId)
 
@@ -43,7 +37,7 @@ class CartServiceImpl(
             val isAvailable = product.stock > 0
             val subtotal = product.price * cartItem.quantity
 
-            CartItemResponse(
+            CartItemResult(
                 cartItemId = cartItem.id,
                 productId = product.id,
                 productName = product.name,
@@ -59,14 +53,14 @@ class CartServiceImpl(
         // 요약 정보 계산
         val summary = calculateSummary(itemResponses)
 
-        return CartResponse(
+        return CartResult(
             userId = userId,
             items = itemResponses,
             summary = summary
         )
     }
 
-    override fun addCartItem(userId: Long, request: AddCartItemRequest): AddCartItemResponse {
+    override fun addCartItem(userId: Long, request: AddCartItemCommand): AddCartItemResult {
         // 사용자 존재 확인
         validateUserExists(userId)
 
@@ -119,7 +113,7 @@ class CartServiceImpl(
 
         val subtotal = product.price * cartItem.quantity
 
-        return AddCartItemResponse(
+        return AddCartItemResult(
             cartItemId = cartItem.id,
             productId = product.id,
             productName = product.name,
@@ -133,8 +127,8 @@ class CartServiceImpl(
     override fun updateCartItem(
         userId: Long,
         cartItemId: Long,
-        request: UpdateCartItemRequest
-    ): UpdateCartItemResponse {
+        request: UpdateCartItemCommand
+    ): UpdateCartItemResult {
         // 장바구니 아이템 조회
         val cartItem = cartRepository.findById(cartItemId)
             ?: throw CartItemNotFoundException(cartItemId)
@@ -166,7 +160,7 @@ class CartServiceImpl(
 
         val subtotal = product.price * cartItem.quantity
 
-        return UpdateCartItemResponse(
+        return UpdateCartItemResult(
             cartItemId = cartItem.id,
             productId = product.id,
             productName = product.name,
@@ -255,14 +249,14 @@ class CartServiceImpl(
     /**
      * 장바구니 요약 정보 계산
      */
-    private fun calculateSummary(items: List<CartItemResponse>): CartSummary {
+    private fun calculateSummary(items: List<CartItemResult>): CartSummaryResult {
         val totalItems = items.size
         val totalQuantity = items.sumOf { it.quantity }
         val totalAmount = items.sumOf { it.subtotal }
         val availableAmount = items.filter { it.isAvailable }.sumOf { it.subtotal }
         val unavailableCount = items.count { !it.isAvailable }
 
-        return CartSummary(
+        return CartSummaryResult(
             totalItems = totalItems,
             totalQuantity = totalQuantity,
             totalAmount = totalAmount,
