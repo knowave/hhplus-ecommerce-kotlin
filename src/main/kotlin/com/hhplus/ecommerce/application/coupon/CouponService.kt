@@ -1,26 +1,20 @@
 package com.hhplus.ecommerce.application.coupon
 
+import com.hhplus.ecommerce.application.coupon.dto.*
 import com.hhplus.ecommerce.domain.coupon.CouponStatus
-import com.hhplus.ecommerce.domain.coupon.entity.Coupon
-import com.hhplus.ecommerce.domain.coupon.entity.UserCoupon
-import com.hhplus.ecommerce.presentation.coupon.dto.AvailableCouponResponse
-import com.hhplus.ecommerce.presentation.coupon.dto.CouponDetailResponse
-import com.hhplus.ecommerce.presentation.coupon.dto.IssueCouponRequest
-import com.hhplus.ecommerce.presentation.coupon.dto.IssueCouponResponse
-import com.hhplus.ecommerce.presentation.coupon.dto.UserCouponListResponse
-import com.hhplus.ecommerce.presentation.coupon.dto.UserCouponResponse
+import com.hhplus.ecommerce.domain.coupon.entity.*
 
 
 interface CouponService {
-    fun issueCoupon(couponId: Long, request: IssueCouponRequest): IssueCouponResponse
+    fun issueCoupon(couponId: Long, request: IssueCouponCommand): IssueCouponResult
 
-    fun getAvailableCoupons(): AvailableCouponResponse
+    fun getAvailableCoupons(): AvailableCouponItemResult
 
-    fun getCouponDetail(couponId: Long): CouponDetailResponse
+    fun getCouponDetail(couponId: Long): CouponDetailResult
 
-    fun getUserCoupons(userId: Long, status: CouponStatus?): UserCouponListResponse
+    fun getUserCoupons(userId: Long, status: CouponStatus?): UserCouponListResult
 
-    fun getUserCoupon(userId: Long, userCouponId: Long): UserCouponResponse
+    fun getUserCoupon(userId: Long, userCouponId: Long): UserCouponResult
 
     fun findCouponById(id: Long): Coupon
 
