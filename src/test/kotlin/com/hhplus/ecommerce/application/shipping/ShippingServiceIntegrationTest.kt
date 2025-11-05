@@ -1,10 +1,10 @@
 package com.hhplus.ecommerce.application.shipping
 
+import com.hhplus.ecommerce.application.shipping.dto.UpdateShippingStatusCommand
 import com.hhplus.ecommerce.common.exception.InvalidStatusTransitionException
 import com.hhplus.ecommerce.infrastructure.shipping.ShippingRepositoryImpl
 import com.hhplus.ecommerce.domain.shipping.entity.Shipping
 import com.hhplus.ecommerce.domain.shipping.entity.ShippingStatus
-import com.hhplus.ecommerce.presentation.shipping.dto.UpdateShippingStatusRequest
 import io.kotest.core.spec.style.DescribeSpec
 import io.kotest.matchers.shouldBe
 import org.assertj.core.api.Assertions.assertThatThrownBy
@@ -47,7 +47,7 @@ class ShippingServiceIntegrationTest : DescribeSpec({
                 val result = shippingService.getShipping(orderId)
 
                 // Then
-                result.shippingId shouldBe 1L
+                result.id shouldBe 1L
                 result.orderId shouldBe orderId
                 result.trackingNumber shouldBe "TRACK001"
                 result.carrier shouldBe "CJ대한통운"
@@ -72,13 +72,13 @@ class ShippingServiceIntegrationTest : DescribeSpec({
                 val shipping = createShipping(1L, 100L, ShippingStatus.PENDING, now)
                 shippingRepository.save(shipping)
 
-                val request = UpdateShippingStatusRequest(
+                val command = UpdateShippingStatusCommand(
                     status = "IN_TRANSIT",
                     deliveredAt = null
                 )
 
                 // When
-                val result = shippingService.updateShippingStatus(1L, request)
+                val result = shippingService.updateShippingStatus(1L, command)
 
                 // Then
                 result.status shouldBe "IN_TRANSIT"
@@ -101,13 +101,13 @@ class ShippingServiceIntegrationTest : DescribeSpec({
                 shippingRepository.save(shipping)
 
                 val deliveredAt = estimatedArrivalAt.plusDays(2) // 예상보다 2일 늦게 도착
-                val request = UpdateShippingStatusRequest(
+                val command = UpdateShippingStatusCommand(
                     status = "DELIVERED",
                     deliveredAt = deliveredAt
                 )
 
                 // When
-                val result = shippingService.updateShippingStatus(1L, request)
+                val result = shippingService.updateShippingStatus(1L, command)
 
                 // Then
                 result.status shouldBe "DELIVERED"
@@ -132,13 +132,13 @@ class ShippingServiceIntegrationTest : DescribeSpec({
                 shippingRepository.save(shipping)
 
                 val deliveredAt = estimatedArrivalAt.minusHours(1) // 예상보다 1시간 일찍 도착
-                val request = UpdateShippingStatusRequest(
+                val command = UpdateShippingStatusCommand(
                     status = "DELIVERED",
                     deliveredAt = deliveredAt
                 )
 
                 // When
-                val result = shippingService.updateShippingStatus(1L, request)
+                val result = shippingService.updateShippingStatus(1L, command)
 
                 // Then
                 result.status shouldBe "DELIVERED"
@@ -155,14 +155,14 @@ class ShippingServiceIntegrationTest : DescribeSpec({
                 val shipping = createShipping(1L, 100L, ShippingStatus.PENDING, now)
                 shippingRepository.save(shipping)
 
-                val request = UpdateShippingStatusRequest(
+                val command = UpdateShippingStatusCommand(
                     status = "DELIVERED",
                     deliveredAt = now
                 )
 
                 // When & Then
                 assertThatThrownBy {
-                    shippingService.updateShippingStatus(1L, request)
+                    shippingService.updateShippingStatus(1L, command)
                 }.isInstanceOf(InvalidStatusTransitionException::class.java)
                     .hasMessageContaining("Cannot transition from PENDING to DELIVERED")
             }
@@ -355,8 +355,8 @@ class ShippingServiceIntegrationTest : DescribeSpec({
                 page2.page.number shouldBe 1
 
                 // 페이지 간 데이터가 다른지 확인
-                val page1Ids = page1.items.map { it.shippingId }.toSet()
-                val page2Ids = page2.items.map { it.shippingId }.toSet()
+                val page1Ids = page1.items.map { it.id }.toSet()
+                val page2Ids = page2.items.map { it.id }.toSet()
                 page1Ids.intersect(page2Ids).isEmpty() shouldBe true
             }
 
@@ -400,7 +400,7 @@ class ShippingServiceIntegrationTest : DescribeSpec({
 
                 // Then
                 result.items.size shouldBe 1
-                result.items[0].shippingId shouldBe 3L
+                result.items[0].id shouldBe 3L
                 result.items[0].status shouldBe "DELIVERED"
                 result.items[0].carrier shouldBe "CJ대한통운"
             }

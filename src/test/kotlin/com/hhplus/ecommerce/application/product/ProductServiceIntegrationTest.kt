@@ -123,7 +123,7 @@ class ProductServiceIntegrationTest : DescribeSpec({
 
                 // then
                 response.products.isNotEmpty() shouldBe true
-                response.products.all { it.category == "ELECTRONICS" } shouldBe true
+                response.products.all { it.category == ProductCategory.ELECTRONICS } shouldBe true
             }
 
             it("FASHION 카테고리의 상품만 조회할 수 있다") {
@@ -137,7 +137,7 @@ class ProductServiceIntegrationTest : DescribeSpec({
 
                 // then
                 response.products.isNotEmpty() shouldBe true
-                response.products.all { it.category == "FASHION" } shouldBe true
+                response.products.all { it.category == ProductCategory.FASHION } shouldBe true
             }
 
             it("FOOD 카테고리의 상품만 조회할 수 있다") {
@@ -151,7 +151,7 @@ class ProductServiceIntegrationTest : DescribeSpec({
 
                 // then
                 response.products.isNotEmpty() shouldBe true
-                response.products.all { it.category == "FOOD" } shouldBe true
+                response.products.all { it.category == ProductCategory.FOOD } shouldBe true
 
                 // ProductSummary에는 salesCount가 없으므로 단순히 조회만 확인
             }
@@ -167,7 +167,7 @@ class ProductServiceIntegrationTest : DescribeSpec({
 
                 // then
                 response.products.isNotEmpty() shouldBe true
-                response.products.all { it.category == "FASHION" } shouldBe true
+                response.products.all { it.category == ProductCategory.FASHION } shouldBe true
 
                 // ProductSummary에는 salesCount가 없으므로 단순히 조회만 확인
             }
@@ -192,7 +192,7 @@ class ProductServiceIntegrationTest : DescribeSpec({
                 val productId = 1L
 
                 // when
-                val response = productService.getProductDetail(productId)
+                val response = productService.findProductById(productId)
 
                 // then
                 response.id shouldBe productId
@@ -208,14 +208,14 @@ class ProductServiceIntegrationTest : DescribeSpec({
                 val productId = 1L
 
                 // when
-                val response = productService.getProductDetail(productId)
+                val response = productService.findProductById(productId)
 
                 // then
                 response.id shouldBe productId
                 response.name shouldBe "노트북 ABC"
                 response.price shouldBe 1500000L
                 response.stock shouldBe 50
-                response.category shouldBe "ELECTRONICS"
+                response.category shouldBe ProductCategory.ELECTRONICS
                 response.salesCount shouldBe 150
                 response.specifications shouldNotBe null
             }
@@ -226,7 +226,7 @@ class ProductServiceIntegrationTest : DescribeSpec({
 
                 // when & then
                 shouldThrow<ProductNotFoundException> {
-                    productService.getProductDetail(invalidProductId)
+                    productService.findProductById(invalidProductId)
                 }
             }
         }
@@ -237,16 +237,16 @@ class ProductServiceIntegrationTest : DescribeSpec({
                 val productId = 1L
 
                 // when
-                val response = productService.getProductStock(productId)
+                val response = productService.findProductById(productId)
 
                 // then
                 response.id shouldBe productId
-                response.productName shouldNotBe null
+                response.name shouldNotBe null
                 response.stock shouldNotBe null
-                response.isAvailable shouldBe true
+                response.stock shouldBe 50
             }
 
-            it("재고가 0인 상품은 isAvailable이 false다") {
+            it("재고가 0인 상품도 조회할 수 있다") {
                 // given - 재고 0인 상품 생성
                 val now = LocalDateTime.now().format(dateFormatter)
                 val product = Product(
@@ -264,11 +264,10 @@ class ProductServiceIntegrationTest : DescribeSpec({
                 productRepository.save(product)
 
                 // when
-                val response = productService.getProductStock(1000L)
+                val response = productService.findProductById(1000L)
 
                 // then
                 response.stock shouldBe 0
-                response.isAvailable shouldBe false
             }
 
             it("존재하지 않는 상품 ID로 조회 시 예외가 발생한다") {
@@ -277,7 +276,7 @@ class ProductServiceIntegrationTest : DescribeSpec({
 
                 // when & then
                 shouldThrow<ProductNotFoundException> {
-                    productService.getProductStock(invalidProductId)
+                    productService.findProductById(invalidProductId)
                 }
             }
         }
@@ -325,7 +324,7 @@ class ProductServiceIntegrationTest : DescribeSpec({
 
                 // then
                 response.products.isNotEmpty() shouldBe true
-                response.products.all { it.category == "ELECTRONICS" } shouldBe true
+                response.products.all { it.category == ProductCategory.ELECTRONICS } shouldBe true
 
                 // 가격 오름차순 확인
                 for (i in 0 until response.products.size - 1) {
@@ -346,7 +345,7 @@ class ProductServiceIntegrationTest : DescribeSpec({
 
                 // then
                 response.products.isNotEmpty() shouldBe true
-                response.products.all { it.category == "FASHION" } shouldBe true
+                response.products.all { it.category == ProductCategory.FASHION } shouldBe true
 
                 // 판매량 내림차순 확인
                 for (i in 0 until response.products.size - 1) {
@@ -369,7 +368,7 @@ class ProductServiceIntegrationTest : DescribeSpec({
 
                 // then
                 response.products shouldHaveSize 3
-                response.products.all { it.category == "ELECTRONICS" } shouldBe true
+                response.products.all { it.category == ProductCategory.ELECTRONICS } shouldBe true
                 response.pagination.currentPage shouldBe 0
                 response.pagination.size shouldBe 3
 
@@ -424,7 +423,7 @@ class ProductServiceIntegrationTest : DescribeSpec({
 
                 // then
                 products.products.isNotEmpty() shouldBe true
-                products.products.all { it.category == "ELECTRONICS" } shouldBe true
+                products.products.all { it.category == ProductCategory.ELECTRONICS } shouldBe true
             }
 
             it("패션 카테고리에서 인기 상품 순으로 페이지를 넘기며 조회한다") {
@@ -446,7 +445,7 @@ class ProductServiceIntegrationTest : DescribeSpec({
 
                 // then
                 firstPage.products.isNotEmpty() shouldBe true
-                firstPage.products.all { it.category == "FASHION" } shouldBe true
+                firstPage.products.all { it.category == ProductCategory.FASHION } shouldBe true
 
                 // 첫 페이지와 두 번째 페이지의 상품이 다름
                 if (secondPage.products.isNotEmpty()) {
@@ -458,18 +457,17 @@ class ProductServiceIntegrationTest : DescribeSpec({
         }
 
         context("상품 상세 페이지 시나리오") {
-            it("상품 상세 정보와 재고를 함께 조회한다") {
+            it("상품 상세 정보를 조회한다") {
                 // given
                 val productId = 1L
 
                 // when
-                val detail = productService.getProductDetail(productId)
-                val stock = productService.getProductStock(productId)
+                val product = productService.findProductById(productId)
 
                 // then
-                detail.id shouldBe productId
-                stock.id shouldBe productId
-                detail.stock shouldBe stock.stock
+                product.id shouldBe productId
+                product.name shouldNotBe null
+                product.stock shouldNotBe null
             }
         }
     }

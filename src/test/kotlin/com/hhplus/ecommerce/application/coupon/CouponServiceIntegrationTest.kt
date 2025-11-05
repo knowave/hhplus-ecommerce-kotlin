@@ -1,18 +1,15 @@
 package com.hhplus.ecommerce.application.coupon
 
+import com.hhplus.ecommerce.application.coupon.dto.*
 import com.hhplus.ecommerce.common.exception.CouponAlreadyIssuedException
 import com.hhplus.ecommerce.common.exception.CouponNotFoundException
-import com.hhplus.ecommerce.common.exception.UserCouponNotFoundException
 import com.hhplus.ecommerce.domain.coupon.CouponRepository
 import com.hhplus.ecommerce.infrastructure.coupon.CouponRepositoryImpl
 import com.hhplus.ecommerce.domain.coupon.CouponStatus
-import com.hhplus.ecommerce.presentation.coupon.dto.IssueCouponRequest
 import io.kotest.assertions.throwables.shouldThrow
 import io.kotest.core.spec.style.DescribeSpec
 import io.kotest.matchers.shouldBe
 import io.kotest.matchers.shouldNotBe
-import io.kotest.matchers.collections.shouldNotBeEmpty
-import io.kotest.matchers.collections.shouldBeEmpty
 
 class CouponServiceIntegrationTest : DescribeSpec({
     lateinit var couponRepository: CouponRepository
@@ -32,10 +29,10 @@ class CouponServiceIntegrationTest : DescribeSpec({
                 val userId = 1L
                 val availableCoupons = couponService.getAvailableCoupons()
                 val couponId = availableCoupons.coupons.first().id
-                val request = IssueCouponRequest(userId = userId)
+                val command = IssueCouponCommand(userId = userId)
 
                 // when
-                val result = couponService.issueCoupon(couponId, request)
+                val result = couponService.issueCoupon(couponId, command)
 
                 // then
                 result.userCouponId shouldNotBe null
@@ -59,8 +56,8 @@ class CouponServiceIntegrationTest : DescribeSpec({
                 val remainingBefore = beforeDetail.remainingQuantity
 
                 // when
-                val request = IssueCouponRequest(userId = userId)
-                val result = couponService.issueCoupon(couponId, request)
+                val command = IssueCouponCommand(userId = userId)
+                val result = couponService.issueCoupon(couponId, command)
 
                 // then
                 result.remainingQuantity shouldBe (remainingBefore - 1)
@@ -76,25 +73,25 @@ class CouponServiceIntegrationTest : DescribeSpec({
                 val userId = 3L
                 val availableCoupons = couponService.getAvailableCoupons()
                 val couponId = availableCoupons.coupons.first().id
-                val request = IssueCouponRequest(userId = userId)
+                val command = IssueCouponCommand(userId = userId)
 
                 // 첫 번째 발급
-                couponService.issueCoupon(couponId, request)
+                couponService.issueCoupon(couponId, command)
 
                 // when & then - 두 번째 발급 시도
                 shouldThrow<CouponAlreadyIssuedException> {
-                    couponService.issueCoupon(couponId, request)
+                    couponService.issueCoupon(couponId, command)
                 }
             }
 
             it("존재하지 않는 쿠폰 발급 시 예외가 발생한다") {
                 // given
                 val userId = 4L
-                val request = IssueCouponRequest(userId = userId)
+                val command = IssueCouponCommand(userId = userId)
 
                 // when & then
                 shouldThrow<CouponNotFoundException> {
-                    couponService.issueCoupon(999999L, request)
+                    couponService.issueCoupon(999999L, command)
                 }
             }
         }
@@ -107,8 +104,8 @@ class CouponServiceIntegrationTest : DescribeSpec({
                 val couponId = availableCoupons.coupons.first().id
 
                 // Step 1: 쿠폰 발급
-                val request = IssueCouponRequest(userId = userId)
-                val issueResult = couponService.issueCoupon(couponId, request)
+                val command = IssueCouponCommand(userId = userId)
+                val issueResult = couponService.issueCoupon(couponId, command)
                 issueResult.status shouldBe "AVAILABLE"
 
                 // Step 2: 사용자 쿠폰 목록 조회
@@ -130,12 +127,12 @@ class CouponServiceIntegrationTest : DescribeSpec({
                 val couponId = availableCoupons.coupons.first().id
 
                 // when - 첫 번째 사용자 발급
-                val request1 = IssueCouponRequest(userId = userId1)
-                val result1 = couponService.issueCoupon(couponId, request1)
+                val command1 = IssueCouponCommand(userId = userId1)
+                val result1 = couponService.issueCoupon(couponId, command1)
 
                 // when - 두 번째 사용자 발급
-                val request2 = IssueCouponRequest(userId = userId2)
-                val result2 = couponService.issueCoupon(couponId, request2)
+                val command2 = IssueCouponCommand(userId = userId2)
+                val result2 = couponService.issueCoupon(couponId, command2)
 
                 // then - 각각 발급 성공
                 result1.userId shouldBe userId1

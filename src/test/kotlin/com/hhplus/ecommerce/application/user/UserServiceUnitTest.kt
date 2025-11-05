@@ -1,9 +1,9 @@
 package com.hhplus.ecommerce.application.user
 
+import com.hhplus.ecommerce.application.user.dto.CreateUserCommand
 import com.hhplus.ecommerce.common.exception.*
 import com.hhplus.ecommerce.domain.user.UserRepository
 import com.hhplus.ecommerce.domain.user.entity.User
-import com.hhplus.ecommerce.presentation.user.dto.CreateUserRequest
 import io.kotest.assertions.throwables.shouldThrow
 import io.kotest.core.spec.style.DescribeSpec
 import io.kotest.matchers.shouldBe
@@ -277,10 +277,10 @@ class UserServiceUnitTest : DescribeSpec({
                 every { userRepository.findById(userId) } returns user
 
                 // when
-                val result = userService.getUserInfo(userId)
+                val result = userService.getUser(userId)
 
                 // then
-                result.userId shouldBe userId
+                result.id shouldBe userId
                 result.balance shouldBe balance
                 result.createdAt shouldBe now
                 result.updatedAt shouldBe now
@@ -297,7 +297,7 @@ class UserServiceUnitTest : DescribeSpec({
 
                 // when & then
                 shouldThrow<UserNotFoundException> {
-                    userService.getUserInfo(userId)
+                    userService.getUser(userId)
                 }
 
                 verify(exactly = 1) { userRepository.findById(userId) }
@@ -311,7 +311,7 @@ class UserServiceUnitTest : DescribeSpec({
                 // given
                 val initialBalance = 10000L
                 val generatedId = 1L
-                val request = CreateUserRequest(balance = initialBalance)
+                val request = CreateUserCommand(balance = initialBalance)
 
                 every { userRepository.generateId() } returns generatedId
                 every { userRepository.save(any()) } answers { firstArg() }
@@ -334,7 +334,7 @@ class UserServiceUnitTest : DescribeSpec({
                 // given
                 val minBalance = 1_000L
                 val generatedId = 1L
-                val request = CreateUserRequest(balance = minBalance)
+                val request = CreateUserCommand(balance = minBalance)
 
                 every { userRepository.generateId() } returns generatedId
                 every { userRepository.save(any()) } answers { firstArg() }
@@ -354,7 +354,7 @@ class UserServiceUnitTest : DescribeSpec({
                 // given
                 val maxBalance = 1_000_000L
                 val generatedId = 1L
-                val request = CreateUserRequest(balance = maxBalance)
+                val request = CreateUserCommand(balance = maxBalance)
 
                 every { userRepository.generateId() } returns generatedId
                 every { userRepository.save(any()) } answers { firstArg() }
@@ -375,7 +375,7 @@ class UserServiceUnitTest : DescribeSpec({
             it("초기 잔액이 최소 금액(1,000원) 미만일 때 InvalidAmountException을 발생시킨다") {
                 // given
                 val invalidBalance = 500L
-                val request = CreateUserRequest(balance = invalidBalance)
+                val request = CreateUserCommand(balance = invalidBalance)
 
                 // when & then
                 shouldThrow<InvalidAmountException> {
@@ -389,7 +389,7 @@ class UserServiceUnitTest : DescribeSpec({
             it("초기 잔액이 0원일 때 InvalidAmountException을 발생시킨다") {
                 // given
                 val invalidBalance = 0L
-                val request = CreateUserRequest(balance = invalidBalance)
+                val request = CreateUserCommand(balance = invalidBalance)
 
                 // when & then
                 shouldThrow<InvalidAmountException> {
@@ -403,7 +403,7 @@ class UserServiceUnitTest : DescribeSpec({
             it("초기 잔액이 최대 금액(3,000,000원)을 초과할 때 InvalidAmountException을 발생시킨다") {
                 // given
                 val invalidBalance = 3_500_000L
-                val request = CreateUserRequest(balance = invalidBalance)
+                val request = CreateUserCommand(balance = invalidBalance)
 
                 // when & then
                 shouldThrow<InvalidAmountException> {

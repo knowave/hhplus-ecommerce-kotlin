@@ -1,5 +1,7 @@
 package com.hhplus.ecommerce.application.cart
 
+import com.hhplus.ecommerce.application.cart.dto.AddCartItemCommand
+import com.hhplus.ecommerce.application.cart.dto.UpdateCartItemCommand
 import com.hhplus.ecommerce.application.product.ProductService
 import com.hhplus.ecommerce.application.user.UserService
 import com.hhplus.ecommerce.common.exception.*
@@ -8,8 +10,6 @@ import com.hhplus.ecommerce.domain.product.entity.ProductCategory
 import com.hhplus.ecommerce.domain.cart.entity.CartItem
 import com.hhplus.ecommerce.domain.product.entity.Product
 import com.hhplus.ecommerce.domain.user.entity.User
-import com.hhplus.ecommerce.presentation.cart.dto.AddCartItemRequest
-import com.hhplus.ecommerce.presentation.cart.dto.UpdateCartItemRequest
 import io.kotest.assertions.throwables.shouldThrow
 import io.kotest.core.spec.style.DescribeSpec
 import io.kotest.matchers.collections.shouldBeEmpty
@@ -42,7 +42,7 @@ class CartServiceUnitTest : DescribeSpec({
                 val quantity = 2
                 val user = createUser(userId, "테스트 사용자", "test@example.com", 100000L)
                 val product = createProduct(productId, "노트북", 1500000L, 50, ProductCategory.ELECTRONICS, 0)
-                val request = AddCartItemRequest(productId = productId, quantity = quantity)
+                val command = AddCartItemCommand(productId = productId, quantity = quantity)
 
                 val now = LocalDateTime.now()
                 val savedCartItem = CartItem(1L, userId, productId, quantity, now)
@@ -54,7 +54,7 @@ class CartServiceUnitTest : DescribeSpec({
                 every { cartRepository.save(any()) } returns savedCartItem
 
                 // when
-                val result = cartService.addCartItem(userId, request)
+                val result = cartService.addCartItem(userId, command)
 
                 // then
                 result.cartItemId shouldBe 1L
@@ -81,7 +81,7 @@ class CartServiceUnitTest : DescribeSpec({
                 val additionalQuantity = 3
                 val user = createUser(userId, "테스트 사용자", "test@example.com", 100000L)
                 val product = createProduct(productId, "노트북", 1500000L, 50, ProductCategory.ELECTRONICS, 0)
-                val request = AddCartItemRequest(productId = productId, quantity = additionalQuantity)
+                val command = AddCartItemCommand(productId = productId, quantity = additionalQuantity)
 
                 val now = LocalDateTime.now()
                 val existingCartItem = CartItem(1L, userId, productId, existingQuantity, now)
@@ -92,7 +92,7 @@ class CartServiceUnitTest : DescribeSpec({
                 every { cartRepository.save(any()) } returns existingCartItem.copy(quantity = existingQuantity + additionalQuantity)
 
                 // when
-                val result = cartService.addCartItem(userId, request)
+                val result = cartService.addCartItem(userId, command)
 
                 // then
                 result.quantity shouldBe 5 // 2 + 3
@@ -113,7 +113,7 @@ class CartServiceUnitTest : DescribeSpec({
                 val additionalQuantity = 49
                 val user = createUser(userId, "테스트 사용자", "test@example.com", 100000L)
                 val product = createProduct(productId, "노트북", 1500000L, 200, ProductCategory.ELECTRONICS, 0)
-                val request = AddCartItemRequest(productId = productId, quantity = additionalQuantity)
+                val command = AddCartItemCommand(productId = productId, quantity = additionalQuantity)
 
                 val now = LocalDateTime.now()
                 val existingCartItem = CartItem(1L, userId, productId, existingQuantity, now)
@@ -124,7 +124,7 @@ class CartServiceUnitTest : DescribeSpec({
                 every { cartRepository.save(any()) } returns existingCartItem.copy(quantity = 99)
 
                 // when
-                val result = cartService.addCartItem(userId, request)
+                val result = cartService.addCartItem(userId, command)
 
                 // then
                 result.quantity shouldBe 99
@@ -137,12 +137,12 @@ class CartServiceUnitTest : DescribeSpec({
             it("존재하지 않는 사용자로 상품 추가 시 UserNotFoundException을 발생시킨다") {
                 // given
                 val invalidUserId = 999L
-                val request = AddCartItemRequest(productId = 1L, quantity = 1)
+                val command = AddCartItemCommand(productId = 1L, quantity = 1)
                 every { userService.getUser(invalidUserId) } throws UserNotFoundException(invalidUserId)
 
                 // when & then
                 shouldThrow<UserNotFoundException> {
-                    cartService.addCartItem(invalidUserId, request)
+                    cartService.addCartItem(invalidUserId, command)
                 }
 
                 verify(exactly = 1) { userService.getUser(invalidUserId) }
@@ -153,13 +153,13 @@ class CartServiceUnitTest : DescribeSpec({
                 // given
                 val userId = 1L
                 val user = createUser(userId, "테스트 사용자", "test@example.com", 100000L)
-                val request = AddCartItemRequest(productId = 1L, quantity = 0)
+                val command = AddCartItemCommand(productId = 1L, quantity = 0)
 
                 every { userService.getUser(userId) } returns user
 
                 // when & then
                 shouldThrow<InvalidQuantityException> {
-                    cartService.addCartItem(userId, request)
+                    cartService.addCartItem(userId, command)
                 }
 
                 verify(exactly = 1) { userService.getUser(userId) }
@@ -171,14 +171,14 @@ class CartServiceUnitTest : DescribeSpec({
                 val userId = 1L
                 val invalidProductId = 999L
                 val user = createUser(userId, "테스트 사용자", "test@example.com", 100000L)
-                val request = AddCartItemRequest(productId = invalidProductId, quantity = 1)
+                val command = AddCartItemCommand(productId = invalidProductId, quantity = 1)
 
                 every { userService.getUser(userId) } returns user
                 every { productService.findProductById(invalidProductId) } throws ProductNotFoundException(invalidProductId)
 
                 // when & then
                 shouldThrow<ProductNotFoundException> {
-                    cartService.addCartItem(userId, request)
+                    cartService.addCartItem(userId, command)
                 }
 
                 verify(exactly = 1) { userService.getUser(userId) }
@@ -191,14 +191,14 @@ class CartServiceUnitTest : DescribeSpec({
                 val productId = 15L
                 val user = createUser(userId, "테스트 사용자", "test@example.com", 100000L)
                 val outOfStockProduct = createProduct(productId, "품절 상품", 50000L, 0, ProductCategory.ELECTRONICS, 0)
-                val request = AddCartItemRequest(productId = productId, quantity = 1)
+                val command = AddCartItemCommand(productId = productId, quantity = 1)
 
                 every { userService.getUser(userId) } returns user
                 every { productService.findProductById(productId) } returns outOfStockProduct
 
                 // when & then
                 val exception = shouldThrow<InsufficientStockException> {
-                    cartService.addCartItem(userId, request)
+                    cartService.addCartItem(userId, command)
                 }
                 exception.message shouldContain "Insufficient stock"
 
@@ -212,7 +212,7 @@ class CartServiceUnitTest : DescribeSpec({
                 val productId = 15L
                 val user = createUser(userId, "테스트 사용자", "test@example.com", 100000L)
                 val product = createProduct(productId, "노트북", 1500000L, 200, ProductCategory.ELECTRONICS, 0)
-                val request = AddCartItemRequest(productId = productId, quantity = 101)
+                val command = AddCartItemCommand(productId = productId, quantity = 101)
 
                 every { userService.getUser(userId) } returns user
                 every { productService.findProductById(productId) } returns product
@@ -220,7 +220,7 @@ class CartServiceUnitTest : DescribeSpec({
 
                 // when & then
                 val exception = shouldThrow<ExceedMaxQuantityException> {
-                    cartService.addCartItem(userId, request)
+                    cartService.addCartItem(userId, command)
                 }
                 exception.message shouldContain "Exceed max quantity"
 
@@ -236,7 +236,7 @@ class CartServiceUnitTest : DescribeSpec({
                 val additionalQuantity = 25
                 val user = createUser(userId, "테스트 사용자", "test@example.com", 100000L)
                 val product = createProduct(productId, "노트북", 1500000L, 200, ProductCategory.ELECTRONICS, 0)
-                val request = AddCartItemRequest(productId = productId, quantity = additionalQuantity)
+                val command = AddCartItemCommand(productId = productId, quantity = additionalQuantity)
 
                 val now = LocalDateTime.now()
                 val existingCartItem = CartItem(1L, userId, productId, existingQuantity, now)
@@ -247,7 +247,7 @@ class CartServiceUnitTest : DescribeSpec({
 
                 // when & then
                 shouldThrow<ExceedMaxQuantityException> {
-                    cartService.addCartItem(userId, request)
+                    cartService.addCartItem(userId, command)
                 }
 
                 verify(exactly = 1) { userService.getUser(userId) }
@@ -261,7 +261,7 @@ class CartServiceUnitTest : DescribeSpec({
                 val productId = 7L // 운동화 ABC, 재고 45개
                 val user = createUser(userId, "테스트 사용자", "test@example.com", 100000L)
                 val product = createProduct(productId, "운동화", 89000L, 45, ProductCategory.FASHION, 0)
-                val request = AddCartItemRequest(productId = productId, quantity = 100) // 100 > 45
+                val command = AddCartItemCommand(productId = productId, quantity = 100) // 100 > 45
 
                 every { userService.getUser(userId) } returns user
                 every { productService.findProductById(productId) } returns product
@@ -269,7 +269,7 @@ class CartServiceUnitTest : DescribeSpec({
 
                 // when & then
                 shouldThrow<InsufficientStockException> {
-                    cartService.addCartItem(userId, request)
+                    cartService.addCartItem(userId, command)
                 }
 
                 verify(exactly = 1) { userService.getUser(userId) }
@@ -284,7 +284,7 @@ class CartServiceUnitTest : DescribeSpec({
                 val additionalQuantity = 8
                 val user = createUser(userId, "테스트 사용자", "test@example.com", 100000L)
                 val product = createProduct(productId, "노트북", 1500000L, 10, ProductCategory.ELECTRONICS, 0)
-                val request = AddCartItemRequest(productId = productId, quantity = additionalQuantity)
+                val command = AddCartItemCommand(productId = productId, quantity = additionalQuantity)
 
                 val now = LocalDateTime.now()
                 val existingCartItem = CartItem(1L, userId, productId, existingQuantity, now)
@@ -295,7 +295,7 @@ class CartServiceUnitTest : DescribeSpec({
 
                 // when & then
                 shouldThrow<InsufficientStockException> {
-                    cartService.addCartItem(userId, request)
+                    cartService.addCartItem(userId, command)
                 }
 
                 verify(exactly = 1) { userService.getUser(userId) }
@@ -316,14 +316,14 @@ class CartServiceUnitTest : DescribeSpec({
 
                 val cartItem = CartItem(cartItemId, userId, productId, 2, now)
                 val product = createProduct(productId, "노트북", 1500000L, 50, ProductCategory.ELECTRONICS, 0)
-                val request = UpdateCartItemRequest(quantity = newQuantity)
+                val command = UpdateCartItemCommand(quantity = newQuantity)
 
                 every { cartRepository.findById(cartItemId) } returns cartItem
                 every { productService.findProductById(productId) } returns product
                 every { cartRepository.save(any()) } returns cartItem.copy(quantity = newQuantity)
 
                 // when
-                val result = cartService.updateCartItem(userId, cartItemId, request)
+                val result = cartService.updateCartItem(userId, cartItemId, command)
 
                 // then
                 result.cartItemId shouldBe cartItemId
@@ -344,14 +344,14 @@ class CartServiceUnitTest : DescribeSpec({
 
                 val cartItem = CartItem(cartItemId, userId, productId, 10, now)
                 val product = createProduct(productId, "노트북", 1500000L, 50, ProductCategory.ELECTRONICS, 0)
-                val request = UpdateCartItemRequest(quantity = 1)
+                val command = UpdateCartItemCommand(quantity = 1)
 
                 every { cartRepository.findById(cartItemId) } returns cartItem
                 every { productService.findProductById(productId) } returns product
                 every { cartRepository.save(any()) } returns cartItem.copy(quantity = 1)
 
                 // when
-                val result = cartService.updateCartItem(userId, cartItemId, request)
+                val result = cartService.updateCartItem(userId, cartItemId, command)
 
                 // then
                 result.quantity shouldBe 1
@@ -368,14 +368,14 @@ class CartServiceUnitTest : DescribeSpec({
 
                 val cartItem = CartItem(cartItemId, userId, productId, 10, now)
                 val product = createProduct(productId, "노트북", 1500000L, 150, ProductCategory.ELECTRONICS, 0)
-                val request = UpdateCartItemRequest(quantity = 100)
+                val command = UpdateCartItemCommand(quantity = 100)
 
                 every { cartRepository.findById(cartItemId) } returns cartItem
                 every { productService.findProductById(productId) } returns product
                 every { cartRepository.save(any()) } returns cartItem.copy(quantity = 100)
 
                 // when
-                val result = cartService.updateCartItem(userId, cartItemId, request)
+                val result = cartService.updateCartItem(userId, cartItemId, command)
 
                 // then
                 result.quantity shouldBe 100
@@ -389,13 +389,13 @@ class CartServiceUnitTest : DescribeSpec({
                 // given
                 val userId = 1L
                 val invalidCartItemId = 999L
-                val request = UpdateCartItemRequest(quantity = 5)
+                val command = UpdateCartItemCommand(quantity = 5)
 
                 every { cartRepository.findById(invalidCartItemId) } returns null
 
                 // when & then
                 shouldThrow<CartItemNotFoundException> {
-                    cartService.updateCartItem(userId, invalidCartItemId, request)
+                    cartService.updateCartItem(userId, invalidCartItemId, command)
                 }
 
                 verify(exactly = 1) { cartRepository.findById(invalidCartItemId) }
@@ -410,13 +410,13 @@ class CartServiceUnitTest : DescribeSpec({
                 val now = LocalDateTime.now()
 
                 val otherUserCartItem = CartItem(cartItemId, otherUserId, 15L, 2, now)
-                val request = UpdateCartItemRequest(quantity = 5)
+                val command = UpdateCartItemCommand(quantity = 5)
 
                 every { cartRepository.findById(cartItemId) } returns otherUserCartItem
 
                 // when & then
                 val exception = shouldThrow<ForbiddenException> {
-                    cartService.updateCartItem(userId, cartItemId, request)
+                    cartService.updateCartItem(userId, cartItemId, command)
                 }
                 exception.message shouldContain "다른 사용자의 장바구니 아이템입니다"
 
@@ -432,14 +432,14 @@ class CartServiceUnitTest : DescribeSpec({
                 val now = LocalDateTime.now()
 
                 val cartItem = CartItem(cartItemId, userId, productId, 2, now)
-                val request = UpdateCartItemRequest(quantity = 0)
+                val command = UpdateCartItemCommand(quantity = 0)
 
                 every { cartRepository.findById(cartItemId) } returns cartItem
                 every { cartRepository.delete(cartItemId) } just Runs
 
                 // when & then
                 shouldThrow<CartItemNotFoundException> {
-                    cartService.updateCartItem(userId, cartItemId, request)
+                    cartService.updateCartItem(userId, cartItemId, command)
                 }
 
                 verify(exactly = 1) { cartRepository.findById(cartItemId) }
@@ -455,13 +455,13 @@ class CartServiceUnitTest : DescribeSpec({
                 val now = LocalDateTime.now()
 
                 val cartItem = CartItem(cartItemId, userId, productId, 2, now)
-                val request = UpdateCartItemRequest(quantity = -1)
+                val command = UpdateCartItemCommand(quantity = -1)
 
                 every { cartRepository.findById(cartItemId) } returns cartItem
 
                 // when & then
                 shouldThrow<InvalidQuantityException> {
-                    cartService.updateCartItem(userId, cartItemId, request)
+                    cartService.updateCartItem(userId, cartItemId, command)
                 }
 
                 verify(exactly = 1) { cartRepository.findById(cartItemId) }
@@ -476,13 +476,13 @@ class CartServiceUnitTest : DescribeSpec({
                 val now = LocalDateTime.now()
 
                 val cartItem = CartItem(cartItemId, userId, productId, 2, now)
-                val request = UpdateCartItemRequest(quantity = 101)
+                val command = UpdateCartItemCommand(quantity = 101)
 
                 every { cartRepository.findById(cartItemId) } returns cartItem
 
                 // when & then
                 shouldThrow<ExceedMaxQuantityException> {
-                    cartService.updateCartItem(userId, cartItemId, request)
+                    cartService.updateCartItem(userId, cartItemId, command)
                 }
 
                 verify(exactly = 1) { cartRepository.findById(cartItemId) }
@@ -498,14 +498,14 @@ class CartServiceUnitTest : DescribeSpec({
 
                 val cartItem = CartItem(cartItemId, userId, productId, 2, now)
                 val product = createProduct(productId, "노트북", 1500000L, 5, ProductCategory.ELECTRONICS, 0)
-                val request = UpdateCartItemRequest(quantity = 10)
+                val command = UpdateCartItemCommand(quantity = 10)
 
                 every { cartRepository.findById(cartItemId) } returns cartItem
                 every { productService.findProductById(productId) } returns product
 
                 // when & then
                 shouldThrow<InsufficientStockException> {
-                    cartService.updateCartItem(userId, cartItemId, request)
+                    cartService.updateCartItem(userId, cartItemId, command)
                 }
 
                 verify(exactly = 1) { cartRepository.findById(cartItemId) }
@@ -520,14 +520,14 @@ class CartServiceUnitTest : DescribeSpec({
                 val now = LocalDateTime.now()
 
                 val cartItem = CartItem(cartItemId, userId, productId, 2, now)
-                val request = UpdateCartItemRequest(quantity = 5)
+                val command = UpdateCartItemCommand(quantity = 5)
 
                 every { cartRepository.findById(cartItemId) } returns cartItem
                 every { productService.findProductById(productId) } throws ProductNotFoundException(productId)
 
                 // when & then
                 shouldThrow<ProductNotFoundException> {
-                    cartService.updateCartItem(userId, cartItemId, request)
+                    cartService.updateCartItem(userId, cartItemId, command)
                 }
 
                 verify(exactly = 1) { cartRepository.findById(cartItemId) }

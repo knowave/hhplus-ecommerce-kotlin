@@ -28,9 +28,7 @@ import com.hhplus.ecommerce.domain.coupon.entity.UserCoupon
 import com.hhplus.ecommerce.domain.product.entity.Product
 import com.hhplus.ecommerce.domain.user.entity.User
 import com.hhplus.ecommerce.infrastructure.cart.CartRepositoryImpl
-import com.hhplus.ecommerce.presentation.order.dto.CancelOrderRequest
-import com.hhplus.ecommerce.presentation.order.dto.CreateOrderRequest
-import com.hhplus.ecommerce.presentation.order.dto.OrderItemRequest
+import com.hhplus.ecommerce.application.order.dto.*
 import io.kotest.assertions.throwables.shouldThrow
 import io.kotest.core.spec.style.DescribeSpec
 import io.kotest.matchers.shouldBe
@@ -122,12 +120,12 @@ class OrderServiceIntegrationTest : DescribeSpec({
                 productRepository.save(product)
 
                 // when - 주문 생성
-                val request = CreateOrderRequest(
+                val command = CreateOrderCommand(
                     userId = user.id,
-                    items = listOf(OrderItemRequest(product.id, 2)),
+                    items = listOf(OrderItemCommand(product.id, 2)),
                     couponId = null
                 )
-                val orderResponse = orderService.createOrder(request)
+                val orderResponse = orderService.createOrder(command)
 
                 // then - 주문 생성 검증
                 orderResponse.orderId shouldNotBe null
@@ -205,12 +203,12 @@ class OrderServiceIntegrationTest : DescribeSpec({
                 couponRepository.saveUserCoupon(userCoupon)
 
                 // when - 쿠폰을 사용한 주문 생성
-                val request = CreateOrderRequest(
+                val command = CreateOrderCommand(
                     userId = user.id,
-                    items = listOf(OrderItemRequest(product.id, 1)),
+                    items = listOf(OrderItemCommand(product.id, 1)),
                     couponId = coupon.id
                 )
-                val orderResponse = orderService.createOrder(request)
+                val orderResponse = orderService.createOrder(command)
 
                 // then - 할인 적용 검증
                 orderResponse.pricing.totalAmount shouldBe 100000L
@@ -280,16 +278,16 @@ class OrderServiceIntegrationTest : DescribeSpec({
                 productRepository.save(product3)
 
                 // when - 여러 상품 주문
-                val request = CreateOrderRequest(
+                val command = CreateOrderCommand(
                     userId = user.id,
                     items = listOf(
-                        OrderItemRequest(product1.id, 1),
-                        OrderItemRequest(product2.id, 2),
-                        OrderItemRequest(product3.id, 1)
+                        OrderItemCommand(product1.id, 1),
+                        OrderItemCommand(product2.id, 2),
+                        OrderItemCommand(product3.id, 1)
                     ),
                     couponId = null
                 )
-                val orderResponse = orderService.createOrder(request)
+                val orderResponse = orderService.createOrder(command)
 
                 // then - 주문 검증
                 orderResponse.items.size shouldBe 3
@@ -330,16 +328,16 @@ class OrderServiceIntegrationTest : DescribeSpec({
                 productRepository.save(product)
 
                 // given - 주문 생성
-                val createRequest = CreateOrderRequest(
+                val createCommand = CreateOrderCommand(
                     userId = user.id,
-                    items = listOf(OrderItemRequest(product.id, 3)),
+                    items = listOf(OrderItemCommand(product.id, 3)),
                     couponId = null
                 )
-                val orderResponse = orderService.createOrder(createRequest)
+                val orderResponse = orderService.createOrder(createCommand)
 
                 // when - 주문 취소
-                val cancelRequest = CancelOrderRequest(userId = user.id)
-                val cancelResponse = orderService.cancelOrder(orderResponse.orderId, cancelRequest)
+                val cancelCommand = CancelOrderCommand(userId = user.id)
+                val cancelResponse = orderService.cancelOrder(orderResponse.orderId, cancelCommand)
 
                 // then - 취소 결과 검증
                 cancelResponse.orderId shouldBe orderResponse.orderId
@@ -410,16 +408,16 @@ class OrderServiceIntegrationTest : DescribeSpec({
                 couponRepository.saveUserCoupon(userCoupon)
 
                 // given - 쿠폰을 사용한 주문 생성
-                val createRequest = CreateOrderRequest(
+                val createCommand = CreateOrderCommand(
                     userId = user.id,
-                    items = listOf(OrderItemRequest(product.id, 1)),
+                    items = listOf(OrderItemCommand(product.id, 1)),
                     couponId = coupon.id
                 )
-                val orderResponse = orderService.createOrder(createRequest)
+                val orderResponse = orderService.createOrder(createCommand)
 
                 // when - 주문 취소
-                val cancelRequest = CancelOrderRequest(userId = user.id)
-                val cancelResponse = orderService.cancelOrder(orderResponse.orderId, cancelRequest)
+                val cancelCommand = CancelOrderCommand(userId = user.id)
+                val cancelResponse = orderService.cancelOrder(orderResponse.orderId, cancelCommand)
 
                 // then - 쿠폰 복원 검증
                 cancelResponse.refund.restoredCoupon shouldNotBe null
@@ -463,9 +461,9 @@ class OrderServiceIntegrationTest : DescribeSpec({
                 // when & then - 재고보다 많이 주문하면 실패
                 shouldThrow<InsufficientStockException> {
                     orderService.createOrder(
-                        CreateOrderRequest(
+                        CreateOrderCommand(
                             userId = user.id,
-                            items = listOf(OrderItemRequest(product.id, 5)),
+                            items = listOf(OrderItemCommand(product.id, 5)),
                             couponId = null
                         )
                     )
@@ -504,9 +502,9 @@ class OrderServiceIntegrationTest : DescribeSpec({
 
                 // when - 첫 번째 주문
                 orderService.createOrder(
-                    CreateOrderRequest(
+                    CreateOrderCommand(
                         userId = user.id,
-                        items = listOf(OrderItemRequest(product.id, 3)),
+                        items = listOf(OrderItemCommand(product.id, 3)),
                         couponId = null
                     )
                 )
@@ -516,9 +514,9 @@ class OrderServiceIntegrationTest : DescribeSpec({
 
                 // when - 두 번째 주문
                 orderService.createOrder(
-                    CreateOrderRequest(
+                    CreateOrderCommand(
                         userId = user.id,
-                        items = listOf(OrderItemRequest(product.id, 4)),
+                        items = listOf(OrderItemCommand(product.id, 4)),
                         couponId = null
                     )
                 )
@@ -529,9 +527,9 @@ class OrderServiceIntegrationTest : DescribeSpec({
                 // when & then - 재고 부족으로 실패
                 shouldThrow<InsufficientStockException> {
                     orderService.createOrder(
-                        CreateOrderRequest(
+                        CreateOrderCommand(
                             userId = user.id,
-                            items = listOf(OrderItemRequest(product.id, 5)),
+                            items = listOf(OrderItemCommand(product.id, 5)),
                             couponId = null
                         )
                     )

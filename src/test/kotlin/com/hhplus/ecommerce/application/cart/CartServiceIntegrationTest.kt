@@ -1,5 +1,6 @@
 package com.hhplus.ecommerce.application.cart
 
+import com.hhplus.ecommerce.application.cart.dto.*
 import com.hhplus.ecommerce.application.product.ProductService
 import com.hhplus.ecommerce.application.product.ProductServiceImpl
 import com.hhplus.ecommerce.application.user.UserService
@@ -11,8 +12,6 @@ import com.hhplus.ecommerce.domain.user.UserRepository
 import com.hhplus.ecommerce.infrastructure.cart.CartRepositoryImpl
 import com.hhplus.ecommerce.infrastructure.product.ProductRepositoryImpl
 import com.hhplus.ecommerce.infrastructure.user.UserRepositoryImpl
-import com.hhplus.ecommerce.presentation.cart.dto.AddCartItemRequest
-import com.hhplus.ecommerce.presentation.cart.dto.UpdateCartItemRequest
 import io.kotest.assertions.throwables.shouldThrow
 import io.kotest.core.spec.style.DescribeSpec
 import io.kotest.matchers.collections.shouldBeEmpty
@@ -119,10 +118,10 @@ class CartServiceIntegrationTest : DescribeSpec({
                 val userId = 2L // 빈 장바구니
                 val productId = 1L // 노트북 ABC
                 val quantity = 2
-                val request = AddCartItemRequest(productId = productId, quantity = quantity)
+                val command = AddCartItemCommand(productId = productId, quantity = quantity)
 
                 // when
-                val response = cartService.addCartItem(userId, request)
+                val response = cartService.addCartItem(userId, command)
 
                 // then
                 response.cartItemId shouldNotBe null
@@ -144,10 +143,11 @@ class CartServiceIntegrationTest : DescribeSpec({
                 // given
                 val userId = 2L
 
+
                 // when - 3개 상품 추가
-                cartService.addCartItem(userId, AddCartItemRequest(productId = 1L, quantity = 1))
-                cartService.addCartItem(userId, AddCartItemRequest(productId = 5L, quantity = 2))
-                cartService.addCartItem(userId, AddCartItemRequest(productId = 10L, quantity = 3))
+                cartService.addCartItem(userId, AddCartItemCommand(productId = 1L, quantity = 1))
+                cartService.addCartItem(userId, AddCartItemCommand(productId = 5L, quantity = 2))
+                cartService.addCartItem(userId, AddCartItemCommand(productId = 10L, quantity = 3))
 
                 // then
                 val cart = cartService.getCart(userId)
@@ -164,8 +164,8 @@ class CartServiceIntegrationTest : DescribeSpec({
                 val productId = 1L
 
                 // when - 같은 상품 2번 추가
-                val response1 = cartService.addCartItem(userId, AddCartItemRequest(productId = productId, quantity = 2))
-                val response2 = cartService.addCartItem(userId, AddCartItemRequest(productId = productId, quantity = 3))
+                cartService.addCartItem(userId, AddCartItemCommand(productId = productId, quantity = 2))
+                val response2 = cartService.addCartItem(userId, AddCartItemCommand(productId = productId, quantity = 3))
 
                 // then - 수량 합산
                 response2.quantity shouldBe 5 // 2 + 3
@@ -182,22 +182,22 @@ class CartServiceIntegrationTest : DescribeSpec({
             it("존재하지 않는 사용자로 상품 추가 시 UserNotFoundException을 발생시킨다") {
                 // given
                 val invalidUserId = 999L
-                val request = AddCartItemRequest(productId = 1L, quantity = 1)
+                val command = AddCartItemCommand(productId = 1L, quantity = 1)
 
                 // when & then
                 shouldThrow<UserNotFoundException> {
-                    cartService.addCartItem(invalidUserId, request)
+                    cartService.addCartItem(invalidUserId, command)
                 }
             }
 
             it("존재하지 않는 상품을 추가하면 ProductNotFoundException을 발생시킨다") {
                 // given
                 val userId = 2L
-                val request = AddCartItemRequest(productId = 999L, quantity = 1)
+                val command = AddCartItemCommand(productId = 999L, quantity = 1)
 
                 // when & then
                 shouldThrow<ProductNotFoundException> {
-                    cartService.addCartItem(userId, request)
+                    cartService.addCartItem(userId, command)
                 }
             }
 
@@ -211,11 +211,11 @@ class CartServiceIntegrationTest : DescribeSpec({
                 val updatedProduct = product.copy(stock = 0)
                 productRepository.save(updatedProduct)
 
-                val request = AddCartItemRequest(productId = productId, quantity = 1)
+                val command = AddCartItemCommand(productId = productId, quantity = 1)
 
                 // when & then
                 shouldThrow<InsufficientStockException> {
-                    cartService.addCartItem(userId, request)
+                    cartService.addCartItem(userId, command)
                 }
 
                 // 원복
@@ -225,22 +225,22 @@ class CartServiceIntegrationTest : DescribeSpec({
             it("수량이 0 이하면 InvalidQuantityException을 발생시킨다") {
                 // given
                 val userId = 2L
-                val request = AddCartItemRequest(productId = 1L, quantity = 0)
+                val command = AddCartItemCommand(productId = 1L, quantity = 0)
 
                 // when & then
                 shouldThrow<InvalidQuantityException> {
-                    cartService.addCartItem(userId, request)
+                    cartService.addCartItem(userId, command)
                 }
             }
 
             it("최대 수량(100)을 초과하면 ExceedMaxQuantityException을 발생시킨다") {
                 // given
                 val userId = 2L
-                val request = AddCartItemRequest(productId = 1L, quantity = 101)
+                val command = AddCartItemCommand(productId = 1L, quantity = 101)
 
                 // when & then
                 shouldThrow<ExceedMaxQuantityException> {
-                    cartService.addCartItem(userId, request)
+                    cartService.addCartItem(userId, command)
                 }
             }
 
@@ -250,11 +250,11 @@ class CartServiceIntegrationTest : DescribeSpec({
                 val productId = 1L // 노트북 ABC, 재고 50개
 
                 // 먼저 50개 추가
-                cartService.addCartItem(userId, AddCartItemRequest(productId = productId, quantity = 50))
+                cartService.addCartItem(userId, AddCartItemCommand(productId = productId, quantity = 50))
 
                 // when & then - 추가로 51개 추가 시도 (총 101개, 최대치 초과)
                 shouldThrow<ExceedMaxQuantityException> {
-                    cartService.addCartItem(userId, AddCartItemRequest(productId = productId, quantity = 51))
+                    cartService.addCartItem(userId, AddCartItemCommand(productId = productId, quantity = 51))
                 }
             }
 
@@ -262,11 +262,11 @@ class CartServiceIntegrationTest : DescribeSpec({
                 // given
                 val userId = 2L
                 val productId = 7L // 운동화 ABC, 재고 45개
-                val request = AddCartItemRequest(productId = productId, quantity = 100) // 100 > 45
+                val command = AddCartItemCommand(productId = productId, quantity = 100) // 100 > 45
 
                 // when & then
                 shouldThrow<InsufficientStockException> {
-                    cartService.addCartItem(userId, request)
+                    cartService.addCartItem(userId, command)
                 }
             }
         }
@@ -279,14 +279,14 @@ class CartServiceIntegrationTest : DescribeSpec({
                 // given - 먼저 상품 추가
                 val userId = 2L
                 val productId = 1L
-                val addResponse = cartService.addCartItem(userId, AddCartItemRequest(productId = productId, quantity = 2))
+                val addResponse = cartService.addCartItem(userId, AddCartItemCommand(productId = productId, quantity = 2))
                 val cartItemId = addResponse.cartItemId
 
                 // when - 수량 변경
                 val updateResponse = cartService.updateCartItem(
                     userId = userId,
                     cartItemId = cartItemId,
-                    request = UpdateCartItemRequest(quantity = 5)
+                    request = UpdateCartItemCommand(quantity = 5)
                 )
 
                 // then
@@ -303,14 +303,14 @@ class CartServiceIntegrationTest : DescribeSpec({
             it("수량을 1로 변경할 수 있다") {
                 // given
                 val userId = 2L
-                val addResponse = cartService.addCartItem(userId, AddCartItemRequest(productId = 1L, quantity = 10))
+                val addResponse = cartService.addCartItem(userId, AddCartItemCommand(productId = 1L, quantity = 10))
                 val cartItemId = addResponse.cartItemId
 
                 // when
                 val updateResponse = cartService.updateCartItem(
                     userId = userId,
                     cartItemId = cartItemId,
-                    request = UpdateCartItemRequest(quantity = 1)
+                    request = UpdateCartItemCommand(quantity = 1)
                 )
 
                 // then
@@ -329,7 +329,7 @@ class CartServiceIntegrationTest : DescribeSpec({
                     cartService.updateCartItem(
                         userId = userId,
                         cartItemId = invalidCartItemId,
-                        request = UpdateCartItemRequest(quantity = 5)
+                        request = UpdateCartItemCommand(quantity = 5)
                     )
                 }
             }
@@ -344,7 +344,7 @@ class CartServiceIntegrationTest : DescribeSpec({
                     cartService.updateCartItem(
                         userId = user2Id,
                         cartItemId = user1CartItemId,
-                        request = UpdateCartItemRequest(quantity = 5)
+                        request = UpdateCartItemCommand(quantity = 5)
                     )
                 }
             }
@@ -352,7 +352,7 @@ class CartServiceIntegrationTest : DescribeSpec({
             it("수량을 0으로 변경하면 아이템을 삭제하고 CartItemNotFoundException을 발생시킨다") {
                 // given
                 val userId = 2L
-                val addResponse = cartService.addCartItem(userId, AddCartItemRequest(productId = 1L, quantity = 2))
+                val addResponse = cartService.addCartItem(userId, AddCartItemCommand(productId = 1L, quantity = 2))
                 val cartItemId = addResponse.cartItemId
 
                 // when & then
@@ -360,7 +360,7 @@ class CartServiceIntegrationTest : DescribeSpec({
                     cartService.updateCartItem(
                         userId = userId,
                         cartItemId = cartItemId,
-                        request = UpdateCartItemRequest(quantity = 0)
+                        request = UpdateCartItemCommand(quantity = 0)
                     )
                 }
 
@@ -372,7 +372,7 @@ class CartServiceIntegrationTest : DescribeSpec({
             it("수량을 최대값(100)을 초과하여 변경하면 ExceedMaxQuantityException을 발생시킨다") {
                 // given
                 val userId = 2L
-                val addResponse = cartService.addCartItem(userId, AddCartItemRequest(productId = 1L, quantity = 2))
+                val addResponse = cartService.addCartItem(userId, AddCartItemCommand(productId = 1L, quantity = 2))
                 val cartItemId = addResponse.cartItemId
 
                 // when & then
@@ -380,7 +380,7 @@ class CartServiceIntegrationTest : DescribeSpec({
                     cartService.updateCartItem(
                         userId = userId,
                         cartItemId = cartItemId,
-                        request = UpdateCartItemRequest(quantity = 101)
+                        request = UpdateCartItemCommand(quantity = 101)
                     )
                 }
             }
@@ -389,7 +389,7 @@ class CartServiceIntegrationTest : DescribeSpec({
                 // given
                 val userId = 2L
                 val productId = 7L // 운동화 ABC, 재고 45개
-                val addResponse = cartService.addCartItem(userId, AddCartItemRequest(productId = productId, quantity = 2))
+                val addResponse = cartService.addCartItem(userId, AddCartItemCommand(productId = productId, quantity = 2))
                 val cartItemId = addResponse.cartItemId
 
                 // when & then
@@ -397,7 +397,7 @@ class CartServiceIntegrationTest : DescribeSpec({
                     cartService.updateCartItem(
                         userId = userId,
                         cartItemId = cartItemId,
-                        request = UpdateCartItemRequest(quantity = 100) // 100 > 45
+                        request = UpdateCartItemCommand(quantity = 100) // 100 > 45
                     )
                 }
             }
@@ -410,7 +410,7 @@ class CartServiceIntegrationTest : DescribeSpec({
             it("장바구니에서 아이템을 삭제한다") {
                 // given - 먼저 상품 추가
                 val userId = 2L
-                val addResponse = cartService.addCartItem(userId, AddCartItemRequest(productId = 1L, quantity = 2))
+                val addResponse = cartService.addCartItem(userId, AddCartItemCommand(productId = 1L, quantity = 2))
                 val cartItemId = addResponse.cartItemId
 
                 // when
@@ -424,9 +424,9 @@ class CartServiceIntegrationTest : DescribeSpec({
             it("여러 아이템 중 하나만 삭제할 수 있다") {
                 // given
                 val userId = 2L
-                val response1 = cartService.addCartItem(userId, AddCartItemRequest(productId = 1L, quantity = 1))
-                val response2 = cartService.addCartItem(userId, AddCartItemRequest(productId = 2L, quantity = 2))
-                val response3 = cartService.addCartItem(userId, AddCartItemRequest(productId = 3L, quantity = 3))
+                val response1 = cartService.addCartItem(userId, AddCartItemCommand(productId = 1L, quantity = 1))
+                val response2 = cartService.addCartItem(userId, AddCartItemCommand(productId = 2L, quantity = 2))
+                val response3 = cartService.addCartItem(userId, AddCartItemCommand(productId = 3L, quantity = 3))
 
                 // when - 중간 아이템 삭제
                 cartService.deleteCartItem(userId, response2.cartItemId)
@@ -469,9 +469,9 @@ class CartServiceIntegrationTest : DescribeSpec({
             it("장바구니를 전체 비운다") {
                 // given - 여러 상품 추가
                 val userId = 2L
-                cartService.addCartItem(userId, AddCartItemRequest(productId = 1L, quantity = 1))
-                cartService.addCartItem(userId, AddCartItemRequest(productId = 2L, quantity = 2))
-                cartService.addCartItem(userId, AddCartItemRequest(productId = 3L, quantity = 3))
+                cartService.addCartItem(userId, AddCartItemCommand(productId = 1L, quantity = 1))
+                cartService.addCartItem(userId, AddCartItemCommand(productId = 2L, quantity = 2))
+                cartService.addCartItem(userId, AddCartItemCommand(productId = 3L, quantity = 3))
 
                 val beforeClear = cartService.getCart(userId)
                 beforeClear.items shouldHaveSize 3
@@ -503,7 +503,7 @@ class CartServiceIntegrationTest : DescribeSpec({
                 // given - 10개 상품 추가
                 val userId = 2L
                 for (productId in 1L..10L) {
-                    cartService.addCartItem(userId, AddCartItemRequest(productId = productId, quantity = 1))
+                    cartService.addCartItem(userId, AddCartItemCommand(productId = productId, quantity = 1))
                 }
 
                 val beforeClear = cartService.getCart(userId)
@@ -540,11 +540,11 @@ class CartServiceIntegrationTest : DescribeSpec({
             it("주문 완료 후 주문한 상품들만 장바구니에서 삭제한다") {
                 // given - 5개 상품 추가
                 val userId = 2L
-                cartService.addCartItem(userId, AddCartItemRequest(productId = 1L, quantity = 1))
-                cartService.addCartItem(userId, AddCartItemRequest(productId = 2L, quantity = 2))
-                cartService.addCartItem(userId, AddCartItemRequest(productId = 3L, quantity = 3))
-                cartService.addCartItem(userId, AddCartItemRequest(productId = 5L, quantity = 1))
-                cartService.addCartItem(userId, AddCartItemRequest(productId = 7L, quantity = 2))
+                cartService.addCartItem(userId, AddCartItemCommand(productId = 1L, quantity = 1))
+                cartService.addCartItem(userId, AddCartItemCommand(productId = 2L, quantity = 2))
+                cartService.addCartItem(userId, AddCartItemCommand(productId = 3L, quantity = 3))
+                cartService.addCartItem(userId, AddCartItemCommand(productId = 5L, quantity = 1))
+                cartService.addCartItem(userId, AddCartItemCommand(productId = 7L, quantity = 2))
 
                 val beforeDelete = cartService.getCart(userId)
                 beforeDelete.items shouldHaveSize 5
@@ -562,9 +562,9 @@ class CartServiceIntegrationTest : DescribeSpec({
             it("여러 상품을 한 번에 삭제한다") {
                 // given
                 val userId = 2L
-                cartService.addCartItem(userId, AddCartItemRequest(productId = 1L, quantity = 1))
-                cartService.addCartItem(userId, AddCartItemRequest(productId = 5L, quantity = 2))
-                cartService.addCartItem(userId, AddCartItemRequest(productId = 10L, quantity = 3))
+                cartService.addCartItem(userId, AddCartItemCommand(productId = 1L, quantity = 1))
+                cartService.addCartItem(userId, AddCartItemCommand(productId = 5L, quantity = 2))
+                cartService.addCartItem(userId, AddCartItemCommand(productId = 10L, quantity = 3))
 
                 // when
                 val productIdsToDelete = listOf(1L, 10L)
@@ -579,9 +579,9 @@ class CartServiceIntegrationTest : DescribeSpec({
             it("모든 상품을 일괄 삭제하면 빈 장바구니가 된다") {
                 // given
                 val userId = 2L
-                cartService.addCartItem(userId, AddCartItemRequest(productId = 1L, quantity = 1))
-                cartService.addCartItem(userId, AddCartItemRequest(productId = 2L, quantity = 2))
-                cartService.addCartItem(userId, AddCartItemRequest(productId = 3L, quantity = 3))
+                cartService.addCartItem(userId, AddCartItemCommand(productId = 1L, quantity = 1))
+                cartService.addCartItem(userId, AddCartItemCommand(productId = 2L, quantity = 2))
+                cartService.addCartItem(userId, AddCartItemCommand(productId = 3L, quantity = 3))
 
                 // when - 모든 상품 삭제
                 val allProductIds = listOf(1L, 2L, 3L)
@@ -595,8 +595,8 @@ class CartServiceIntegrationTest : DescribeSpec({
             it("빈 리스트로 삭제 호출하면 아무것도 삭제되지 않는다") {
                 // given
                 val userId = 2L
-                cartService.addCartItem(userId, AddCartItemRequest(productId = 1L, quantity = 1))
-                cartService.addCartItem(userId, AddCartItemRequest(productId = 2L, quantity = 2))
+                cartService.addCartItem(userId, AddCartItemCommand(productId = 1L, quantity = 1))
+                cartService.addCartItem(userId, AddCartItemCommand(productId = 2L, quantity = 2))
 
                 // when
                 cartService.deleteCarts(userId, emptyList())
@@ -609,7 +609,7 @@ class CartServiceIntegrationTest : DescribeSpec({
             it("장바구니에 없는 상품 ID로 삭제 시도해도 에러가 발생하지 않는다") {
                 // given
                 val userId = 2L
-                cartService.addCartItem(userId, AddCartItemRequest(productId = 1L, quantity = 1))
+                cartService.addCartItem(userId, AddCartItemCommand(productId = 1L, quantity = 1))
 
                 // when - 장바구니에 없는 상품 삭제 시도
                 cartService.deleteCarts(userId, listOf(999L, 998L))
@@ -623,9 +623,9 @@ class CartServiceIntegrationTest : DescribeSpec({
             it("일부는 있고 일부는 없는 상품 ID로 삭제하면 있는 것만 삭제된다") {
                 // given
                 val userId = 2L
-                cartService.addCartItem(userId, AddCartItemRequest(productId = 1L, quantity = 1))
-                cartService.addCartItem(userId, AddCartItemRequest(productId = 2L, quantity = 2))
-                cartService.addCartItem(userId, AddCartItemRequest(productId = 3L, quantity = 3))
+                cartService.addCartItem(userId, AddCartItemCommand(productId = 1L, quantity = 1))
+                cartService.addCartItem(userId, AddCartItemCommand(productId = 2L, quantity = 2))
+                cartService.addCartItem(userId, AddCartItemCommand(productId = 3L, quantity = 3))
 
                 // when - 1L, 2L은 있지만 999L은 없음
                 cartService.deleteCarts(userId, listOf(1L, 2L, 999L))
@@ -650,9 +650,9 @@ class CartServiceIntegrationTest : DescribeSpec({
                 emptyCart.items.shouldBeEmpty()
 
                 // 2. 상품 3개 추가
-                val item1 = cartService.addCartItem(userId, AddCartItemRequest(productId = 1L, quantity = 2))
-                val item2 = cartService.addCartItem(userId, AddCartItemRequest(productId = 5L, quantity = 1))
-                val item3 = cartService.addCartItem(userId, AddCartItemRequest(productId = 10L, quantity = 3))
+                val item1 = cartService.addCartItem(userId, AddCartItemCommand(productId = 1L, quantity = 2))
+                val item2 = cartService.addCartItem(userId, AddCartItemCommand(productId = 5L, quantity = 1))
+                val item3 = cartService.addCartItem(userId, AddCartItemCommand(productId = 10L, quantity = 3))
 
                 // 3. 장바구니 조회 - 3개 아이템 확인
                 val cartWith3Items = cartService.getCart(userId)
@@ -660,7 +660,7 @@ class CartServiceIntegrationTest : DescribeSpec({
                 cartWith3Items.summary.totalQuantity shouldBe 6 // 2 + 1 + 3
 
                 // 4. 첫 번째 아이템 수량 변경 (2 -> 5)
-                cartService.updateCartItem(userId, item1.cartItemId, UpdateCartItemRequest(quantity = 5))
+                cartService.updateCartItem(userId, item1.cartItemId, UpdateCartItemCommand(quantity = 5))
 
                 val cartAfterUpdate = cartService.getCart(userId)
                 cartAfterUpdate.summary.totalQuantity shouldBe 9 // 5 + 1 + 3
@@ -685,9 +685,9 @@ class CartServiceIntegrationTest : DescribeSpec({
                 val productId = 1L
 
                 // when - 같은 상품 3번 추가
-                cartService.addCartItem(userId, AddCartItemRequest(productId = productId, quantity = 2))
-                cartService.addCartItem(userId, AddCartItemRequest(productId = productId, quantity = 3))
-                cartService.addCartItem(userId, AddCartItemRequest(productId = productId, quantity = 5))
+                cartService.addCartItem(userId, AddCartItemCommand(productId = productId, quantity = 2))
+                cartService.addCartItem(userId, AddCartItemCommand(productId = productId, quantity = 3))
+                cartService.addCartItem(userId, AddCartItemCommand(productId = productId, quantity = 5))
 
                 // then
                 val cart = cartService.getCart(userId)
@@ -702,12 +702,12 @@ class CartServiceIntegrationTest : DescribeSpec({
                 val user2Id = 3L
 
                 // when - 사용자1은 상품 1, 2 추가
-                cartService.addCartItem(user1Id, AddCartItemRequest(productId = 1L, quantity = 1))
-                cartService.addCartItem(user1Id, AddCartItemRequest(productId = 2L, quantity = 1))
+                cartService.addCartItem(user1Id, AddCartItemCommand(productId = 1L, quantity = 1))
+                cartService.addCartItem(user1Id, AddCartItemCommand(productId = 2L, quantity = 1))
 
                 // when - 사용자2는 상품 5, 10 추가
-                cartService.addCartItem(user2Id, AddCartItemRequest(productId = 5L, quantity = 2))
-                cartService.addCartItem(user2Id, AddCartItemRequest(productId = 10L, quantity = 3))
+                cartService.addCartItem(user2Id, AddCartItemCommand(productId = 5L, quantity = 2))
+                cartService.addCartItem(user2Id, AddCartItemCommand(productId = 10L, quantity = 3))
 
                 // then - 각 사용자의 장바구니가 독립적으로 관리됨
                 val cart1 = cartService.getCart(user1Id)
@@ -725,7 +725,7 @@ class CartServiceIntegrationTest : DescribeSpec({
                 val productId = 1L // 노트북 ABC
 
                 // when
-                cartService.addCartItem(userId, AddCartItemRequest(productId = productId, quantity = 2))
+                cartService.addCartItem(userId, AddCartItemCommand(productId = productId, quantity = 2))
 
                 // then - 장바구니 조회 시 상품 정보 확인
                 val cart = cartService.getCart(userId)
@@ -766,9 +766,9 @@ class CartServiceIntegrationTest : DescribeSpec({
                 val userId = 3L
 
                 // when - 여러 상품 추가
-                cartService.addCartItem(userId, AddCartItemRequest(productId = 1L, quantity = 2)) // 노트북 ABC: 1,500,000 * 2 = 3,000,000원
-                cartService.addCartItem(userId, AddCartItemRequest(productId = 5L, quantity = 1)) // 코틀린 인 액션: 36,000 * 1 = 36,000원
-                cartService.addCartItem(userId, AddCartItemRequest(productId = 7L, quantity = 3)) // 운동화 ABC: 89,000 * 3 = 267,000원
+                cartService.addCartItem(userId, AddCartItemCommand(productId = 1L, quantity = 2)) // 노트북 ABC: 1,500,000 * 2 = 3,000,000원
+                cartService.addCartItem(userId, AddCartItemCommand(productId = 5L, quantity = 1)) // 코틀린 인 액션: 36,000 * 1 = 36,000원
+                cartService.addCartItem(userId, AddCartItemCommand(productId = 7L, quantity = 3)) // 운동화 ABC: 89,000 * 3 = 267,000원
 
                 // then
                 val cart = cartService.getCart(userId)
