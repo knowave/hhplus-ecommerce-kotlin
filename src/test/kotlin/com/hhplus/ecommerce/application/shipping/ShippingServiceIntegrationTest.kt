@@ -51,7 +51,7 @@ class ShippingServiceIntegrationTest : DescribeSpec({
                 result.orderId shouldBe orderId
                 result.trackingNumber shouldBe "TRACK001"
                 result.carrier shouldBe "CJ대한통운"
-                result.status shouldBe "PENDING"
+                result.status shouldBe ShippingStatus.PENDING
             }
 
             it("존재하지 않는 주문 ID로 조회하면 OrderNotFoundForShippingException을 발생시킨다") {
@@ -401,7 +401,7 @@ class ShippingServiceIntegrationTest : DescribeSpec({
                 // Then
                 result.items.size shouldBe 1
                 result.items[0].id shouldBe 3L
-                result.items[0].status shouldBe "DELIVERED"
+                result.items[0].status shouldBe ShippingStatus.DELIVERED
                 result.items[0].carrier shouldBe "CJ대한통운"
             }
         }

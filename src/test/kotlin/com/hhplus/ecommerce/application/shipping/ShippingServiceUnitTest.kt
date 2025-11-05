@@ -42,7 +42,7 @@ class ShippingServiceUnitTest : DescribeSpec({
                 // Then
                 result.id shouldBe 1L
                 result.orderId shouldBe orderId
-                result.status shouldBe "PENDING"
+                result.status shouldBe ShippingStatus.PENDING
                 result.carrier shouldBe "CJ대한통운"
                 verify(exactly = 1) { shippingRepository.findByOrderId(orderId) }
             }
