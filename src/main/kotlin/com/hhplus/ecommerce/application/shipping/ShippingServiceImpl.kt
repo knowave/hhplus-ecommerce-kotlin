@@ -1,11 +1,13 @@
 package com.hhplus.ecommerce.application.shipping
 
+import com.hhplus.ecommerce.application.shipping.dto.*
 import com.hhplus.ecommerce.common.exception.AlreadyDeliveredException
 import com.hhplus.ecommerce.common.exception.InvalidEstimatedDateException
 import com.hhplus.ecommerce.common.exception.InvalidStatusTransitionException
 import com.hhplus.ecommerce.common.exception.OrderNotFoundForShippingException
 import com.hhplus.ecommerce.common.exception.ShippingNotFoundException
 import com.hhplus.ecommerce.domain.shipping.ShippingRepository
+import com.hhplus.ecommerce.domain.shipping.entity.Shipping
 import com.hhplus.ecommerce.domain.shipping.entity.ShippingStatus
 import com.hhplus.ecommerce.presentation.shipping.dto.*
 import org.springframework.stereotype.Service
@@ -28,21 +30,21 @@ class ShippingServiceImpl(
     // Mock용 택배사 목록
     private val carriers = listOf("CJ대한통운", "한진택배", "롯데택배", "우체국택배")
 
-    override fun getShipping(orderId: Long): ShippingDetailResponse {
+    override fun getShipping(orderId: Long): Shipping {
         // 1. 주문 ID로 배송 조회
         val shipping = shippingRepository.findByOrderId(orderId)
             ?: throw OrderNotFoundForShippingException(orderId)
 
         // 2. 응답 생성
-        return ShippingDetailResponse(
-            shippingId = shipping.id,
+        return Shipping(
+            id = shipping.id,
             orderId = shipping.orderId,
             carrier = shipping.carrier,
             trackingNumber = shipping.trackingNumber,
             shippingStartAt = shipping.shippingStartAt,
             estimatedArrivalAt = shipping.estimatedArrivalAt,
             deliveredAt = shipping.deliveredAt,
-            status = shipping.status.name,
+            status = shipping.status,
             isDelayed = shipping.isDelayed,
             isExpired = shipping.isExpired,
             createdAt = shipping.createdAt,
@@ -52,8 +54,8 @@ class ShippingServiceImpl(
 
     override fun updateShippingStatus(
         shippingId: Long,
-        request: UpdateShippingStatusRequest
-    ): UpdateShippingStatusResponse {
+        request: UpdateShippingStatusCommand
+    ): UpdateShippingStatusResult {
         // 1. 배송 조회
         val shipping = shippingRepository.findById(shippingId)
             ?: throw ShippingNotFoundException(shippingId)
@@ -95,7 +97,7 @@ class ShippingServiceImpl(
         shippingRepository.save(updatedShipping)
 
         // 8. 응답 생성
-        return UpdateShippingStatusResponse(
+        return UpdateShippingStatusResult(
             shippingId = updatedShipping.id,
             orderId = updatedShipping.orderId,
             status = updatedShipping.status.name,
@@ -112,7 +114,7 @@ class ShippingServiceImpl(
         to: String?,
         page: Int,
         size: Int
-    ): UserShippingListResponse {
+    ): UserShippingListResult {
         // 1. 필터 파라미터 파싱
         val statusEnum = status?.let {
             try {
@@ -147,12 +149,12 @@ class ShippingServiceImpl(
 
         // 4. ShippingItem으로 변환
         val items = pagedShippings.map { shipping ->
-            ShippingItem(
-                shippingId = shipping.id,
+            Shipping(
+                id = shipping.id,
                 orderId = shipping.orderId,
                 carrier = shipping.carrier,
                 trackingNumber = shipping.trackingNumber,
-                status = shipping.status.name,
+                status = shipping.status,
                 shippingStartAt = shipping.shippingStartAt,
                 estimatedArrivalAt = shipping.estimatedArrivalAt,
                 deliveredAt = shipping.deliveredAt,
@@ -163,7 +165,7 @@ class ShippingServiceImpl(
         }
 
         // 5. Summary 계산 (전체 데이터 기준)
-        val summary = ShippingSummary(
+        val summary = ShippingSummaryDto(
             totalCount = allShippings.size,
             pendingCount = allShippings.count { it.status == ShippingStatus.PENDING },
             inTransitCount = allShippings.count { it.status == ShippingStatus.IN_TRANSIT },
@@ -171,7 +173,7 @@ class ShippingServiceImpl(
         )
 
         // 6. 페이지 정보
-        val pageInfo = PageInfo(
+        val pageInfo = UserShippingPageInfoDto(
             number = page,
             size = size,
             totalElements = totalElements,
@@ -179,7 +181,7 @@ class ShippingServiceImpl(
         )
 
         // 7. 응답 생성
-        return UserShippingListResponse(
+        return UserShippingListResult(
             userId = userId,
             items = items,
             page = pageInfo,
