@@ -1,5 +1,6 @@
 package com.hhplus.ecommerce.application.user
 
+import com.hhplus.ecommerce.application.user.dto.ChargeBalanceResult
 import com.hhplus.ecommerce.common.exception.*
 import com.hhplus.ecommerce.domain.user.UserRepository
 import com.hhplus.ecommerce.presentation.user.dto.*
@@ -20,16 +21,7 @@ class UserServiceImpl(
         private val DATE_FORMATTER: DateTimeFormatter = DateTimeFormatter.ISO_LOCAL_DATE_TIME
     }
 
-    override fun getUserBalance(userId: Long): UserBalanceResponse {
-        val user = findUserById(userId)
-
-        return UserBalanceResponse(
-            userId = user.id,
-            balance = user.balance,
-        )
-    }
-
-    override fun chargeBalance(userId: Long, amount: Long): ChargeBalanceResponse {
+    override fun chargeBalance(userId: Long, amount: Long): ChargeBalanceResult {
         val user = findUserById(userId)
 
         // 충전 금액 유효성 검증
@@ -49,7 +41,7 @@ class UserServiceImpl(
         userRepository.save(user)
 
         // 응답 생성
-        return ChargeBalanceResponse(
+        return ChargeBalanceResult(
             userId = userId,
             previousBalance = previousBalance,
             chargedAmount = amount,
@@ -58,15 +50,8 @@ class UserServiceImpl(
         )
     }
 
-    override fun getUserInfo(userId: Long): UserInfoResponse {
-        val user = findUserById(userId)
-
-        return UserInfoResponse(
-            userId = user.id,
-            balance = user.balance,
-            createdAt = user.createdAt,
-            updatedAt = user.updatedAt
-        )
+    override fun getUser(id: Long): User {
+        return findUserById(id)
     }
 
     override fun createUser(dto: CreateUserRequest): User {
@@ -86,11 +71,6 @@ class UserServiceImpl(
 
         // Repository에 저장
         return userRepository.save(newUser)
-    }
-
-    override fun getUser(id: Long): User {
-        return userRepository.findById(id)
-            ?: throw UserNotFoundException(id)
     }
 
     override fun updateUser(user: User): User {
