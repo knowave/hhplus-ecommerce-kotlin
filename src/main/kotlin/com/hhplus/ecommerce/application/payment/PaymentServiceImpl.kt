@@ -2,6 +2,7 @@ package com.hhplus.ecommerce.application.payment
 
 import com.hhplus.ecommerce.application.coupon.CouponService
 import com.hhplus.ecommerce.application.order.OrderService
+import com.hhplus.ecommerce.application.payment.dto.*
 import com.hhplus.ecommerce.application.product.ProductService
 import com.hhplus.ecommerce.application.user.UserService
 import com.hhplus.ecommerce.common.exception.*
@@ -9,7 +10,6 @@ import com.hhplus.ecommerce.common.lock.LockManager
 import com.hhplus.ecommerce.domain.coupon.*
 import com.hhplus.ecommerce.domain.payment.PaymentRepository
 import com.hhplus.ecommerce.domain.order.entity.*
-import com.hhplus.ecommerce.presentation.payment.dto.*
 import com.hhplus.ecommerce.domain.payment.entity.*
 import org.springframework.stereotype.Service
 import java.time.LocalDateTime
@@ -36,7 +36,7 @@ class PaymentServiceImpl(
         private val DATE_FORMATTER: DateTimeFormatter = DateTimeFormatter.ISO_LOCAL_DATE_TIME
     }
 
-    override fun processPayment(orderId: Long, request: ProcessPaymentRequest): ProcessPaymentResponse {
+    override fun processPayment(orderId: Long, request: ProcessPaymentCommand): ProcessPaymentResult {
         // 1. 주문 조회 및 검증
         val order = orderService.getOrder(orderId)
 
@@ -102,7 +102,7 @@ class PaymentServiceImpl(
         paymentRepository.saveTransmission(transmission)
 
         // 8. 응답 생성
-        return ProcessPaymentResponse(
+        return ProcessPaymentResult(
             paymentId = payment.paymentId,
             orderId = order.id,
             orderNumber = order.orderNumber,
@@ -110,12 +110,12 @@ class PaymentServiceImpl(
             amount = paymentAmount,
             paymentStatus = payment.status.name,
             orderStatus = order.status.name,
-            balance = BalanceInfo(
+            balance = BalanceInfoResult(
                 previousBalance = previousBalance,
                 paidAmount = paymentAmount,
                 remainingBalance = currentBalance
             ),
-            dataTransmission = DataTransmissionInfo(
+            dataTransmission = DataTransmissionInfoResult(
                 transmissionId = transmission.transmissionId,
                 status = transmission.status.name,
                 scheduledAt = transmission.nextRetryAt!!.format(DATE_FORMATTER)
@@ -124,7 +124,7 @@ class PaymentServiceImpl(
         )
     }
 
-    override fun getPaymentDetail(paymentId: Long, userId: Long): PaymentDetailResponse {
+    override fun getPaymentDetail(paymentId: Long, userId: Long): PaymentDetailResult {
         val payment = paymentRepository.findById(paymentId)
             ?: throw PaymentNotFoundException(paymentId)
 
@@ -136,7 +136,7 @@ class PaymentServiceImpl(
         val order = orderService.getOrder(payment.orderId)
         val transmission = paymentRepository.findTransmissionByOrderId(payment.orderId)
 
-        return PaymentDetailResponse(
+        return PaymentDetailResult(
             paymentId = payment.paymentId,
             orderId = payment.orderId,
             orderNumber = order.orderNumber,
@@ -144,7 +144,7 @@ class PaymentServiceImpl(
             amount = payment.amount,
             paymentStatus = payment.status.name,
             paidAt = payment.paidAt.format(DATE_FORMATTER),
-            dataTransmission = DataTransmissionDetailInfo(
+            dataTransmission = DataTransmissionDetailInfoResult(
                 transmissionId = transmission?.transmissionId ?: 0L,
                 status = transmission?.status?.name ?: "UNKNOWN",
                 sentAt = transmission?.sentAt?.format(DATE_FORMATTER),
@@ -153,7 +153,7 @@ class PaymentServiceImpl(
         )
     }
 
-    override fun getOrderPayment(orderId: Long, userId: Long): OrderPaymentResponse {
+    override fun getOrderPayment(orderId: Long, userId: Long): OrderPaymentResult {
         val order = orderService.getOrder(orderId)
 
         // 권한 확인
@@ -163,11 +163,11 @@ class PaymentServiceImpl(
 
         val payment = paymentRepository.findByOrderId(orderId)
 
-        return OrderPaymentResponse(
+        return OrderPaymentResult(
             orderId = orderId,
             orderNumber = order.orderNumber,
             payment = payment?.let {
-                PaymentInfo(
+                PaymentInfoResult(
                     paymentId = it.paymentId,
                     amount = it.amount,
                     status = it.status.name,
@@ -177,13 +177,13 @@ class PaymentServiceImpl(
         )
     }
 
-    override fun getTransmissionDetail(transmissionId: Long): TransmissionDetailResponse {
+    override fun getTransmissionDetail(transmissionId: Long): TransmissionDetailResult {
         val transmission = paymentRepository.findTransmissionById(transmissionId)
             ?: throw TransmissionNotFoundException(transmissionId)
 
         val order = orderService.getOrder(transmission.orderId)
 
-        return TransmissionDetailResponse(
+        return TransmissionDetailResult(
             transmissionId = transmission.transmissionId,
             orderId = transmission.orderId,
             orderNumber = order.orderNumber,
@@ -197,7 +197,7 @@ class PaymentServiceImpl(
         )
     }
 
-    override fun retryTransmission(transmissionId: Long): RetryTransmissionResponse {
+    override fun retryTransmission(transmissionId: Long): RetryTransmissionResult {
         val transmission = paymentRepository.findTransmissionById(transmissionId)
             ?: throw TransmissionNotFoundException(transmissionId)
 
@@ -217,7 +217,7 @@ class PaymentServiceImpl(
 
         paymentRepository.saveTransmission(transmission)
 
-        return RetryTransmissionResponse(
+        return RetryTransmissionResult(
             transmissionId = transmission.transmissionId,
             status = transmission.status.name,
             retriedAt = now.format(DATE_FORMATTER),
@@ -234,7 +234,7 @@ class PaymentServiceImpl(
      *
      * 주문 상태 변경, 재고 복구, 쿠폰 복구는 OrderService의 책임입니다.
      */
-    override fun cancelPayment(paymentId: Long, request: com.hhplus.ecommerce.presentation.payment.dto.CancelPaymentRequest): com.hhplus.ecommerce.presentation.payment.dto.CancelPaymentResponse {
+    override fun cancelPayment(paymentId: Long, request: CancelPaymentCommand): CancelPaymentResult {
         // 1. 결제 조회 및 검증
         val payment = paymentRepository.findById(paymentId)
             ?: throw PaymentNotFoundException(paymentId)
@@ -277,7 +277,7 @@ class PaymentServiceImpl(
         paymentRepository.save(cancelledPayment)
 
         // 5. 응답 생성 (주문 상태는 변경하지 않음)
-        return CancelPaymentResponse(
+        return CancelPaymentResult(
             paymentId = payment.paymentId,
             orderId = order.id,
             orderNumber = order.orderNumber,
@@ -285,7 +285,7 @@ class PaymentServiceImpl(
             refundedAmount = refundAmount,
             paymentStatus = cancelledPayment.status.name,
             orderStatus = order.status.name,  // 현재 주문 상태만 반환
-            balance = RefundBalanceInfo(
+            balance = RefundBalanceInfoResult(
                 previousBalance = previousBalance,
                 refundedAmount = refundAmount,
                 currentBalance = currentBalance

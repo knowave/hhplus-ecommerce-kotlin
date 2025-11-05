@@ -1,11 +1,7 @@
 package com.hhplus.ecommerce.application.payment
 
-import com.hhplus.ecommerce.presentation.payment.dto.CancelPaymentRequest
-import com.hhplus.ecommerce.presentation.payment.dto.CancelPaymentResponse
+import com.hhplus.ecommerce.application.payment.dto.*
 import com.hhplus.ecommerce.presentation.payment.dto.OrderPaymentResponse
-import com.hhplus.ecommerce.presentation.payment.dto.PaymentDetailResponse
-import com.hhplus.ecommerce.presentation.payment.dto.ProcessPaymentRequest
-import com.hhplus.ecommerce.presentation.payment.dto.ProcessPaymentResponse
 import com.hhplus.ecommerce.presentation.payment.dto.RetryTransmissionResponse
 import com.hhplus.ecommerce.presentation.payment.dto.TransmissionDetailResponse
 
@@ -17,30 +13,30 @@ interface PaymentService {
     /**
      * 결제 처리
      */
-    fun processPayment(orderId: Long, request: ProcessPaymentRequest): ProcessPaymentResponse
+    fun processPayment(orderId: Long, request: ProcessPaymentCommand): ProcessPaymentResult
 
     /**
      * 결제 취소 (환불)
      */
-    fun cancelPayment(paymentId: Long, request: CancelPaymentRequest): CancelPaymentResponse
+    fun cancelPayment(paymentId: Long, request: CancelPaymentCommand): CancelPaymentResult
 
     /**
      * 결제 정보 조회
      */
-    fun getPaymentDetail(paymentId: Long, userId: Long): PaymentDetailResponse
+    fun getPaymentDetail(paymentId: Long, userId: Long): PaymentDetailResult
 
     /**
      * 주문별 결제 내역 조회
      */
-    fun getOrderPayment(orderId: Long, userId: Long): OrderPaymentResponse
+    fun getOrderPayment(orderId: Long, userId: Long): OrderPaymentResult
 
     /**
      * 데이터 전송 상태 조회
      */
-    fun getTransmissionDetail(transmissionId: Long): TransmissionDetailResponse
+    fun getTransmissionDetail(transmissionId: Long): TransmissionDetailResult
 
     /**
      * 데이터 전송 재시도
      */
-    fun retryTransmission(transmissionId: Long): RetryTransmissionResponse
+    fun retryTransmission(transmissionId: Long): RetryTransmissionResult
 }
