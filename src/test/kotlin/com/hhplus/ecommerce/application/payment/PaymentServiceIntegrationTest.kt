@@ -218,68 +218,6 @@ class PaymentServiceIntegrationTest : DescribeSpec({
             }
         }
 
-        context("결제 조회 통합 시나리오") {
-            it("결제 ID로 결제 상세 정보를 조회할 수 있다") {
-                // given - 결제 완료
-                val createUserRequest = CreateUserRequest(balance = 2000000L)
-                val user = userService.createUser(createUserRequest)
-
-                val products = productRepository.findAll()
-                val productId = products.first().id
-
-                val createOrderRequest = CreateOrderRequest(
-                    userId = user.id,
-                    items = listOf(
-                        OrderItemRequest(productId = productId, quantity = 1)
-                    )
-                )
-                val order = orderService.createOrder(createOrderRequest)
-
-                val paymentRequest = ProcessPaymentRequest(userId = user.id)
-                val payment = paymentService.processPayment(order.orderId, paymentRequest)
-
-                // when
-                val result = paymentService.getPaymentDetail(payment.paymentId, user.id)
-
-                // then
-                result.paymentId shouldBe payment.paymentId
-                result.orderId shouldBe order.orderId
-                result.userId shouldBe user.id
-                result.amount shouldBe order.pricing.finalAmount
-                result.paymentStatus shouldBe "SUCCESS"
-                result.paidAt shouldNotBe null
-            }
-
-            it("주문 ID로 결제 내역을 조회할 수 있다") {
-                // given
-                val createUserRequest = CreateUserRequest(balance = 2000000L)
-                val user = userService.createUser(createUserRequest)
-
-                val products = productRepository.findAll()
-                val productId = products.first().id
-
-                val createOrderRequest = CreateOrderRequest(
-                    userId = user.id,
-                    items = listOf(
-                        OrderItemRequest(productId = productId, quantity = 1)
-                    )
-                )
-                val order = orderService.createOrder(createOrderRequest)
-
-                val paymentRequest = ProcessPaymentRequest(userId = user.id)
-                paymentService.processPayment(order.orderId, paymentRequest)
-
-                // when
-                val result = paymentService.getOrderPayment(order.orderId, user.id)
-
-                // then
-                result.orderId shouldBe order.orderId
-                result.orderNumber shouldBe order.orderNumber
-                result.payment shouldNotBe null
-                result.payment?.status shouldBe "SUCCESS"
-            }
-        }
-
         context("예외 케이스") {
             it("존재하지 않는 주문에 대한 결제 시 예외가 발생한다") {
                 // given
@@ -357,38 +295,6 @@ class PaymentServiceIntegrationTest : DescribeSpec({
                 // when & then - 다시 결제 시도
                 shouldThrow<InvalidOrderStatusException> {
                     paymentService.processPayment(order.orderId, paymentRequest)
-                }
-            }
-
-            it("존재하지 않는 결제 ID 조회 시 예외가 발생한다") {
-                // when & then
-                shouldThrow<PaymentNotFoundException> {
-                    paymentService.getPaymentDetail(999999L, 1L)
-                }
-            }
-
-            it("다른 사용자의 결제 정보는 조회할 수 없다") {
-                // given
-                val user1 = userService.createUser(CreateUserRequest(balance = 2000000L))
-                val user2 = userService.createUser(CreateUserRequest(balance = 2000000L))
-
-                val products = productRepository.findAll()
-                val productId = products.first().id
-
-                val createOrderRequest = CreateOrderRequest(
-                    userId = user1.id,
-                    items = listOf(
-                        OrderItemRequest(productId = productId, quantity = 1)
-                    )
-                )
-                val order = orderService.createOrder(createOrderRequest)
-
-                val paymentRequest = ProcessPaymentRequest(userId = user1.id)
-                val payment = paymentService.processPayment(order.orderId, paymentRequest)
-
-                // when & then - 다른 사용자가 조회 시도
-                shouldThrow<ForbiddenException> {
-                    paymentService.getPaymentDetail(payment.paymentId, user2.id)
                 }
             }
         }

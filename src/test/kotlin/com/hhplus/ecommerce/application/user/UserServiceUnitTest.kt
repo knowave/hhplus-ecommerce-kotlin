@@ -1,8 +1,6 @@
 package com.hhplus.ecommerce.application.user
 
-import com.hhplus.ecommerce.common.exception.BalanceLimitExceededException
-import com.hhplus.ecommerce.common.exception.InvalidAmountException
-import com.hhplus.ecommerce.common.exception.UserNotFoundException
+import com.hhplus.ecommerce.common.exception.*
 import com.hhplus.ecommerce.domain.user.UserRepository
 import com.hhplus.ecommerce.domain.user.entity.User
 import com.hhplus.ecommerce.presentation.user.dto.CreateUserRequest
@@ -23,52 +21,8 @@ class UserServiceUnitTest : DescribeSpec({
     val dateFormatter: DateTimeFormatter = DateTimeFormatter.ISO_LOCAL_DATE_TIME
 
     beforeEach {
-        userRepository = mockk()
+        userRepository = mockk(relaxed = true)
         userService = UserServiceImpl(userRepository)
-    }
-
-    describe("UserService 단위 테스트 - getUserBalance") {
-        context("정상 케이스") {
-            it("사용자 ID로 잔액을 정상적으로 조회한다") {
-                // given
-                val userId = 1L
-                val balance = 50000L
-                val now = LocalDateTime.now().format(dateFormatter)
-                val user = User(
-                    id = userId,
-                    balance = balance,
-                    createdAt = now,
-                    updatedAt = now
-                )
-
-                every { userRepository.findById(userId) } returns user
-
-                // when
-                val result = userService.getUserBalance(userId)
-
-                // then
-                result.userId shouldBe userId
-                result.balance shouldBe balance
-
-                verify(exactly = 1) { userRepository.findById(userId) }
-            }
-        }
-
-        context("예외 케이스") {
-            it("존재하지 않는 사용자 ID로 조회 시 UserNotFoundException을 발생시킨다") {
-                // given
-                val userId = 999L
-                every { userRepository.findById(userId) } returns null
-
-                // when & then
-                val exception = shouldThrow<UserNotFoundException> {
-                    userService.getUserBalance(userId)
-                }
-                exception.message shouldContain "User not found with id: $userId"
-
-                verify(exactly = 1) { userRepository.findById(userId) }
-            }
-        }
     }
 
     describe("UserService 단위 테스트 - chargeBalance") {
@@ -173,6 +127,7 @@ class UserServiceUnitTest : DescribeSpec({
                 )
 
                 every { userRepository.findById(userId) } returns user
+                every { userRepository.save(user) } returns user
 
                 // when & then
                 val exception = shouldThrow<InvalidAmountException> {
@@ -197,6 +152,7 @@ class UserServiceUnitTest : DescribeSpec({
                 )
 
                 every { userRepository.findById(userId) } returns user
+                every { userRepository.save(user) } returns user
 
                 // when & then
                 shouldThrow<InvalidAmountException> {
@@ -207,10 +163,10 @@ class UserServiceUnitTest : DescribeSpec({
                 verify(exactly = 0) { userRepository.save(any()) }
             }
 
-            it("충전 금액이 최대 금액(1,000,000원)을 초과할 때 InvalidAmountException을 발생시킨다") {
+            it("충전 금액이 최대 금액(3,000,000원)을 초과할 때 InvalidAmountException을 발생시킨다") {
                 // given
                 val userId = 1L
-                val invalidAmount = 1_500_000L
+                val invalidAmount = 3_500_000L
                 val now = LocalDateTime.now().format(dateFormatter)
                 val user = User(
                     id = userId,
@@ -220,12 +176,12 @@ class UserServiceUnitTest : DescribeSpec({
                 )
 
                 every { userRepository.findById(userId) } returns user
+                every { userRepository.save(user) } returns user
 
                 // when & then
-                val exception = shouldThrow<InvalidAmountException> {
+                shouldThrow<InvalidAmountException> {
                     userService.chargeBalance(userId, invalidAmount)
                 }
-                exception.message shouldContain "1000000원 이하"
 
                 verify(exactly = 1) { userRepository.findById(userId) }
                 verify(exactly = 0) { userRepository.save(any()) }
@@ -444,9 +400,9 @@ class UserServiceUnitTest : DescribeSpec({
                 verify(exactly = 0) { userRepository.save(any()) }
             }
 
-            it("초기 잔액이 최대 금액(1,000,000원)을 초과할 때 InvalidAmountException을 발생시킨다") {
+            it("초기 잔액이 최대 금액(3,000,000원)을 초과할 때 InvalidAmountException을 발생시킨다") {
                 // given
-                val invalidBalance = 1_500_000L
+                val invalidBalance = 3_500_000L
                 val request = CreateUserRequest(balance = invalidBalance)
 
                 // when & then

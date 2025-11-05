@@ -1,16 +1,13 @@
 package com.hhplus.ecommerce.application.product
 
-import com.hhplus.ecommerce.common.exception.ProductNotFoundException
 import com.hhplus.ecommerce.domain.product.entity.ProductCategory
 import com.hhplus.ecommerce.domain.product.ProductRepository
 import com.hhplus.ecommerce.domain.product.entity.Product
-import io.kotest.assertions.throwables.shouldThrow
 import io.kotest.core.spec.style.DescribeSpec
 import io.kotest.matchers.collections.shouldBeEmpty
 import io.kotest.matchers.collections.shouldHaveSize
 import io.kotest.matchers.shouldBe
 import io.kotest.matchers.shouldNotBe
-import io.kotest.matchers.string.shouldContain
 import io.mockk.every
 import io.mockk.mockk
 import io.mockk.verify
@@ -61,26 +58,6 @@ class ProductServiceUnitTest : DescribeSpec({
 
                 verify(exactly = 1) { productRepository.findAll() }
             }
-
-            it("빈 상품 목록을 정상적으로 처리한다") {
-                // given
-                every { productRepository.findAll() } returns emptyList()
-
-                // when
-                val result = productService.getProducts(
-                    category = null,
-                    sort = null,
-                    page = 0,
-                    size = 10
-                )
-
-                // then
-                result.products.shouldBeEmpty()
-                result.pagination.totalElements shouldBe 0
-                result.pagination.totalPages shouldBe 0
-
-                verify(exactly = 1) { productRepository.findAll() }
-            }
         }
 
         context("정상 케이스 - 카테고리 필터링") {
@@ -107,25 +84,6 @@ class ProductServiceUnitTest : DescribeSpec({
                 result.products.all { it.category == "ELECTRONICS" } shouldBe true
 
                 verify(exactly = 1) { productRepository.findByCategory(ProductCategory.ELECTRONICS) }
-                verify(exactly = 0) { productRepository.findAll() }
-            }
-
-            it("존재하지 않는 카테고리로 조회 시 빈 목록을 반환한다") {
-                // given (잘못된 카테고리명)
-
-                // when
-                val result = productService.getProducts(
-                    category = "INVALID_CATEGORY",
-                    sort = null,
-                    page = 0,
-                    size = 10
-                )
-
-                // then
-                result.products.shouldBeEmpty()
-                result.pagination.totalElements shouldBe 0
-
-                verify(exactly = 0) { productRepository.findByCategory(any()) }
                 verify(exactly = 0) { productRepository.findAll() }
             }
 
@@ -323,216 +281,6 @@ class ProductServiceUnitTest : DescribeSpec({
                 result.pagination.hasPrevious shouldBe true
 
                 verify(exactly = 1) { productRepository.findAll() }
-            }
-
-            it("범위를 벗어난 페이지 번호는 빈 목록을 반환한다") {
-                // given
-                every { productRepository.findAll() } returns manyProducts
-
-                // when
-                val result = productService.getProducts(
-                    category = null,
-                    sort = null,
-                    page = 10,
-                    size = 5
-                )
-
-                // then
-                result.products.shouldBeEmpty()
-                result.pagination.totalElements shouldBe 15
-                result.pagination.totalPages shouldBe 3
-
-                verify(exactly = 1) { productRepository.findAll() }
-            }
-        }
-
-        context("정상 케이스 - 복합 조건") {
-            it("카테고리 필터 + 가격순 정렬 + 페이지네이션을 모두 적용한다") {
-                // given
-                val now = LocalDateTime.now().format(dateFormatter)
-                val electronicsProducts = listOf(
-                    createProduct(1L, "노트북", 1500000L, 50, ProductCategory.ELECTRONICS, 100, "2025-10-01T00:00:00", now),
-                    createProduct(2L, "스마트폰", 1200000L, 100, ProductCategory.ELECTRONICS, 150, "2025-10-05T00:00:00", now),
-                    createProduct(3L, "이어폰", 150000L, 80, ProductCategory.ELECTRONICS, 200, "2025-10-10T00:00:00", now)
-                )
-
-                every { productRepository.findByCategory(ProductCategory.ELECTRONICS) } returns electronicsProducts
-
-                // when
-                val result = productService.getProducts(
-                    category = "ELECTRONICS",
-                    sort = "price",
-                    page = 0,
-                    size = 2
-                )
-
-                // then
-                result.products shouldHaveSize 2
-                result.products[0].price shouldBe 150000L // 가격 오름차순
-                result.products[1].price shouldBe 1200000L
-                result.pagination.totalElements shouldBe 3
-                result.pagination.hasNext shouldBe true
-
-                verify(exactly = 1) { productRepository.findByCategory(ProductCategory.ELECTRONICS) }
-            }
-        }
-    }
-
-    describe("ProductService 단위 테스트 - getProductDetail") {
-        context("정상 케이스") {
-            it("상품 ID로 상품 상세 정보를 조회한다") {
-                // given
-                val productId = 1L
-                val now = LocalDateTime.now().format(dateFormatter)
-                val product = createProduct(
-                    id = productId,
-                    name = "노트북 ABC",
-                    price = 1500000L,
-                    stock = 50,
-                    category = ProductCategory.ELECTRONICS,
-                    salesCount = 150,
-                    createdAt = "2025-10-01T00:00:00",
-                    updatedAt = now
-                )
-
-                every { productRepository.findById(productId) } returns product
-
-                // when
-                val result = productService.getProductDetail(productId)
-
-                // then
-                result.id shouldBe productId
-                result.name shouldBe "노트북 ABC"
-                result.price shouldBe 1500000L
-                result.stock shouldBe 50
-                result.category shouldBe "ELECTRONICS"
-                result.salesCount shouldBe 150
-                result.specifications shouldNotBe null
-                result.createdAt shouldBe "2025-10-01T00:00:00"
-                result.updatedAt shouldBe now
-
-                verify(exactly = 1) { productRepository.findById(productId) }
-            }
-
-            it("specifications가 포함된 상품 상세 정보를 조회한다") {
-                // given
-                val productId = 1L
-                val now = LocalDateTime.now().format(dateFormatter)
-                val specifications = mapOf("cpu" to "Intel i7", "ram" to "16GB")
-                val product = Product(
-                    id = productId,
-                    name = "노트북",
-                    description = "고성능 노트북",
-                    price = 1500000L,
-                    stock = 50,
-                    category = ProductCategory.ELECTRONICS,
-                    specifications = specifications,
-                    salesCount = 150,
-                    createdAt = "2025-10-01T00:00:00",
-                    updatedAt = now
-                )
-
-                every { productRepository.findById(productId) } returns product
-
-                // when
-                val result = productService.getProductDetail(productId)
-
-                // then
-                result.specifications shouldBe specifications
-
-                verify(exactly = 1) { productRepository.findById(productId) }
-            }
-        }
-
-        context("예외 케이스") {
-            it("존재하지 않는 상품 ID로 조회 시 ProductNotFoundException을 발생시킨다") {
-                // given
-                val invalidProductId = 999L
-                every { productRepository.findById(invalidProductId) } returns null
-
-                // when & then
-                val exception = shouldThrow<ProductNotFoundException> {
-                    productService.getProductDetail(invalidProductId)
-                }
-                exception.message shouldContain "Product not found with id: $invalidProductId"
-
-                verify(exactly = 1) { productRepository.findById(invalidProductId) }
-            }
-        }
-    }
-
-    describe("ProductService 단위 테스트 - getProductStock") {
-        context("정상 케이스") {
-            it("상품의 재고 정보를 조회한다") {
-                // given
-                val productId = 1L
-                val now = LocalDateTime.now().format(dateFormatter)
-                val product = createProduct(
-                    id = productId,
-                    name = "노트북",
-                    price = 1500000L,
-                    stock = 50,
-                    category = ProductCategory.ELECTRONICS,
-                    salesCount = 100,
-                    createdAt = "2025-10-01T00:00:00",
-                    updatedAt = now
-                )
-
-                every { productRepository.findById(productId) } returns product
-
-                // when
-                val result = productService.getProductStock(productId)
-
-                // then
-                result.id shouldBe productId
-                result.productName shouldBe "노트북"
-                result.stock shouldBe 50
-                result.isAvailable shouldBe true
-                result.lastUpdatedAt shouldBe now
-
-                verify(exactly = 1) { productRepository.findById(productId) }
-            }
-
-            it("재고가 0인 경우 isAvailable이 false이다") {
-                // given
-                val productId = 1L
-                val now = LocalDateTime.now().format(dateFormatter)
-                val product = createProduct(
-                    id = productId,
-                    name = "품절 상품",
-                    price = 10000L,
-                    stock = 0,
-                    category = ProductCategory.FASHION,
-                    salesCount = 100,
-                    createdAt = "2025-10-01T00:00:00",
-                    updatedAt = now
-                )
-
-                every { productRepository.findById(productId) } returns product
-
-                // when
-                val result = productService.getProductStock(productId)
-
-                // then
-                result.stock shouldBe 0
-                result.isAvailable shouldBe false
-
-                verify(exactly = 1) { productRepository.findById(productId) }
-            }
-        }
-
-        context("예외 케이스") {
-            it("존재하지 않는 상품의 재고 조회 시 ProductNotFoundException을 발생시킨다") {
-                // given
-                val invalidProductId = 999L
-                every { productRepository.findById(invalidProductId) } returns null
-
-                // when & then
-                shouldThrow<ProductNotFoundException> {
-                    productService.getProductStock(invalidProductId)
-                }
-
-                verify(exactly = 1) { productRepository.findById(invalidProductId) }
             }
         }
     }

@@ -14,6 +14,7 @@ import com.hhplus.ecommerce.domain.payment.entity.Payment
 import com.hhplus.ecommerce.domain.payment.entity.PaymentStatus
 import com.hhplus.ecommerce.domain.payment.entity.TransmissionStatus
 import com.hhplus.ecommerce.domain.user.entity.User
+import com.hhplus.ecommerce.presentation.payment.dto.CancelPaymentRequest
 import com.hhplus.ecommerce.presentation.payment.dto.ProcessPaymentRequest
 import com.hhplus.ecommerce.presentation.user.dto.UserInfoResponse
 import io.kotest.assertions.throwables.shouldThrow
@@ -472,73 +473,141 @@ class PaymentServiceUnitTest : DescribeSpec({
         }
     }
 
-    describe("PaymentService 단위 테스트 - retryTransmission") {
-        it("FAILED 상태의 전송을 재시도할 수 있다") {
-            // given
-            val transmissionId = 1L
-            val now = LocalDateTime.now()
+    describe("PaymentService 단위 테스트 - cancelPayment") {
+        context("정상 케이스") {
+            it("결제 취소를 성공하고, 결제자에게 잔액을 환불한다.") {
+                val paymentId = 1L
+                val userId =  100L
+                val orderId = 1L
+                val amount = 50000L
+                val now = LocalDateTime.now()
 
-            val transmission = DataTransmission(
-                transmissionId = transmissionId,
-                orderId = 1L,
-                status = TransmissionStatus.FAILED,
-                attempts = 1,
-                maxAttempts = 3,
-                createdAt = now.minusHours(1),
-                sentAt = now.minusMinutes(5),
-                nextRetryAt = null,
-                errorMessage = "Network error"
-            )
+                val payment = Payment(
+                    paymentId,
+                    orderId,
+                    userId,
+                    amount,
+                    status = PaymentStatus.SUCCESS,
+                    paidAt = now
+                )
 
-            every { paymentRepository.findTransmissionById(transmissionId) } returns transmission
-            every { paymentRepository.saveTransmission(any()) } answers { firstArg() }
+                val order = Order(
+                    id = orderId,
+                    userId = userId,
+                    orderNumber = "ORD-20251103-001",
+                    items = listOf(
+                        OrderItem(
+                            id = 1L,
+                            productId = 1L,
+                            orderId = orderId,
+                            productName = "Test Product",
+                            quantity = 1,
+                            unitPrice = 50000L,
+                            subtotal = 50000L
+                        )
+                    ),
+                    totalAmount = amount,
+                    discountAmount = 0L,
+                    finalAmount = amount,
+                    appliedCouponId = null,
+                    status = OrderStatus.PAID,
+                    createdAt = now,
+                    updatedAt = now
+                )
 
-            // when
-            val result = paymentService.retryTransmission(transmissionId)
+                val user = User(
+                    id = userId,
+                    balance = 50000L,  // 현재 잔액
+                    createdAt = "2025-11-03T00:00:00",
+                    updatedAt = "2025-11-03T00:00:00"
+                )
 
-            // then
-            result.transmissionId shouldBe transmissionId
-            result.status shouldBe "SUCCESS"  // 재시도는 항상 SUCCESS로 처리됨
-            result.retriedAt shouldNotBe null
-            result.attempts shouldBe 2
+                val refundedUser = user.copy(balance = 100000L)
+                val request = CancelPaymentRequest(userId)
 
-            verify(exactly = 1) { paymentRepository.saveTransmission(any()) }
-        }
+                // mock
+                every { paymentRepository.findById(paymentId) } returns payment
+                every { orderService.getOrder(orderId) } returns order
+                every { userService.getUser(userId) } returns user
+                every { userService.updateUser(any()) } returns refundedUser
+                every { paymentRepository.save(any()) } answers { firstArg() }
 
-        it("이미 성공한 전송은 재시도할 수 없다") {
-            // given
-            val transmissionId = 1L
-            val now = LocalDateTime.now()
+                val result = paymentService.cancelPayment(paymentId, request)
 
-            val transmission = DataTransmission(
-                transmissionId = transmissionId,
-                orderId = 1L,
-                status = TransmissionStatus.SUCCESS,
-                attempts = 0,
-                maxAttempts = 3,
-                createdAt = now,
-                sentAt = now.plusMinutes(5),
-                nextRetryAt = null,
-                errorMessage = null
-            )
+                result.paymentId shouldBe paymentId
+                result.orderId shouldBe orderId
+                result.userId shouldBe userId
+                result.refundedAmount shouldBe amount
+                result.paymentStatus shouldBe "CANCELLED"
+                result.orderStatus shouldBe "PAID"
+                result.balance.previousBalance shouldBe 50000L
+                result.balance.refundedAmount shouldBe amount
+                result.balance.currentBalance shouldBe 100000L
+                result.cancelledAt shouldNotBe null
 
-            every { paymentRepository.findTransmissionById(transmissionId) } returns transmission
-
-            // when & then
-            shouldThrow<AlreadySuccessException> {
-                paymentService.retryTransmission(transmissionId)
+                verify(exactly = 1) { paymentRepository.findById(paymentId) }
+                verify(exactly = 1) { orderService.getOrder(orderId) }
+                verify(exactly = 1) { userService.getUser(userId) }
+                verify(exactly = 1) { userService.updateUser(any()) }
+                verify(exactly = 1) { paymentRepository.save(match { it.status == PaymentStatus.CANCELLED }) }
             }
         }
 
-        it("존재하지 않는 전송 ID인 경우 TransmissionNotFoundException 발생") {
-            // given
-            val transmissionId = 999L
+        context("예외 케이스") {
+            it("이미 취소된 결제를 다시 취소하려는 경우 AlreadyCancelledException 발생") {
+                // given
+                val paymentId = 1L
+                val userId = 100L
+                val now = LocalDateTime.now()
 
-            every { paymentRepository.findTransmissionById(transmissionId) } returns null
+                val payment = Payment(
+                    paymentId = paymentId,
+                    orderId = 1L,
+                    userId = userId,
+                    amount = 50000L,
+                    status = PaymentStatus.CANCELLED,  // 이미 취소됨
+                    paidAt = now
+                )
 
-            // when & then
-            shouldThrow<TransmissionNotFoundException> {
-                paymentService.retryTransmission(transmissionId)
+                val request = CancelPaymentRequest(userId = userId)
+
+                every { paymentRepository.findById(paymentId) } returns payment
+
+                // when & then
+                shouldThrow<AlreadyCancelledException> {
+                    paymentService.cancelPayment(paymentId, request)
+                }
+
+                verify(exactly = 1) { paymentRepository.findById(paymentId) }
+                verify(exactly = 0) { paymentRepository.save(any()) }
+            }
+
+            it("SUCCESS 상태가 아닌 결제 취소 시도 시 InvalidPaymentStatusException 발생") {
+                // given
+                val paymentId = 1L
+                val userId = 100L
+                val now = LocalDateTime.now()
+
+                val payment = Payment(
+                    paymentId = paymentId,
+                    orderId = 1L,
+                    userId = userId,
+                    amount = 50000L,
+                    status = PaymentStatus.FAILED,  // SUCCESS가 아님
+                    paidAt = now
+                )
+
+                val request = CancelPaymentRequest(userId = userId)
+
+                every { paymentRepository.findById(paymentId) } returns payment
+
+                // when & then
+                shouldThrow<InvalidPaymentStatusException> {
+                    paymentService.cancelPayment(paymentId, request)
+                }
+
+                verify(exactly = 1) { paymentRepository.findById(paymentId) }
+                verify(exactly = 0) { paymentRepository.save(any()) }
             }
         }
     }
