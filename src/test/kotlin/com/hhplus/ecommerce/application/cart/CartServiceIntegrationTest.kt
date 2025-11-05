@@ -498,6 +498,27 @@ class CartServiceIntegrationTest : DescribeSpec({
                 val afterClear = cartService.getCart(userId)
                 afterClear.items.shouldBeEmpty()
             }
+
+            it("대량의 아이템이 담긴 장바구니를 한 번에 비운다") {
+                // given - 10개 상품 추가
+                val userId = 2L
+                for (productId in 1L..10L) {
+                    cartService.addCartItem(userId, AddCartItemRequest(productId = productId, quantity = 1))
+                }
+
+                val beforeClear = cartService.getCart(userId)
+                beforeClear.items shouldHaveSize 10
+
+                // when
+                cartService.clearCart(userId)
+
+                // then
+                val afterClear = cartService.getCart(userId)
+                afterClear.items.shouldBeEmpty()
+                afterClear.summary.totalItems shouldBe 0
+                afterClear.summary.totalQuantity shouldBe 0
+                afterClear.summary.totalAmount shouldBe 0L
+            }
         }
 
         context("예외 케이스") {
@@ -509,6 +530,110 @@ class CartServiceIntegrationTest : DescribeSpec({
                 shouldThrow<UserNotFoundException> {
                     cartService.clearCart(invalidUserId)
                 }
+            }
+        }
+    }
+
+    describe("CartService 통합 테스트 - 여러 상품 일괄 삭제") {
+
+        context("정상 케이스") {
+            it("주문 완료 후 주문한 상품들만 장바구니에서 삭제한다") {
+                // given - 5개 상품 추가
+                val userId = 2L
+                cartService.addCartItem(userId, AddCartItemRequest(productId = 1L, quantity = 1))
+                cartService.addCartItem(userId, AddCartItemRequest(productId = 2L, quantity = 2))
+                cartService.addCartItem(userId, AddCartItemRequest(productId = 3L, quantity = 3))
+                cartService.addCartItem(userId, AddCartItemRequest(productId = 5L, quantity = 1))
+                cartService.addCartItem(userId, AddCartItemRequest(productId = 7L, quantity = 2))
+
+                val beforeDelete = cartService.getCart(userId)
+                beforeDelete.items shouldHaveSize 5
+
+                // when - 주문 완료된 상품 3개만 삭제 (실제 주문 시나리오)
+                val orderedProductIds = listOf(1L, 2L, 3L)
+                cartService.deleteCarts(userId, orderedProductIds)
+
+                // then - 나머지 2개만 남음
+                val afterDelete = cartService.getCart(userId)
+                afterDelete.items shouldHaveSize 2
+                afterDelete.items.map { it.productId } shouldContainExactlyInAnyOrder listOf(5L, 7L)
+            }
+
+            it("여러 상품을 한 번에 삭제한다") {
+                // given
+                val userId = 2L
+                cartService.addCartItem(userId, AddCartItemRequest(productId = 1L, quantity = 1))
+                cartService.addCartItem(userId, AddCartItemRequest(productId = 5L, quantity = 2))
+                cartService.addCartItem(userId, AddCartItemRequest(productId = 10L, quantity = 3))
+
+                // when
+                val productIdsToDelete = listOf(1L, 10L)
+                cartService.deleteCarts(userId, productIdsToDelete)
+
+                // then
+                val cart = cartService.getCart(userId)
+                cart.items shouldHaveSize 1
+                cart.items[0].productId shouldBe 5L
+            }
+
+            it("모든 상품을 일괄 삭제하면 빈 장바구니가 된다") {
+                // given
+                val userId = 2L
+                cartService.addCartItem(userId, AddCartItemRequest(productId = 1L, quantity = 1))
+                cartService.addCartItem(userId, AddCartItemRequest(productId = 2L, quantity = 2))
+                cartService.addCartItem(userId, AddCartItemRequest(productId = 3L, quantity = 3))
+
+                // when - 모든 상품 삭제
+                val allProductIds = listOf(1L, 2L, 3L)
+                cartService.deleteCarts(userId, allProductIds)
+
+                // then
+                val cart = cartService.getCart(userId)
+                cart.items.shouldBeEmpty()
+            }
+
+            it("빈 리스트로 삭제 호출하면 아무것도 삭제되지 않는다") {
+                // given
+                val userId = 2L
+                cartService.addCartItem(userId, AddCartItemRequest(productId = 1L, quantity = 1))
+                cartService.addCartItem(userId, AddCartItemRequest(productId = 2L, quantity = 2))
+
+                // when
+                cartService.deleteCarts(userId, emptyList())
+
+                // then
+                val cart = cartService.getCart(userId)
+                cart.items shouldHaveSize 2
+            }
+
+            it("장바구니에 없는 상품 ID로 삭제 시도해도 에러가 발생하지 않는다") {
+                // given
+                val userId = 2L
+                cartService.addCartItem(userId, AddCartItemRequest(productId = 1L, quantity = 1))
+
+                // when - 장바구니에 없는 상품 삭제 시도
+                cartService.deleteCarts(userId, listOf(999L, 998L))
+
+                // then - 기존 장바구니는 변하지 않음
+                val cart = cartService.getCart(userId)
+                cart.items shouldHaveSize 1
+                cart.items[0].productId shouldBe 1L
+            }
+
+            it("일부는 있고 일부는 없는 상품 ID로 삭제하면 있는 것만 삭제된다") {
+                // given
+                val userId = 2L
+                cartService.addCartItem(userId, AddCartItemRequest(productId = 1L, quantity = 1))
+                cartService.addCartItem(userId, AddCartItemRequest(productId = 2L, quantity = 2))
+                cartService.addCartItem(userId, AddCartItemRequest(productId = 3L, quantity = 3))
+
+                // when - 1L, 2L은 있지만 999L은 없음
+                cartService.deleteCarts(userId, listOf(1L, 2L, 999L))
+
+                // then - 1L, 2L만 삭제되고 3L은 남음
+                val cart = cartService.getCart(userId)
+                cart.items shouldHaveSize 1
+                cart.items[0].productId shouldBe 3L
             }
         }
     }
