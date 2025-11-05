@@ -1,9 +1,9 @@
 package com.hhplus.ecommerce.application.product
 
+import com.hhplus.ecommerce.application.product.dto.*
 import com.hhplus.ecommerce.common.exception.ProductNotFoundException
 import com.hhplus.ecommerce.domain.product.entity.ProductCategory
 import com.hhplus.ecommerce.domain.product.ProductRepository
-import com.hhplus.ecommerce.presentation.product.dto.*
 import com.hhplus.ecommerce.domain.product.entity.Product
 import org.springframework.stereotype.Service
 import java.time.LocalDateTime
@@ -24,7 +24,7 @@ class ProductServiceImpl(
         sort: String?,
         page: Int,
         size: Int
-    ): ProductListResponse {
+    ): ProductListResult {
         // 1. 모든 상품 조회 또는 카테고리 필터링
         var products: List<Product> = if (category != null) {
             val productCategory = try {
@@ -62,21 +62,21 @@ class ProductServiceImpl(
         }
 
         // 4. DTO 변환
-        val productSummaries = pagedProducts.map { product ->
-            ProductSummary(
+        val productsResult = pagedProducts.map { product ->
+            Product(
                 id = product.id,
                 name = product.name,
                 description = product.description,
                 price = product.price,
                 stock = product.stock,
                 salesCount = product.salesCount,
-                category = product.category.name,
+                category = product.category,
                 createdAt = product.createdAt,
                 updatedAt = product.updatedAt
             )
         }
 
-        val pagination = Pagination(
+        val pagination = PaginationResult(
             currentPage = page,
             totalPages = totalPages,
             totalElements = totalElements,
@@ -85,42 +85,12 @@ class ProductServiceImpl(
             hasPrevious = page > 0
         )
 
-        return ProductListResponse(
-            products = productSummaries,
+        return ProductListResult(
+            products = productsResult,
             pagination = pagination
         )
     }
-
-    override fun getProductDetail(productId: Long): ProductDetailResponse {
-        val product = findProductById(productId)
-
-        return ProductDetailResponse(
-            id = product.id,
-            name = product.name,
-            description = product.description,
-            price = product.price,
-            stock = product.stock,
-            category = product.category.name,
-            specifications = product.specifications,
-            salesCount = product.salesCount,
-            createdAt = product.createdAt,
-            updatedAt = product.updatedAt
-        )
-    }
-
-    override fun getProductStock(productId: Long): ProductStockResponse {
-        val product = findProductById(productId)
-
-        return ProductStockResponse(
-            id = product.id,
-            productName = product.name,
-            stock = product.stock,
-            isAvailable = product.stock > 0,
-            lastUpdatedAt = product.updatedAt
-        )
-    }
-
-    override fun getTopProducts(days: Int, limit: Int): TopProductsResponse {
+    override fun getTopProducts(days: Int, limit: Int): TopProductsResult {
         // 1. 모든 상품을 판매량 기준으로 정렬
         val allProducts = productRepository.findAll()
 
@@ -139,7 +109,7 @@ class ProductServiceImpl(
 
         // 5. DTO 변환
         val topProductItems = topProducts.mapIndexed { index, product ->
-            TopProductItem(
+            TopProductItemResult(
                 rank = index + 1,
                 id = product.id,
                 name = product.name,
@@ -155,13 +125,13 @@ class ProductServiceImpl(
         val endDate = LocalDateTime.now()
         val startDate = endDate.minusDays(days.toLong())
 
-        val period = Period(
+        val period = PeriodResult(
             days = days,
             startDate = startDate.format(DATE_FORMATTER),
             endDate = endDate.format(DATE_FORMATTER)
         )
 
-        return TopProductsResponse(
+        return TopProductsResult(
             period = period,
             products = topProductItems
         )

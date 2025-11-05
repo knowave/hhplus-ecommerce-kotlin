@@ -1,22 +1,13 @@
 package com.hhplus.ecommerce.application.product
 
+import com.hhplus.ecommerce.application.product.dto.*
 import com.hhplus.ecommerce.domain.product.entity.Product
-import com.hhplus.ecommerce.presentation.product.dto.*
 
 interface ProductService {
 
-    fun getProducts(
-        category: String?,
-        sort: String?,
-        page: Int,
-        size: Int
-    ): ProductListResponse
+    fun getProducts(category: String?, sort: String?, page: Int, size: Int): ProductListResult
 
-    fun getProductDetail(productId: Long): ProductDetailResponse
-
-    fun getProductStock(productId: Long): ProductStockResponse
-
-    fun getTopProducts(days: Int, limit: Int): TopProductsResponse
+    fun getTopProducts(days: Int, limit: Int): TopProductsResult
 
     fun findProductById(id: Long): Product
 
