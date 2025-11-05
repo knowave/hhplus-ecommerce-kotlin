@@ -1,8 +1,8 @@
 package com.hhplus.ecommerce.presentation.user
 
 import com.hhplus.ecommerce.application.user.UserService
+import com.hhplus.ecommerce.application.user.dto.*
 import com.hhplus.ecommerce.presentation.user.dto.*
-import com.hhplus.ecommerce.domain.user.entity.User
 import io.swagger.v3.oas.annotations.Operation
 import org.springframework.http.HttpStatus
 import org.springframework.http.ResponseEntity
@@ -17,7 +17,8 @@ class UserController(
     @Operation(summary = "사용자 생성", description = "새로운 사용자를 생성합니다")
     @PostMapping
     fun createUser(@RequestBody request: CreateUserRequest): ResponseEntity<CreateUserResponse> {
-        val user = userService.createUser(request)
+        val command = CreateUserCommand.command(request)
+        val user = userService.createUser(command)
         return ResponseEntity.status(HttpStatus.CREATED).body(CreateUserResponse.from(user))
     }
 

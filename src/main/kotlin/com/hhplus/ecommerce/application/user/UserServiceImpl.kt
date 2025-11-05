@@ -1,9 +1,8 @@
 package com.hhplus.ecommerce.application.user
 
-import com.hhplus.ecommerce.application.user.dto.ChargeBalanceResult
+import com.hhplus.ecommerce.application.user.dto.*
 import com.hhplus.ecommerce.common.exception.*
 import com.hhplus.ecommerce.domain.user.UserRepository
-import com.hhplus.ecommerce.presentation.user.dto.*
 import com.hhplus.ecommerce.domain.user.entity.User
 import org.springframework.stereotype.Service
 import java.time.LocalDateTime
@@ -54,7 +53,7 @@ class UserServiceImpl(
         return findUserById(id)
     }
 
-    override fun createUser(dto: CreateUserRequest): User {
+    override fun createUser(dto: CreateUserCommand): User {
         // 초기 잔액 유효성 검증
         validateChargeAmount(dto.balance)
 
