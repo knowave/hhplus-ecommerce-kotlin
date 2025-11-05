@@ -13,12 +13,7 @@ import io.kotest.matchers.shouldNotBe
 import java.time.LocalDateTime
 import java.time.format.DateTimeFormatter
 
-/**
- * ProductService 통합 테스트
- *
- * 목적: ProductService와 실제 Repository 구현체가 함께 정상적으로 동작하는지 검증
- * 특징: Mock이 아닌 실제 In-Memory Repository 구현체 사용
- */
+
 class ProductServiceIntegrationTest : DescribeSpec({
 
     lateinit var productRepository: ProductRepository

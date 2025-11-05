@@ -248,11 +248,6 @@ class OrderServiceImpl(
             throw ForbiddenException("다른 사용자의 주문입니다.")
         }
 
-        // 취소 가능 상태 확인 (PENDING만 취소 가능)
-        if (order.status != OrderStatus.PENDING) {
-            throw CannotCancelOrderException(orderId, order.status.name)
-        }
-
         // 재고 복원
         val restoredStock = restoreStock(order.items)
 
