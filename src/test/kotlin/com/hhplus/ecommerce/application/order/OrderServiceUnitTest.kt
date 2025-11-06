@@ -4,13 +4,11 @@ import com.hhplus.ecommerce.application.cart.CartService
 import com.hhplus.ecommerce.application.coupon.CouponService
 import com.hhplus.ecommerce.application.product.ProductService
 import com.hhplus.ecommerce.application.user.UserService
-import com.hhplus.ecommerce.common.exception.CannotCancelOrderException
 import com.hhplus.ecommerce.common.exception.CouponNotFoundException
 import com.hhplus.ecommerce.common.exception.ExpiredCouponException
 import com.hhplus.ecommerce.common.exception.ForbiddenException
 import com.hhplus.ecommerce.common.exception.InsufficientStockException
 import com.hhplus.ecommerce.common.exception.InvalidCouponException
-import com.hhplus.ecommerce.common.exception.InvalidOrderItemsException
 import com.hhplus.ecommerce.common.exception.InvalidQuantityException
 import com.hhplus.ecommerce.common.exception.OrderNotFoundException
 import com.hhplus.ecommerce.common.exception.ProductNotFoundException
@@ -29,7 +27,6 @@ import com.hhplus.ecommerce.domain.user.entity.User
 import com.hhplus.ecommerce.application.order.dto.*
 import io.kotest.assertions.throwables.shouldThrow
 import io.kotest.core.spec.style.DescribeSpec
-import io.kotest.matchers.reflection.beLateInit
 import io.kotest.matchers.shouldBe
 import io.kotest.matchers.shouldNotBe
 import io.mockk.every
