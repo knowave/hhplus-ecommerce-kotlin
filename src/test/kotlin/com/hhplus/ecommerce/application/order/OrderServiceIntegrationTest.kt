@@ -8,9 +8,7 @@ import com.hhplus.ecommerce.application.product.ProductService
 import com.hhplus.ecommerce.application.product.ProductServiceImpl
 import com.hhplus.ecommerce.application.user.UserService
 import com.hhplus.ecommerce.application.user.UserServiceImpl
-import com.hhplus.ecommerce.common.exception.CannotCancelOrderException
 import com.hhplus.ecommerce.common.exception.InsufficientStockException
-import com.hhplus.ecommerce.common.exception.OrderNotFoundException
 import com.hhplus.ecommerce.common.lock.LockManager
 import com.hhplus.ecommerce.domain.cart.CartRepository
 import com.hhplus.ecommerce.domain.coupon.CouponRepository
