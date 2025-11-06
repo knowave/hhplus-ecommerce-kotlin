@@ -532,6 +532,7 @@ class PaymentServiceUnitTest : DescribeSpec({
                 every { orderService.getOrder(orderId) } returns order
                 every { userService.getUser(userId) } returns user
                 every { userService.updateUser(any()) } returns refundedUser
+                every { orderService.updateOrder(order) } answers { firstArg() }
                 every { paymentRepository.save(any()) } answers { firstArg() }
 
                 val result = paymentService.cancelPayment(paymentId, command)
