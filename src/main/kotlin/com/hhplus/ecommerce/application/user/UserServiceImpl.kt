@@ -86,12 +86,12 @@ class UserServiceImpl(
         when {
             amount < MIN_CHARGE_AMOUNT -> {
                 throw InvalidAmountException(
-                    "충전 금액은 ${MIN_CHARGE_AMOUNT}원 이상이어야 합니다. (입력값: ${amount}원)"
+                    "The recharge amount must be at least ${MIN_CHARGE_AMOUNT} won. (value: ${amount})"
                 )
             }
             amount > MAX_CHARGE_AMOUNT -> {
                 throw InvalidAmountException(
-                    "충전 금액은 ${MAX_CHARGE_AMOUNT}원 이하여야 합니다. (입력값: ${amount}원)"
+                    "The recharge amount must be less than ${MAX_CHARGE_AMOUNT} won. (value: ${amount})"
                 )
             }
         }

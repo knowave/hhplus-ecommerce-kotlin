@@ -1,5 +1,8 @@
 package com.hhplus.ecommerce.domain.order.entity
 
+import com.hhplus.ecommerce.common.exception.OrderAlreadyCancelledException
+import com.hhplus.ecommerce.common.exception.OrderNotRefundableException
+import com.hhplus.ecommerce.common.exception.PaymentFailedException
 import java.time.LocalDateTime
 
 /**
@@ -42,7 +45,7 @@ data class Order(
      */
     fun markAsPaid() {
         require(status == OrderStatus.PENDING) {
-            "Only PENDING orders can be marked as PAID. Current status: $status"
+            throw PaymentFailedException("Only PENDING orders can be marked as PAID. Current status: $status")
         }
         status = OrderStatus.PAID
         updatedAt = LocalDateTime.now()
@@ -54,7 +57,7 @@ data class Order(
      */
     fun cancel() {
         require(status == OrderStatus.PENDING) {
-            "Only PENDING orders can be cancelled. Current status: $status"
+            throw OrderAlreadyCancelledException(status)
         }
         status = OrderStatus.CANCELLED
         updatedAt = LocalDateTime.now()
@@ -94,7 +97,7 @@ data class Order(
      */
     fun refund() {
         require(status == OrderStatus.PAID) {
-            "Only PAID orders can be refunded. Current status: $status"
+            throw OrderNotRefundableException(status)
         }
         status = OrderStatus.REFUNDED
         updatedAt = LocalDateTime.now()
