@@ -163,13 +163,13 @@ class UserE2ETest(
                 chargeResponse.statusCode shouldBe HttpStatus.BAD_REQUEST
             }
 
-            it("최대 충전 금액(1000000원)을 초과하는 금액으로 충전할 수 없어야 한다") {
+            it("최대 충전 금액(3000000원)을 초과하는 금액으로 충전할 수 없어야 한다") {
                 // Given
                 val createRequest = CreateUserRequest(balance = 50000L)
                 val createResponse = restTemplate.postForEntity(url("/users"), createRequest, User::class.java)
                 val userId = createResponse.body?.id
 
-                val invalidChargeRequest = ChargeBalanceRequest(balance = 2000000L)
+                val invalidChargeRequest = ChargeBalanceRequest(balance = 3100000L)
 
                 // When
                 val chargeResponse = restTemplate.postForEntity(
