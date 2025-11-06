@@ -133,7 +133,7 @@ class UserServiceUnitTest : DescribeSpec({
                 val exception = shouldThrow<InvalidAmountException> {
                     userService.chargeBalance(userId, invalidAmount)
                 }
-                exception.message shouldContain "1000원 이상"
+                exception.message shouldContain "must be at least 1000 won."
 
                 verify(exactly = 1) { userRepository.findById(userId) }
                 verify(exactly = 0) { userRepository.save(any()) }
