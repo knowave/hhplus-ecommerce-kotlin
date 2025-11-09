@@ -1,5 +1,6 @@
 package com.hhplus.ecommerce.common.exception
 
+import com.hhplus.ecommerce.domain.order.entity.OrderStatus
 import java.math.BigDecimal
 
 open class BaseException(
@@ -72,9 +73,14 @@ class InvalidOrderItemsException(message: String) : BaseException(
     message = message
 )
 
-class CannotCancelOrderException(orderId: Long, currentStatus: String) : BaseException(
-    errorCode = ErrorCode.CANNOT_CANCEL_ORDER,
-    message = "Cannot cancel order. Order id: $orderId, Current status: $currentStatus"
+class OrderAlreadyCancelledException(status: OrderStatus) : BaseException(
+    errorCode = ErrorCode.ORDER_ALREADY_CANCELLED,
+    message = "Order is already cancelled. status: $status"
+)
+
+class OrderNotRefundableException(status: OrderStatus) : BaseException(
+    errorCode = ErrorCode.ORDER_NOT_REFUNDABLE,
+    message = "Order cannot be refunded. Current status: $status"
 )
 
 // Payment related
