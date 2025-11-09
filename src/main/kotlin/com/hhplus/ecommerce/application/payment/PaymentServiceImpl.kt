@@ -9,12 +9,14 @@ import com.hhplus.ecommerce.common.exception.*
 import com.hhplus.ecommerce.common.lock.LockManager
 import com.hhplus.ecommerce.domain.coupon.*
 import com.hhplus.ecommerce.domain.coupon.repository.CouponStatus
-import com.hhplus.ecommerce.domain.payment.PaymentRepository
 import com.hhplus.ecommerce.domain.order.entity.*
 import com.hhplus.ecommerce.domain.payment.entity.*
+import com.hhplus.ecommerce.domain.payment.repository.DataTransmissionJpaRepository
+import com.hhplus.ecommerce.domain.payment.repository.PaymentJpaRepository
 import org.springframework.stereotype.Service
 import java.time.LocalDateTime
 import java.time.format.DateTimeFormatter
+import java.util.UUID
 
 /**
  * 결제 서비스 구현체
@@ -25,7 +27,8 @@ import java.time.format.DateTimeFormatter
  */
 @Service
 class PaymentServiceImpl(
-    private val paymentRepository: PaymentRepository,
+    private val paymentRepository: PaymentJpaRepository,
+    private val transmissionRepository: DataTransmissionJpaRepository,
     private val orderService: OrderService,
     private val userService: UserService,
     private val productService: ProductService,
@@ -37,13 +40,13 @@ class PaymentServiceImpl(
         private val DATE_FORMATTER: DateTimeFormatter = DateTimeFormatter.ISO_LOCAL_DATE_TIME
     }
 
-    override fun processPayment(orderId: Long, request: ProcessPaymentCommand): ProcessPaymentResult {
+    override fun processPayment(orderId: UUID, request: ProcessPaymentCommand): ProcessPaymentResult {
         // 1. 주문 조회 및 검증
         val order = orderService.getOrder(orderId)
 
         // 권한 확인
         if (order.userId != request.userId) {
-            throw ForbiddenException("다른 사용자의 주문입니다.")
+            throw ForbiddenException("access denied order")
         }
 
         // 주문 상태 확인 (PENDING만 결제 가능)
@@ -82,7 +85,6 @@ class PaymentServiceImpl(
         // 6. 결제 레코드 생성
         val now = LocalDateTime.now()
         val payment = Payment(
-            paymentId = paymentRepository.generateId(),
             orderId = orderId,
             userId = request.userId,
             amount = paymentAmount,
@@ -93,19 +95,18 @@ class PaymentServiceImpl(
 
         // 7. 데이터 전송 레코드 생성 (Outbox Pattern)
         val transmission = DataTransmission(
-            transmissionId = paymentRepository.generateTransmissionId(),
             orderId = orderId,
             status = TransmissionStatus.PENDING,
             attempts = 0,
-            createdAt = now,
             nextRetryAt = now.plusMinutes(1) // 1분 후 첫 전송 시도
         )
-        paymentRepository.saveTransmission(transmission)
+
+        transmissionRepository.save(transmission)
 
         // 8. 응답 생성
         return ProcessPaymentResult(
-            paymentId = payment.paymentId,
-            orderId = order.id,
+            paymentId = payment.id!!,
+            orderId = order.id!!,
             orderNumber = order.orderNumber,
             userId = order.userId,
             amount = paymentAmount,
@@ -117,7 +118,7 @@ class PaymentServiceImpl(
                 remainingBalance = currentBalance
             ),
             dataTransmission = DataTransmissionInfoResult(
-                transmissionId = transmission.transmissionId,
+                transmissionId = transmission.id!!,
                 status = transmission.status.name,
                 scheduledAt = transmission.nextRetryAt!!.format(DATE_FORMATTER)
             ),
@@ -125,20 +126,20 @@ class PaymentServiceImpl(
         )
     }
 
-    override fun getPaymentDetail(paymentId: Long, userId: Long): PaymentDetailResult {
+    override fun getPaymentDetail(paymentId: UUID, userId: UUID): PaymentDetailResult {
         val payment = paymentRepository.findById(paymentId)
-            ?: throw PaymentNotFoundException(paymentId)
+            .orElseThrow { PaymentNotFoundException(paymentId) }
 
         // 권한 확인
         if (payment.userId != userId) {
-            throw ForbiddenException("다른 사용자의 결제 정보입니다.")
+            throw ForbiddenException("access denied payment")
         }
 
         val order = orderService.getOrder(payment.orderId)
-        val transmission = paymentRepository.findTransmissionByOrderId(payment.orderId)
+        val transmission = transmissionRepository.findByOrderId(payment.orderId)
 
         return PaymentDetailResult(
-            paymentId = payment.paymentId,
+            paymentId = payment.id!!,
             orderId = payment.orderId,
             orderNumber = order.orderNumber,
             userId = payment.userId,
@@ -146,7 +147,7 @@ class PaymentServiceImpl(
             paymentStatus = payment.status.name,
             paidAt = payment.paidAt.format(DATE_FORMATTER),
             dataTransmission = DataTransmissionDetailInfoResult(
-                transmissionId = transmission?.transmissionId ?: 0L,
+                transmissionId = transmission?.id.toString(),
                 status = transmission?.status?.name ?: "UNKNOWN",
                 sentAt = transmission?.sentAt?.format(DATE_FORMATTER),
                 attempts = transmission?.attempts ?: 0
@@ -154,12 +155,12 @@ class PaymentServiceImpl(
         )
     }
 
-    override fun getOrderPayment(orderId: Long, userId: Long): OrderPaymentResult {
+    override fun getOrderPayment(orderId: UUID, userId: UUID): OrderPaymentResult {
         val order = orderService.getOrder(orderId)
 
         // 권한 확인
         if (order.userId != userId) {
-            throw ForbiddenException("다른 사용자의 주문입니다.")
+            throw ForbiddenException("access denied order")
         }
 
         val payment = paymentRepository.findByOrderId(orderId)
@@ -169,7 +170,7 @@ class PaymentServiceImpl(
             orderNumber = order.orderNumber,
             payment = payment?.let {
                 PaymentInfoResult(
-                    paymentId = it.paymentId,
+                    paymentId = it.id!!,
                     amount = it.amount,
                     status = it.status.name,
                     paidAt = it.paidAt.format(DATE_FORMATTER)
@@ -178,29 +179,29 @@ class PaymentServiceImpl(
         )
     }
 
-    override fun getTransmissionDetail(transmissionId: Long): TransmissionDetailResult {
-        val transmission = paymentRepository.findTransmissionById(transmissionId)
-            ?: throw TransmissionNotFoundException(transmissionId)
+    override fun getTransmissionDetail(transmissionId: UUID): TransmissionDetailResult {
+        val transmission = transmissionRepository.findById(transmissionId)
+            .orElseThrow{ TransmissionNotFoundException(transmissionId) }
 
         val order = orderService.getOrder(transmission.orderId)
 
         return TransmissionDetailResult(
-            transmissionId = transmission.transmissionId,
+            transmissionId = transmission.id!!,
             orderId = transmission.orderId,
             orderNumber = order.orderNumber,
             status = transmission.status.name,
             attempts = transmission.attempts,
             maxAttempts = transmission.maxAttempts,
-            createdAt = transmission.createdAt.format(DATE_FORMATTER),
+            createdAt = transmission.createdAt!!.format(DATE_FORMATTER),
             sentAt = transmission.sentAt?.format(DATE_FORMATTER),
             nextRetryAt = transmission.nextRetryAt?.format(DATE_FORMATTER),
             errorMessage = transmission.errorMessage
         )
     }
 
-    override fun retryTransmission(transmissionId: Long): RetryTransmissionResult {
-        val transmission = paymentRepository.findTransmissionById(transmissionId)
-            ?: throw TransmissionNotFoundException(transmissionId)
+    override fun retryTransmission(transmissionId: UUID): RetryTransmissionResult {
+        val transmission = transmissionRepository.findById(transmissionId)
+            .orElseThrow { TransmissionNotFoundException(transmissionId) }
 
         // 이미 성공한 전송은 재시도 불가
         if (transmission.status == TransmissionStatus.SUCCESS) {
@@ -216,10 +217,10 @@ class PaymentServiceImpl(
         transmission.nextRetryAt = null
         transmission.errorMessage = null
 
-        paymentRepository.saveTransmission(transmission)
+        transmissionRepository.save(transmission)
 
         return RetryTransmissionResult(
-            transmissionId = transmission.transmissionId,
+            transmissionId = transmission.id!!,
             status = transmission.status.name,
             retriedAt = now.format(DATE_FORMATTER),
             attempts = transmission.attempts
@@ -235,14 +236,14 @@ class PaymentServiceImpl(
      *
      * 주문 상태 변경, 재고 복구, 쿠폰 복구는 OrderService의 책임입니다.
      */
-    override fun cancelPayment(paymentId: Long, request: CancelPaymentCommand): CancelPaymentResult {
+    override fun cancelPayment(paymentId: UUID, request: CancelPaymentCommand): CancelPaymentResult {
         // 1. 결제 조회 및 검증
         val payment = paymentRepository.findById(paymentId)
-            ?: throw PaymentNotFoundException(paymentId)
+            .orElseThrow { PaymentNotFoundException(paymentId) }
 
         // 권한 확인
         if (payment.userId != request.userId) {
-            throw ForbiddenException("다른 사용자의 결제입니다.")
+            throw ForbiddenException("access denied payment")
         }
 
         // 이미 취소된 결제인지 확인
@@ -272,19 +273,17 @@ class PaymentServiceImpl(
 
         // 4. 결제 상태 변경 (SUCCESS → CANCELLED)
         val now = LocalDateTime.now()
-        val cancelledPayment = payment.copy(
-            status = PaymentStatus.CANCELLED
-        )
-        paymentRepository.save(cancelledPayment)
+        payment.status = PaymentStatus.CANCELLED
+        paymentRepository.save(payment)
 
         // 5. 응답 생성 (주문 상태는 변경하지 않음)
         return CancelPaymentResult(
-            paymentId = payment.paymentId,
-            orderId = order.id,
+            paymentId = payment.id!!,
+            orderId = order.id!!,
             orderNumber = order.orderNumber,
             userId = request.userId,
             refundedAmount = refundAmount,
-            paymentStatus = cancelledPayment.status.name,
+            paymentStatus = payment.status.name,
             orderStatus = order.status.name,  // 현재 주문 상태만 반환
             balance = RefundBalanceInfoResult(
                 previousBalance = previousBalance,
@@ -315,9 +314,9 @@ class PaymentServiceImpl(
 
         // 2. 쿠폰 복원 (도메인 메서드 사용)
         if (order.appliedCouponId != null) {
-            val userCoupon = couponService.findUserCoupon(order.userId, order.appliedCouponId)
+            val userCoupon = couponService.findUserCoupon(order.userId, order.appliedCouponId!!)
             if (userCoupon.status == CouponStatus.USED) {
-                lockManager.executeWithCouponLock(order.appliedCouponId) {
+                lockManager.executeWithCouponLock(order.appliedCouponId!!) {
                     userCoupon.restore()  // 도메인 메서드 사용 (만료 체크 포함)
                     couponService.updateUserCoupon(userCoupon)
                 }

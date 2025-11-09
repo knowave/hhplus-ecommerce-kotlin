@@ -102,28 +102,37 @@ class PaymentFailedException(reason: String) : BaseException(
     message = "Payment failed. Reason: $reason"
 )
 
-class PaymentNotFoundException(paymentId: Long) : BaseException(
+class PaymentNotFoundException(paymentId: UUID) : BaseException(
     errorCode = ErrorCode.PAYMENT_NOT_FOUND,
     message = "Payment not found with id: $paymentId"
 )
 
-class InvalidOrderStatusException(orderId: Long, currentStatus: String) : BaseException(
+class InvalidOrderStatusException(orderId: UUID, currentStatus: String) : BaseException(
     errorCode = ErrorCode.INVALID_ORDER_STATUS,
     message = "Invalid order status for payment. Order id: $orderId, Status: $currentStatus"
 )
 
-class AlreadyPaidException(orderId: Long) : BaseException(
+class AlreadyPaidException(orderId: UUID) : BaseException(
     errorCode = ErrorCode.ALREADY_PAID,
     message = "Order already paid. Order id: $orderId"
 )
 
+class AlreadyCancelledException(
+    paymentId: UUID
+) : RuntimeException("Payment already cancelled: paymentId=$paymentId")
+
+class InvalidPaymentStatusException(
+    paymentId: UUID,
+    status: String
+) : RuntimeException("Invalid payment status for cancellation: paymentId=$paymentId, status=$status")
+
 // Data Transmission related
-class TransmissionNotFoundException(transmissionId: Long) : BaseException(
+class TransmissionNotFoundException(transmissionId: UUID) : BaseException(
     errorCode = ErrorCode.TRANSMISSION_NOT_FOUND,
     message = "Data transmission not found with id: $transmissionId"
 )
 
-class AlreadySuccessException(transmissionId: Long) : BaseException(
+class AlreadySuccessException(transmissionId: UUID) : BaseException(
     errorCode = ErrorCode.ALREADY_SUCCESS,
     message = "Transmission already successful. Transmission id: $transmissionId"
 )

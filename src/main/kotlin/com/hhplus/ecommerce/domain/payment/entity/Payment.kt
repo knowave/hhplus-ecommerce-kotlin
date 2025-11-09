@@ -37,7 +37,7 @@ class Payment(
 
     @Enumerated(EnumType.STRING)
     @Column(nullable = false, length = 20)
-    val status: PaymentStatus,
+    var status: PaymentStatus,
 
     @Column(nullable = false)
     val paidAt: LocalDateTime
