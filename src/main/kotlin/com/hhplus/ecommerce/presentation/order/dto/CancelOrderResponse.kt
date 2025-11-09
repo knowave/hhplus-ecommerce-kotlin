@@ -1,12 +1,13 @@
 package com.hhplus.ecommerce.presentation.order.dto
 
 import com.hhplus.ecommerce.application.order.dto.*
+import java.util.UUID
 
 /**
  * 주문 취소 응답 DTO
  */
 data class CancelOrderResponse(
-    val orderId: Long,
+    val orderId: UUID,
     val status: String,
     val cancelledAt: String,
     val refund: RefundInfo
@@ -38,7 +39,7 @@ data class RefundInfo(
 }
 
 data class RestoredStockItem(
-    val productId: Long,
+    val productId: UUID,
     val quantity: Int
 ) {
     companion object {
@@ -52,7 +53,7 @@ data class RestoredStockItem(
 }
 
 data class RestoredCouponInfo(
-    val couponId: Long,
+    val couponId: UUID,
     val status: String
 ) {
     companion object {

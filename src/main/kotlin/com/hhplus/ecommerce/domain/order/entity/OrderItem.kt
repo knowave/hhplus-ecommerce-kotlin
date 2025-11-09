@@ -10,6 +10,9 @@ class OrderItem(
     @Column(nullable = false, columnDefinition = "BINARY(16)")
     val productId: UUID,
 
+    @Column(nullable = false, columnDefinition = "BINARY(16)")
+    val userId: UUID,
+
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "order_id", nullable = false)
     val order: Order,

@@ -13,7 +13,7 @@ import com.hhplus.ecommerce.common.lock.LockManager
 import com.hhplus.ecommerce.domain.coupon.repository.CouponRepository
 import com.hhplus.ecommerce.infrastructure.coupon.CouponRepositoryImpl
 import com.hhplus.ecommerce.domain.coupon.repository.CouponStatus
-import com.hhplus.ecommerce.domain.order.OrderRepository
+import com.hhplus.ecommerce.domain.order.repository.OrderRepository
 import com.hhplus.ecommerce.infrastructure.order.OrderRepositoryImpl
 import com.hhplus.ecommerce.domain.product.entity.ProductCategory
 import com.hhplus.ecommerce.domain.product.ProductRepository

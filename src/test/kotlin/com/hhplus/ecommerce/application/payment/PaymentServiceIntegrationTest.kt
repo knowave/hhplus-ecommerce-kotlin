@@ -14,7 +14,7 @@ import com.hhplus.ecommerce.common.exception.*
 import com.hhplus.ecommerce.common.lock.LockManager
 import com.hhplus.ecommerce.domain.coupon.repository.CouponRepository
 import com.hhplus.ecommerce.infrastructure.coupon.CouponRepositoryImpl
-import com.hhplus.ecommerce.domain.order.OrderRepository
+import com.hhplus.ecommerce.domain.order.repository.OrderRepository
 import com.hhplus.ecommerce.infrastructure.order.OrderRepositoryImpl
 import com.hhplus.ecommerce.domain.payment.PaymentRepository
 import com.hhplus.ecommerce.domain.payment.entity.TransmissionStatus
