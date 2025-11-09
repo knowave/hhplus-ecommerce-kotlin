@@ -6,7 +6,7 @@ import com.hhplus.ecommerce.application.product.ProductService
 import com.hhplus.ecommerce.application.user.UserService
 import com.hhplus.ecommerce.common.exception.*
 import com.hhplus.ecommerce.common.lock.LockManager
-import com.hhplus.ecommerce.domain.payment.PaymentRepository
+import com.hhplus.ecommerce.domain.payment.repository.PaymentRepository
 import com.hhplus.ecommerce.domain.order.entity.Order
 import com.hhplus.ecommerce.domain.order.entity.OrderItem
 import com.hhplus.ecommerce.domain.order.entity.OrderStatus

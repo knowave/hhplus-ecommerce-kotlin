@@ -16,7 +16,7 @@ import com.hhplus.ecommerce.domain.coupon.repository.CouponRepository
 import com.hhplus.ecommerce.infrastructure.coupon.CouponRepositoryImpl
 import com.hhplus.ecommerce.domain.order.repository.OrderRepository
 import com.hhplus.ecommerce.infrastructure.order.OrderRepositoryImpl
-import com.hhplus.ecommerce.domain.payment.PaymentRepository
+import com.hhplus.ecommerce.domain.payment.repository.PaymentRepository
 import com.hhplus.ecommerce.domain.payment.entity.TransmissionStatus
 import com.hhplus.ecommerce.infrastructure.payment.PaymentRepositoryImpl
 import com.hhplus.ecommerce.domain.product.ProductRepository

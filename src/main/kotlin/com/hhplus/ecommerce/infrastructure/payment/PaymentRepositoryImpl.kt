@@ -2,7 +2,7 @@ package com.hhplus.ecommerce.infrastructure.payment
 
 import com.hhplus.ecommerce.domain.payment.entity.DataTransmission
 import com.hhplus.ecommerce.domain.payment.entity.Payment
-import com.hhplus.ecommerce.domain.payment.PaymentRepository
+import com.hhplus.ecommerce.domain.payment.repository.PaymentRepository
 import org.springframework.stereotype.Repository
 import java.util.UUID
 

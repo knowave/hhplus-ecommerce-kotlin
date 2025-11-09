@@ -1,4 +1,4 @@
-package com.hhplus.ecommerce.domain.payment
+package com.hhplus.ecommerce.domain.payment.repository
 
 import com.hhplus.ecommerce.domain.payment.entity.DataTransmission
 import com.hhplus.ecommerce.domain.payment.entity.Payment
