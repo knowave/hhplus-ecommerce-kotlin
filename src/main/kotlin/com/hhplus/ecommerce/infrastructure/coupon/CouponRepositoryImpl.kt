@@ -1,7 +1,7 @@
 package com.hhplus.ecommerce.infrastructure.coupon
 
 import com.hhplus.ecommerce.domain.coupon.entity.Coupon
-import com.hhplus.ecommerce.domain.coupon.CouponRepository
+import com.hhplus.ecommerce.domain.coupon.repository.CouponRepository
 import com.hhplus.ecommerce.domain.coupon.entity.UserCoupon
 import org.springframework.stereotype.Repository
 import java.time.LocalDateTime

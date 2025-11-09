@@ -1,11 +1,9 @@
 package com.hhplus.ecommerce.infrastructure.cart
 
 import com.hhplus.ecommerce.domain.cart.entity.CartItem
-import com.hhplus.ecommerce.domain.cart.CartRepository
+import com.hhplus.ecommerce.domain.cart.repository.CartRepository
 import org.springframework.stereotype.Repository
-import java.time.LocalDateTime
 import java.util.UUID
-import kotlin.inc
 
 @Repository
 class CartRepositoryImpl : CartRepository {

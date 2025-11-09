@@ -1,4 +1,4 @@
-package com.hhplus.ecommerce.domain.coupon
+package com.hhplus.ecommerce.domain.coupon.repository
 
 import com.hhplus.ecommerce.domain.coupon.entity.Coupon
 import com.hhplus.ecommerce.domain.coupon.entity.UserCoupon

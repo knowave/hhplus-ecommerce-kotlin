@@ -1,24 +1,25 @@
 package com.hhplus.ecommerce.application.coupon
 
 import com.hhplus.ecommerce.application.coupon.dto.*
-import com.hhplus.ecommerce.domain.coupon.CouponStatus
+import com.hhplus.ecommerce.domain.coupon.repository.CouponStatus
 import com.hhplus.ecommerce.domain.coupon.entity.*
+import java.util.UUID
 
 
 interface CouponService {
-    fun issueCoupon(couponId: Long, request: IssueCouponCommand): IssueCouponResult
+    fun issueCoupon(couponId: UUID, request: IssueCouponCommand): IssueCouponResult
 
     fun getAvailableCoupons(): AvailableCouponItemResult
 
-    fun getCouponDetail(couponId: Long): CouponDetailResult
+    fun getCouponDetail(couponId: UUID): CouponDetailResult
 
-    fun getUserCoupons(userId: Long, status: CouponStatus?): UserCouponListResult
+    fun getUserCoupons(userId: UUID, status: CouponStatus?): UserCouponListResult
 
-    fun getUserCoupon(userId: Long, userCouponId: Long): UserCouponResult
+    fun getUserCoupon(userId: UUID, userCouponId: UUID): UserCouponResult
 
-    fun findCouponById(id: Long): Coupon
+    fun findCouponById(id: UUID): Coupon
 
-    fun findUserCoupon(userId: Long, couponId: Long): UserCoupon
+    fun findUserCoupon(userId: UUID, couponId: UUID): UserCoupon
 
     fun updateUserCoupon(userCoupon: UserCoupon): UserCoupon
 }

@@ -129,7 +129,7 @@ class AlreadySuccessException(transmissionId: Long) : BaseException(
 )
 
 // Coupon related
-class CouponSoldOutException(couponId: Long) : BaseException(
+class CouponSoldOutException(couponId: UUID) : BaseException(
     errorCode = ErrorCode.COUPON_SOLD_OUT,
     message = "Coupon sold out. Coupon id: $couponId"
 )
@@ -144,22 +144,22 @@ class ExpiredCouponException(couponId: UUID) : BaseException(
     message = "Coupon expired. Coupon id: $couponId"
 )
 
-class AlreadyUsedCouponException(couponId: Long) : BaseException(
+class AlreadyUsedCouponException(couponId: UUID) : BaseException(
     errorCode = ErrorCode.ALREADY_USED_COUPON,
     message = "Coupon already used. Coupon id: $couponId"
 )
 
-class CouponNotFoundException(couponId: Long) : BaseException(
+class CouponNotFoundException(couponId: UUID) : BaseException(
     errorCode = ErrorCode.COUPON_NOT_FOUND,
     message = "Coupon not found with id: $couponId"
 )
 
-class CouponAlreadyIssuedException(userId: Long, couponId: Long) : BaseException(
+class CouponAlreadyIssuedException(userId: UUID, couponId: UUID) : BaseException(
     errorCode = ErrorCode.COUPON_ALREADY_ISSUED,
     message = "User already has this coupon. User id: $userId, Coupon id: $couponId"
 )
 
-class UserCouponNotFoundException(userId: Long, userCouponId: Long) : BaseException(
+class UserCouponNotFoundException(userId: UUID, userCouponId: UUID) : BaseException(
     errorCode = ErrorCode.USER_COUPON_NOT_FOUND,
     message = "User Coupon Not found userId: $userId, userCouponId: $userCouponId"
 )

@@ -1,4 +1,4 @@
-package com.hhplus.ecommerce.domain.cart
+package com.hhplus.ecommerce.domain.cart.repository
 
 import com.hhplus.ecommerce.domain.cart.entity.CartItem
 import java.util.UUID

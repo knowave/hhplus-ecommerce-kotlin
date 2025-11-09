@@ -1,6 +1,6 @@
 package com.hhplus.ecommerce.infrastructure.coupon
 
-import com.hhplus.ecommerce.domain.coupon.CouponJpaRepository
+import com.hhplus.ecommerce.domain.coupon.repository.CouponJpaRepository
 import com.hhplus.ecommerce.domain.coupon.entity.Coupon
 import org.springframework.boot.CommandLineRunner
 import org.springframework.context.annotation.Bean

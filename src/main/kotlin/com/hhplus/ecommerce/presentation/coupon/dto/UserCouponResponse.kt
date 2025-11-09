@@ -1,7 +1,7 @@
 package com.hhplus.ecommerce.presentation.coupon.dto
 
 import com.hhplus.ecommerce.application.coupon.dto.UserCouponResult
-import com.hhplus.ecommerce.domain.coupon.CouponStatus
+import com.hhplus.ecommerce.domain.coupon.repository.CouponStatus
 
 data class UserCouponResponse(
     val id: Long,
