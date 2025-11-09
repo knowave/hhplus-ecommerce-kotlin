@@ -12,7 +12,7 @@ import com.hhplus.ecommerce.application.user.UserService
 import com.hhplus.ecommerce.application.user.UserServiceImpl
 import com.hhplus.ecommerce.common.exception.*
 import com.hhplus.ecommerce.common.lock.LockManager
-import com.hhplus.ecommerce.domain.coupon.CouponRepository
+import com.hhplus.ecommerce.domain.coupon.repository.CouponRepository
 import com.hhplus.ecommerce.infrastructure.coupon.CouponRepositoryImpl
 import com.hhplus.ecommerce.domain.order.OrderRepository
 import com.hhplus.ecommerce.infrastructure.order.OrderRepositoryImpl

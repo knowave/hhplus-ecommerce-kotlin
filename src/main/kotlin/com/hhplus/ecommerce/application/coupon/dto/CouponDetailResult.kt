@@ -1,7 +1,9 @@
 package com.hhplus.ecommerce.application.coupon.dto
 
+import java.util.UUID
+
 data class CouponDetailResult(
-    val id: Long,
+    val id: UUID,
     val couponName: String,
     val description: String,
     val discountRate: Int,

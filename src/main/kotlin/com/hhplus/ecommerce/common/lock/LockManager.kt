@@ -2,6 +2,7 @@ package com.hhplus.ecommerce.common.lock
 
 import org.slf4j.LoggerFactory
 import org.springframework.stereotype.Component
+import java.util.UUID
 import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.locks.ReentrantLock
 
@@ -24,16 +25,16 @@ class LockManager {
     private val logger = LoggerFactory.getLogger(LockManager::class.java)
 
     // 도메인별 Lock 저장소
-    private val userLocks = ConcurrentHashMap<Long, ReentrantLock>()
-    private val productLocks = ConcurrentHashMap<Long, ReentrantLock>()
-    private val couponLocks = ConcurrentHashMap<Long, ReentrantLock>()
+    private val userLocks = ConcurrentHashMap<UUID, ReentrantLock>()
+    private val productLocks = ConcurrentHashMap<UUID, ReentrantLock>()
+    private val couponLocks = ConcurrentHashMap<UUID, ReentrantLock>()
 
     /**
      * 사용자 Lock을 획득하고 작업을 실행합니다.
      *
      * 주로 잔액 차감/환불 시 사용됩니다.
      */
-    fun <T> executeWithUserLock(userId: Long, action: () -> T): T {
+    fun <T> executeWithUserLock(userId: UUID, action: () -> T): T {
         val lock = userLocks.computeIfAbsent(userId) { ReentrantLock() }
         logger.debug("Acquiring user lock for userId: {}", userId)
         lock.lock()
@@ -51,7 +52,7 @@ class LockManager {
      *
      * 주로 재고 차감/복원 시 사용됩니다.
      */
-    fun <T> executeWithProductLock(productId: Long, action: () -> T): T {
+    fun <T> executeWithProductLock(productId: UUID, action: () -> T): T {
         val lock = productLocks.computeIfAbsent(productId) { ReentrantLock() }
         logger.debug("Acquiring product lock for productId: {}", productId)
         lock.lock()
@@ -69,7 +70,7 @@ class LockManager {
      *
      * 주로 쿠폰 발급/사용 시 사용됩니다.
      */
-    fun <T> executeWithCouponLock(couponId: Long, action: () -> T): T {
+    fun <T> executeWithCouponLock(couponId: UUID, action: () -> T): T {
         val lock = couponLocks.computeIfAbsent(couponId) { ReentrantLock() }
         logger.debug("Acquiring coupon lock for couponId: {}", couponId)
         lock.lock()
@@ -87,7 +88,7 @@ class LockManager {
      *
      * 데드락 방지를 위해 productId를 정렬하여 항상 동일한 순서로 Lock을 획득합니다.
      */
-    fun <T> executeWithProductLocks(productIds: List<Long>, action: () -> T): T {
+    fun <T> executeWithProductLocks(productIds: List<UUID>, action: () -> T): T {
         // 데드락 방지: productId를 정렬하여 항상 동일한 순서로 Lock 획득
         val sortedProductIds = productIds.distinct().sorted()
         val locks = sortedProductIds.map { productId ->
@@ -115,9 +116,9 @@ class LockManager {
      * 이 메서드는 주문+결제와 같은 복합 작업에서 사용됩니다.
      */
     fun <T> executeWithMultipleLocks(
-        couponId: Long? = null,
-        productIds: List<Long> = emptyList(),
-        userId: Long? = null,
+        couponId: UUID? = null,
+        productIds: List<UUID> = emptyList(),
+        userId: UUID? = null,
         action: () -> T
     ): T {
         // 1. Coupon Lock (선택적)
@@ -135,8 +136,8 @@ class LockManager {
      * Product → User Lock 순서로 실행 (내부 헬퍼 메서드)
      */
     private fun <T> executeLockChain(
-        productIds: List<Long>,
-        userId: Long?,
+        productIds: List<UUID>,
+        userId: UUID?,
         action: () -> T
     ): T {
         // 2. Product Locks (선택적)
@@ -153,7 +154,7 @@ class LockManager {
     /**
      * User Lock 실행 (내부 헬퍼 메서드)
      */
-    private fun <T> executeUserLockOrAction(userId: Long?, action: () -> T): T {
+    private fun <T> executeUserLockOrAction(userId: UUID?, action: () -> T): T {
         // 3. User Lock (선택적)
         if (userId != null) {
             return executeWithUserLock(userId, action)

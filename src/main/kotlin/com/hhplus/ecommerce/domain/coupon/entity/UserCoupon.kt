@@ -3,7 +3,7 @@ package com.hhplus.ecommerce.domain.coupon.entity
 import com.hhplus.ecommerce.common.entity.BaseEntity
 import com.hhplus.ecommerce.common.exception.ExpiredCouponException
 import com.hhplus.ecommerce.common.exception.InvalidCouponException
-import com.hhplus.ecommerce.domain.coupon.CouponStatus
+import com.hhplus.ecommerce.domain.coupon.repository.CouponStatus
 import jakarta.persistence.*
 import java.time.LocalDateTime
 import java.util.*

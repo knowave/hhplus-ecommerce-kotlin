@@ -12,7 +12,7 @@ import com.hhplus.ecommerce.presentation.coupon.dto.*
 import com.hhplus.ecommerce.presentation.user.dto.CreateUserRequest
 import com.hhplus.ecommerce.domain.user.entity.User
 import com.hhplus.ecommerce.domain.user.UserRepository
-import com.hhplus.ecommerce.domain.coupon.CouponStatus
+import com.hhplus.ecommerce.domain.coupon.repository.CouponStatus
 
 @SpringBootTest(webEnvironment = SpringBootTest.WebEnvironment.RANDOM_PORT)
 class CouponE2ETest(

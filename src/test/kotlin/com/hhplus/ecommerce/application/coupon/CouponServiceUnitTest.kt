@@ -4,8 +4,8 @@ import com.hhplus.ecommerce.application.coupon.dto.*
 import com.hhplus.ecommerce.common.exception.CouponAlreadyIssuedException
 import com.hhplus.ecommerce.common.exception.CouponSoldOutException
 import com.hhplus.ecommerce.common.exception.InvalidCouponDateException
-import com.hhplus.ecommerce.domain.coupon.CouponRepository
-import com.hhplus.ecommerce.domain.coupon.CouponStatus
+import com.hhplus.ecommerce.domain.coupon.repository.CouponRepository
+import com.hhplus.ecommerce.domain.coupon.repository.CouponStatus
 import com.hhplus.ecommerce.domain.coupon.entity.Coupon
 import com.hhplus.ecommerce.domain.coupon.entity.UserCoupon
 import io.kotest.assertions.throwables.shouldThrow
