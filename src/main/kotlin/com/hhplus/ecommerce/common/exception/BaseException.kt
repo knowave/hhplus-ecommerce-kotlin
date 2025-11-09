@@ -31,7 +31,7 @@ class InsufficientStockException(
 )
 
 // Cart related
-class CartItemNotFoundException(cartItemId: Long) : BaseException(
+class CartItemNotFoundException(cartItemId: UUID) : BaseException(
     errorCode = ErrorCode.CART_ITEM_NOT_FOUND,
     message = "Cart item not found with id: $cartItemId"
 )

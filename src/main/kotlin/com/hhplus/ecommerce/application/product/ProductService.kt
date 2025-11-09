@@ -2,6 +2,7 @@ package com.hhplus.ecommerce.application.product
 
 import com.hhplus.ecommerce.application.product.dto.*
 import com.hhplus.ecommerce.domain.product.entity.Product
+import java.util.UUID
 
 interface ProductService {
 
@@ -9,7 +10,7 @@ interface ProductService {
 
     fun getTopProducts(days: Int, limit: Int): TopProductsResult
 
-    fun findProductById(id: Long): Product
+    fun findProductById(id: UUID): Product
 
     fun updateProduct(product: Product): Product
 }

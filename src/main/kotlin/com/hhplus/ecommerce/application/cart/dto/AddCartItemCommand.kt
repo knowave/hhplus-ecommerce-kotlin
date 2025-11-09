@@ -1,9 +1,10 @@
 package com.hhplus.ecommerce.application.cart.dto
 
 import com.hhplus.ecommerce.presentation.cart.dto.AddCartItemRequest
+import java.util.UUID
 
 data class AddCartItemCommand(
-    val productId: Long,
+    val productId: UUID,
     val quantity: Int
 ) {
     companion object {
