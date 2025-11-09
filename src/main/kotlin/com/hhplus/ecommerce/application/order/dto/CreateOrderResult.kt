@@ -1,8 +1,10 @@
 package com.hhplus.ecommerce.application.order.dto
 
+import java.util.UUID
+
 data class CreateOrderResult(
-    val orderId: Long,
-    val userId: Long,
+    val orderId: UUID,
+    val userId: UUID,
     val orderNumber: String,
     val items: List<OrderItemResult>,
     val pricing: PricingInfoDto,
@@ -11,8 +13,8 @@ data class CreateOrderResult(
 )
 
 data class OrderItemResult(
-    val orderItemId: Long,
-    val productId: Long,
+    val orderItemId: UUID,
+    val productId: UUID,
     val productName: String,
     val quantity: Int,
     val unitPrice: Long,
@@ -27,7 +29,7 @@ data class PricingInfoDto(
 )
 
 data class AppliedCouponInfoDto(
-    val couponId: Long,
+    val couponId: UUID,
     val couponName: String,
     val discountRate: Int
 )

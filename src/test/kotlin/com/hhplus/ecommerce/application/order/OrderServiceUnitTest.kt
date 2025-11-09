@@ -15,7 +15,7 @@ import com.hhplus.ecommerce.common.exception.ProductNotFoundException
 import com.hhplus.ecommerce.common.exception.UserNotFoundException
 import com.hhplus.ecommerce.common.lock.LockManager
 import com.hhplus.ecommerce.domain.coupon.repository.CouponStatus
-import com.hhplus.ecommerce.domain.order.OrderRepository
+import com.hhplus.ecommerce.domain.order.repository.OrderRepository
 import com.hhplus.ecommerce.domain.product.entity.ProductCategory
 import com.hhplus.ecommerce.domain.coupon.entity.Coupon
 import com.hhplus.ecommerce.domain.coupon.entity.UserCoupon

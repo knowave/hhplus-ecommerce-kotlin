@@ -54,7 +54,7 @@ class ForbiddenException(message: String) : BaseException(
 )
 
 // Order related
-class OrderNotFoundException(orderId: Long) : BaseException(
+class OrderNotFoundException(orderId: UUID) : BaseException(
     errorCode = ErrorCode.ORDER_NOT_FOUND,
     message = "Order not found with id: $orderId"
 )

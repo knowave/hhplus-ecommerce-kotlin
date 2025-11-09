@@ -1,4 +1,4 @@
-package com.hhplus.ecommerce.domain.order
+package com.hhplus.ecommerce.domain.order.repository
 
 import com.hhplus.ecommerce.domain.order.entity.Order
 import com.hhplus.ecommerce.domain.order.entity.OrderStatus
