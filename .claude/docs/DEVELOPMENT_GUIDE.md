@@ -8,7 +8,9 @@
 7. GlobalCustomException을 사용하고 error message는 영어로 한다.
 8. `application.yml` 파일에서 default path를 `/api` 로 설정되어 있어서 API 기본 경로에 `/api`를 붙이지 않아도 됨. 
 9. 각 도메인의 pk는 `domainId`가 아니라 `id`로 정의.
-10. 실제 DB를 사용하지 않고 인메모리 DB를 사용함.
+10. JPA를 사용해서 MySQL DB를 사용함.
+11. 각 테이블에 공통적으로 사용될 `id`, `createdAt`, `updatedAt`은 `BaseEntity`를 상속받아서 사용.
+12. 조회가 자주 일어나는 테이블은 index를 사용하여 성능 개선.
 
 ## 테스트 코드
 1. 테스트 코드는 `kotest`로 진행.

@@ -2,9 +2,10 @@ package com.hhplus.ecommerce.domain.coupon
 
 import com.hhplus.ecommerce.domain.coupon.entity.Coupon
 import com.hhplus.ecommerce.domain.coupon.entity.UserCoupon
+import java.util.UUID
 
 interface CouponRepository {
-    fun findById(couponId: Long): Coupon?
+    fun findById(couponId: UUID): Coupon?
 
     fun findAll(): List<Coupon>
 
@@ -12,15 +13,13 @@ interface CouponRepository {
 
     fun save(coupon: Coupon): Coupon
 
-    fun findUserCoupon(userId: Long, couponId: Long): UserCoupon?
+    fun findUserCoupon(userId: UUID, couponId: UUID): UserCoupon?
 
     fun saveUserCoupon(userCoupon: UserCoupon): UserCoupon
 
-    fun generateUserCouponId(): Long
+    fun findUserCouponsByUserId(userId: UUID): List<UserCoupon>
 
-    fun findUserCouponsByUserId(userId: Long): List<UserCoupon>
-
-    fun findUserCouponByIdAndUserId(id: Long, userId: Long): UserCoupon?
+    fun findUserCouponByIdAndUserId(id: UUID, userId: UUID): UserCoupon?
 }
 
 enum class CouponStatus(val description: String) {

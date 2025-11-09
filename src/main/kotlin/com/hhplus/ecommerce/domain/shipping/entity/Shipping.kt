@@ -1,24 +1,41 @@
 package com.hhplus.ecommerce.domain.shipping.entity
 
+import com.hhplus.ecommerce.common.entity.BaseEntity
+import jakarta.persistence.*
 import java.time.LocalDateTime
+import java.util.*
 
-/**
- * 배송 도메인 모델
- */
-data class Shipping(
-    val id: Long,
-    val orderId: Long,
+@Entity
+@Table(name = "shipping")
+class Shipping(
+    @Column(nullable = false, columnDefinition = "BINARY(16)")
+    val orderId: UUID,
+
+    @Column(nullable = false, length = 100)
     val carrier: String,
+
+    @Column(nullable = false, length = 100)
     val trackingNumber: String,
+
+    @Column
     val shippingStartAt: LocalDateTime?,
+
+    @Column(nullable = false)
     val estimatedArrivalAt: LocalDateTime,
+
+    @Column
     val deliveredAt: LocalDateTime?,
+
+    @Enumerated(EnumType.STRING)
+    @Column(nullable = false, length = 20)
     var status: ShippingStatus,
+
+    @Column(nullable = false)
     val isDelayed: Boolean = false,
-    val isExpired: Boolean = false,
-    val createdAt: LocalDateTime,
-    var updatedAt: LocalDateTime
-)
+
+    @Column(nullable = false)
+    val isExpired: Boolean = false
+) : BaseEntity()
 
 /**
  * 배송 상태

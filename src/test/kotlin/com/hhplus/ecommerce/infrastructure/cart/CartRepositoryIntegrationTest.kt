@@ -1,7 +1,6 @@
 package com.hhplus.ecommerce.infrastructure.cart
 
 import com.hhplus.ecommerce.domain.cart.entity.CartItem
-import com.hhplus.ecommerce.domain.cart.CartRepository
 import io.kotest.core.spec.style.DescribeSpec
 import io.kotest.matchers.collections.shouldBeEmpty
 import io.kotest.matchers.collections.shouldContainExactlyInAnyOrder

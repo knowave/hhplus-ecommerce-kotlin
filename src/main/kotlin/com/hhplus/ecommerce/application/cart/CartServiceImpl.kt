@@ -4,7 +4,6 @@ import com.hhplus.ecommerce.application.cart.dto.*
 import com.hhplus.ecommerce.application.product.ProductService
 import com.hhplus.ecommerce.application.user.UserService
 import com.hhplus.ecommerce.common.exception.*
-import com.hhplus.ecommerce.domain.cart.CartRepository
 import com.hhplus.ecommerce.domain.cart.entity.CartItem
 import org.springframework.stereotype.Service
 import java.time.LocalDateTime

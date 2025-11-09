@@ -31,13 +31,11 @@ class UserServiceImpl(
         val newBalance = previousBalance + amount
         validateBalanceLimit(newBalance)
 
-        // 잔액 업데이트
-        val chargedAt = LocalDateTime.now().format(DATE_FORMATTER)
+        // 잔액 업데이트 (updatedAt은 JPA Auditing이 자동으로 설정)
         user.balance = newBalance
-        user.updatedAt = chargedAt
 
         // Repository에 저장
-        userRepository.save(user)
+        val savedUser = userRepository.save(user)
 
         // 응답 생성
         return ChargeBalanceResult(
@@ -45,7 +43,7 @@ class UserServiceImpl(
             previousBalance = previousBalance,
             chargedAmount = amount,
             currentBalance = newBalance,
-            chargedAt = chargedAt
+            chargedAt = savedUser.updatedAt!!.format(DATE_FORMATTER)
         )
     }
 
@@ -57,15 +55,9 @@ class UserServiceImpl(
         // 초기 잔액 유효성 검증
         validateChargeAmount(dto.balance)
 
-        // 현재 시간
-        val now = LocalDateTime.now().format(DATE_FORMATTER)
-
-        // 새 사용자 생성
+        // 새 사용자 생성 (id, createdAt, updatedAt은 JPA가 자동으로 설정)
         val newUser = User(
-            id = userRepository.generateId(),
-            balance = dto.balance,
-            createdAt = now,
-            updatedAt = now
+            balance = dto.balance
         )
 
         // Repository에 저장
