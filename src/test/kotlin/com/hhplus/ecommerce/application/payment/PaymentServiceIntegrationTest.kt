@@ -12,7 +12,6 @@ import com.hhplus.ecommerce.application.user.UserService
 import com.hhplus.ecommerce.application.user.UserServiceImpl
 import com.hhplus.ecommerce.common.exception.*
 import com.hhplus.ecommerce.common.lock.LockManager
-import com.hhplus.ecommerce.domain.cart.CartRepository
 import com.hhplus.ecommerce.domain.coupon.CouponRepository
 import com.hhplus.ecommerce.infrastructure.coupon.CouponRepositoryImpl
 import com.hhplus.ecommerce.domain.order.OrderRepository
@@ -23,7 +22,6 @@ import com.hhplus.ecommerce.infrastructure.payment.PaymentRepositoryImpl
 import com.hhplus.ecommerce.domain.product.ProductRepository
 import com.hhplus.ecommerce.infrastructure.product.ProductRepositoryImpl
 import com.hhplus.ecommerce.domain.user.UserRepository
-import com.hhplus.ecommerce.infrastructure.cart.CartRepositoryImpl
 import com.hhplus.ecommerce.infrastructure.user.UserRepositoryImpl
 import com.hhplus.ecommerce.application.order.dto.CreateOrderCommand
 import com.hhplus.ecommerce.application.order.dto.OrderItemCommand

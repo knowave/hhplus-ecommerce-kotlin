@@ -6,6 +6,7 @@ import com.hhplus.ecommerce.domain.order.entity.OrderStatus
 import org.springframework.stereotype.Repository
 import java.time.LocalDate
 import java.time.format.DateTimeFormatter
+import java.util.UUID
 
 /**
  * 주문 인메모리 Repository 구현체
@@ -15,44 +16,40 @@ import java.time.format.DateTimeFormatter
  */
 @Repository
 class OrderRepositoryImpl : OrderRepository {
+    // Mock 데이터 저장소
+    private val orders: MutableMap<UUID, Order> = mutableMapOf()
 
-    // ID 자동 생성을 위한 카운터
-    private var nextOrderId: Long = 1001L
-    private var nextItemId: Long = 1L
+    private fun assignId(order: Order) {
+        if (order.id == null) {
+            val idField = order.javaClass.superclass.getDeclaredField("id")
+            idField.isAccessible = true
+            idField.set(order, java.util.UUID.randomUUID())
+        }
+    }
 
-    // Mock 데이터 저장소: orderId -> Order
-    private val orders: MutableMap<Long, Order> = mutableMapOf()
-
-    override fun findById(orderId: Long): Order? {
+    override fun findById(orderId: UUID): Order? {
         return orders[orderId]
     }
 
-    override fun findByUserId(userId: Long): List<Order> {
+    override fun findByUserId(userId: UUID): List<Order> {
         return orders.values
             .filter { it.userId == userId }
             .sortedByDescending { it.createdAt }
     }
 
-    override fun findByUserIdAndStatus(userId: Long, status: OrderStatus): List<Order> {
+    override fun findByUserIdAndStatus(userId: UUID, status: OrderStatus): List<Order> {
         return orders.values
             .filter { it.userId == userId && it.status == status }
             .sortedByDescending { it.createdAt }
     }
 
     override fun save(order: Order): Order {
-        orders[order.id] = order
+        assignId(order)
+        orders[order.id!!] = order
         return order
     }
 
-    override fun generateId(): Long {
-        return nextOrderId++
-    }
-
-    override fun generateItemId(): Long {
-        return nextItemId++
-    }
-
-    override fun generateOrderNumber(orderId: Long): String {
+    override fun generateOrderNumber(orderId: UUID): String {
         val dateStr = LocalDate.now().format(DateTimeFormatter.ofPattern("yyyyMMdd"))
         return "ORD-$dateStr-$orderId"
     }

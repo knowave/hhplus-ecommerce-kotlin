@@ -10,7 +10,6 @@ import com.hhplus.ecommerce.application.user.UserService
 import com.hhplus.ecommerce.application.user.UserServiceImpl
 import com.hhplus.ecommerce.common.exception.InsufficientStockException
 import com.hhplus.ecommerce.common.lock.LockManager
-import com.hhplus.ecommerce.domain.cart.CartRepository
 import com.hhplus.ecommerce.domain.coupon.CouponRepository
 import com.hhplus.ecommerce.infrastructure.coupon.CouponRepositoryImpl
 import com.hhplus.ecommerce.domain.coupon.CouponStatus
@@ -25,7 +24,6 @@ import com.hhplus.ecommerce.domain.coupon.entity.Coupon
 import com.hhplus.ecommerce.domain.coupon.entity.UserCoupon
 import com.hhplus.ecommerce.domain.product.entity.Product
 import com.hhplus.ecommerce.domain.user.entity.User
-import com.hhplus.ecommerce.infrastructure.cart.CartRepositoryImpl
 import com.hhplus.ecommerce.application.order.dto.*
 import io.kotest.assertions.throwables.shouldThrow
 import io.kotest.core.spec.style.DescribeSpec

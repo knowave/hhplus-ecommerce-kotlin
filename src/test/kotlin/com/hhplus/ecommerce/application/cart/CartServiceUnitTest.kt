@@ -5,7 +5,6 @@ import com.hhplus.ecommerce.application.cart.dto.UpdateCartItemCommand
 import com.hhplus.ecommerce.application.product.ProductService
 import com.hhplus.ecommerce.application.user.UserService
 import com.hhplus.ecommerce.common.exception.*
-import com.hhplus.ecommerce.domain.cart.CartRepository
 import com.hhplus.ecommerce.domain.product.entity.ProductCategory
 import com.hhplus.ecommerce.domain.cart.entity.CartItem
 import com.hhplus.ecommerce.domain.product.entity.Product

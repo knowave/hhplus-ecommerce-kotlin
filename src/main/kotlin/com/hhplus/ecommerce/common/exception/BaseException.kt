@@ -2,6 +2,7 @@ package com.hhplus.ecommerce.common.exception
 
 import com.hhplus.ecommerce.domain.order.entity.OrderStatus
 import java.math.BigDecimal
+import java.util.*
 
 open class BaseException(
     val errorCode: ErrorCode,
@@ -16,7 +17,7 @@ class ProductNotFoundException(productId: Long) : BaseException(
 )
 
 class InsufficientStockException(
-    productId: Long,
+    productId: UUID,
     requested: Int,
     available: Int
 ) : BaseException(
@@ -138,7 +139,7 @@ class InvalidCouponException(reason: String) : BaseException(
     message = "Invalid coupon. Reason: $reason"
 )
 
-class ExpiredCouponException(couponId: Long) : BaseException(
+class ExpiredCouponException(couponId: UUID) : BaseException(
     errorCode = ErrorCode.EXPIRED_COUPON,
     message = "Coupon expired. Coupon id: $couponId"
 )

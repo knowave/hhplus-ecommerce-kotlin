@@ -1,31 +1,62 @@
 package com.hhplus.ecommerce.domain.order.entity
 
+import com.hhplus.ecommerce.common.entity.BaseEntity
 import com.hhplus.ecommerce.common.exception.OrderAlreadyCancelledException
 import com.hhplus.ecommerce.common.exception.OrderNotRefundableException
 import com.hhplus.ecommerce.common.exception.PaymentFailedException
+import jakarta.persistence.*
 import java.time.LocalDateTime
+import java.util.*
 
-/**
- * 주문 도메인 모델
- *
- * 비즈니스 규칙:
- * 1. 주문 생성 시 PENDING 상태로 시작
- * 2. PENDING 상태에서만 PAID 또는 CANCELLED로 전환 가능
- * 3. PAID, CANCELLED 상태는 최종 상태 (변경 불가)
- */
-data class Order(
-    val id: Long,
-    val userId: Long,
+@Entity
+@Table(
+    name = "orders", // order table은 SQL 예약어로 인해 orders로 진행
+    indexes = [
+        // 마이페이지: 사용자별 주문 내역 (가장 중요!)
+        Index(name = "idx_order_user_id", columnList = "user_id"),
+
+        // 마이페이지: 최신 주문 순 정렬
+        Index(name = "idx_order_user_created", columnList = "user_id, created_at DESC"),
+
+        // 주문 번호로 조회 (주문 상세, 배송 조회 등)
+        Index(name = "idx_order_number", columnList = "order_number", unique = true),
+
+        // 주문 상태별 필터 (관리자, 통계)
+        Index(name = "idx_order_status", columnList = "status"),
+
+        // 사용자별 상태 필터 (마이페이지에서 "배송 중", "완료" 등 필터)
+        Index(name = "idx_order_user_status", columnList = "user_id, status"),
+
+        // 쿠폰 사용 내역 조회
+        Index(name = "idx_order_coupon", columnList = "applied_coupon_id")
+    ]
+)
+class Order(
+    @Column(nullable = false, columnDefinition = "BINARY(16)")
+    val userId: UUID,
+
+    @Column(nullable = false, unique = true, length = 50)
     val orderNumber: String,
-    val items: List<OrderItem>,
+
+    @OneToMany(mappedBy = "order", cascade = [CascadeType.ALL], orphanRemoval = true, fetch = FetchType.LAZY)
+    val items: MutableList<OrderItem> = mutableListOf(),
+
+    @Column(nullable = false)
     val totalAmount: Long,
+
+    @Column(nullable = false)
     val discountAmount: Long,
+
+    @Column(nullable = false)
     val finalAmount: Long,
-    val appliedCouponId: Long?,
-    var status: OrderStatus,
-    val createdAt: LocalDateTime,
-    var updatedAt: LocalDateTime
-) {
+
+    @Column(columnDefinition = "BINARY(16)")
+    val appliedCouponId: UUID?,
+
+    @Enumerated(EnumType.STRING)
+    @Column(nullable = false, length = 20)
+    var status: OrderStatus
+) : BaseEntity() {
     /**
      * 주문 금액 검증
      */
@@ -36,7 +67,6 @@ data class Order(
         require(finalAmount == totalAmount - discountAmount) {
             "Final amount must equal total amount minus discount amount"
         }
-        require(items.isNotEmpty()) { "Order must have at least one item" }
     }
 
     /**
@@ -48,7 +78,6 @@ data class Order(
             throw PaymentFailedException("Only PENDING orders can be marked as PAID. Current status: $status")
         }
         status = OrderStatus.PAID
-        updatedAt = LocalDateTime.now()
     }
 
     /**
@@ -60,7 +89,6 @@ data class Order(
             throw OrderAlreadyCancelledException(status)
         }
         status = OrderStatus.CANCELLED
-        updatedAt = LocalDateTime.now()
     }
 
     /**
@@ -100,7 +128,6 @@ data class Order(
             throw OrderNotRefundableException(status)
         }
         status = OrderStatus.REFUNDED
-        updatedAt = LocalDateTime.now()
     }
 
     /**

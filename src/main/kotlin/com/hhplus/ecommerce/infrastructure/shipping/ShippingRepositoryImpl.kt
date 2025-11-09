@@ -5,6 +5,7 @@ import com.hhplus.ecommerce.domain.shipping.ShippingRepository
 import com.hhplus.ecommerce.domain.shipping.entity.ShippingStatus
 import org.springframework.stereotype.Repository
 import java.time.LocalDateTime
+import java.util.UUID
 import kotlin.random.Random
 
 /**
@@ -15,41 +16,45 @@ import kotlin.random.Random
  */
 @Repository
 class ShippingRepositoryImpl : ShippingRepository {
-
-    // ID 자동 생성을 위한 카운터
-    private var nextShippingId: Long = 1001L
-
     // Mock 데이터 저장소
-    private val shippings: MutableMap<Long, Shipping> = mutableMapOf()
-    private val orderIdToShippingId: MutableMap<Long, Long> = mutableMapOf()
+    private val shippingList: MutableMap<UUID, Shipping> = mutableMapOf()
+    private val orderIdToShippingId: MutableMap<UUID, UUID> = mutableMapOf()
     private val trackingNumbers: MutableSet<String> = mutableSetOf()
 
     // userId를 매핑하기 위한 임시 저장소 (orderId -> userId)
     // 실제로는 Order를 조회해야 하지만, Mock이므로 간단히 처리
-    private val orderIdToUserId: MutableMap<Long, Long> = mutableMapOf()
+    private val orderIdToUserId: MutableMap<UUID, UUID> = mutableMapOf()
 
-    override fun findById(shippingId: Long): Shipping? {
-        return shippings[shippingId]
+    private fun assignId(shipping: Shipping) {
+        if (shipping.id == null) {
+            val idField = shipping.javaClass.superclass.getDeclaredField("id")
+            idField.isAccessible = true
+            idField.set(shipping, UUID.randomUUID())
+        }
     }
 
-    override fun findByOrderId(orderId: Long): Shipping? {
+    override fun findById(shippingId: UUID): Shipping? {
+        return shippingList[shippingId]
+    }
+
+    override fun findByOrderId(orderId: UUID): Shipping? {
         val shippingId = orderIdToShippingId[orderId] ?: return null
-        return shippings[shippingId]
+        return shippingList[shippingId]
     }
 
-    override fun findByUserId(userId: Long): List<Shipping> {
+    override fun findByUserId(userId: UUID): List<Shipping> {
         val userOrderIds = orderIdToUserId.entries
             .filter { it.value == userId }
             .map { it.key }
             .toSet()
 
-        return shippings.values
+        return shippingList.values
             .filter { it.orderId in userOrderIds }
             .sortedByDescending { it.createdAt }
     }
 
     override fun findByUserIdWithFilters(
-        userId: Long,
+        userId: UUID,
         status: ShippingStatus?,
         carrier: String?,
         from: LocalDateTime?,
@@ -60,7 +65,7 @@ class ShippingRepositoryImpl : ShippingRepository {
             .map { it.key }
             .toSet()
 
-        return shippings.values
+        return shippingList.values
             .filter { shipping ->
                 var matches = shipping.orderId in userOrderIds
 
@@ -73,11 +78,11 @@ class ShippingRepositoryImpl : ShippingRepository {
                 }
 
                 if (from != null) {
-                    matches = matches && shipping.createdAt >= from
+                    matches = matches && shipping.createdAt!! >= from
                 }
 
                 if (to != null) {
-                    matches = matches && shipping.createdAt <= to
+                    matches = matches && shipping.createdAt!! <= to
                 }
 
                 matches
@@ -90,14 +95,11 @@ class ShippingRepositoryImpl : ShippingRepository {
     }
 
     override fun save(shipping: Shipping): Shipping {
-        shippings[shipping.id] = shipping
-        orderIdToShippingId[shipping.orderId] = shipping.id
+        assignId(shipping)
+        shippingList[shipping.id!!] = shipping
+        orderIdToShippingId[shipping.orderId] = shipping.id!!
         trackingNumbers.add(shipping.trackingNumber)
         return shipping
-    }
-
-    override fun generateId(): Long {
-        return nextShippingId++
     }
 
     override fun generateTrackingNumber(): String {
@@ -113,7 +115,7 @@ class ShippingRepositoryImpl : ShippingRepository {
      * Mock 용: orderId와 userId 매핑 저장
      * 실제 구현에서는 Order를 조회하여 userId를 가져옴
      */
-    fun associateOrderWithUser(orderId: Long, userId: Long) {
+    fun associateOrderWithUser(orderId: UUID, userId: UUID) {
         orderIdToUserId[orderId] = userId
     }
 }

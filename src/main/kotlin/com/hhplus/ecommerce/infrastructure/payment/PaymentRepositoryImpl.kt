@@ -4,6 +4,7 @@ import com.hhplus.ecommerce.domain.payment.entity.DataTransmission
 import com.hhplus.ecommerce.domain.payment.entity.Payment
 import com.hhplus.ecommerce.domain.payment.PaymentRepository
 import org.springframework.stereotype.Repository
+import java.util.UUID
 
 /**
  * 결제 인메모리 Repository 구현체
@@ -12,54 +13,59 @@ import org.springframework.stereotype.Repository
  */
 @Repository
 class PaymentRepositoryImpl : PaymentRepository {
-
-    // ID 자동 생성을 위한 카운터
-    private var nextPaymentId: Long = 5001L
-    private var nextTransmissionId: Long = 7001L
-
     // Mock 데이터 저장소
-    private val payments: MutableMap<Long, Payment> = mutableMapOf()
-    private val transmissions: MutableMap<Long, DataTransmission> = mutableMapOf()
+    private val payments: MutableMap<UUID, Payment> = mutableMapOf()
+    private val transmissions: MutableMap<UUID, DataTransmission> = mutableMapOf()
 
     // orderId를 키로 하는 인덱스
-    private val paymentsByOrderId: MutableMap<Long, Long> = mutableMapOf()
-    private val transmissionsByOrderId: MutableMap<Long, Long> = mutableMapOf()
+    private val paymentsByOrderId: MutableMap<UUID, UUID> = mutableMapOf()
+    private val transmissionsByOrderId: MutableMap<UUID, UUID> = mutableMapOf()
 
-    override fun findById(paymentId: Long): Payment? {
+    private fun assignId(payment: Payment) {
+        if (payment.id == null) {
+            val idField = payment.javaClass.superclass.getDeclaredField("id")
+            idField.isAccessible = true
+            idField.set(payment, UUID.randomUUID())
+        }
+    }
+
+    private fun assignTransmissionId(transmission: DataTransmission) {
+        if (transmission.id == null) {
+            val idField = transmission.javaClass.superclass.getDeclaredField("id")
+            idField.isAccessible = true
+            idField.set(transmission, UUID.randomUUID())
+        }
+    }
+
+    override fun findById(paymentId: UUID): Payment? {
         return payments[paymentId]
     }
 
-    override fun findByOrderId(orderId: Long): Payment? {
+    override fun findByOrderId(orderId: UUID): Payment? {
         val paymentId = paymentsByOrderId[orderId] ?: return null
         return payments[paymentId]
     }
 
     override fun save(payment: Payment): Payment {
-        payments[payment.paymentId] = payment
-        paymentsByOrderId[payment.orderId] = payment.paymentId
+        assignId(payment)
+        payments[payment.id!!] = payment
+        paymentsByOrderId[payment.orderId] = payment.id!!
         return payment
     }
 
-    override fun generateId(): Long {
-        return nextPaymentId++
-    }
-
-    override fun findTransmissionById(transmissionId: Long): DataTransmission? {
+    override fun findTransmissionById(transmissionId: UUID): DataTransmission? {
         return transmissions[transmissionId]
     }
 
-    override fun findTransmissionByOrderId(orderId: Long): DataTransmission? {
+    override fun findTransmissionByOrderId(orderId: UUID): DataTransmission? {
         val transmissionId = transmissionsByOrderId[orderId] ?: return null
         return transmissions[transmissionId]
     }
 
     override fun saveTransmission(transmission: DataTransmission): DataTransmission {
-        transmissions[transmission.transmissionId] = transmission
-        transmissionsByOrderId[transmission.orderId] = transmission.transmissionId
+        assignTransmissionId(transmission)
+        transmissions[transmission.id!!] = transmission
+        transmissionsByOrderId[transmission.orderId] = transmission.id!!
         return transmission
-    }
-
-    override fun generateTransmissionId(): Long {
-        return nextTransmissionId++
     }
 }

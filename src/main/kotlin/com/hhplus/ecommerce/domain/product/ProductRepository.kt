@@ -2,6 +2,7 @@ package com.hhplus.ecommerce.domain.product
 
 import com.hhplus.ecommerce.domain.product.entity.Product
 import com.hhplus.ecommerce.domain.product.entity.ProductCategory
+import java.util.UUID
 
 /**
  * 상품 데이터 접근을 담당하는 Repository 인터페이스
@@ -11,7 +12,7 @@ interface ProductRepository {
     /**
      * 상품 ID로 상품을 조회합니다.
      */
-    fun findById(productId: Long): Product?
+    fun findById(productId: UUID): Product?
 
     /**
      * 모든 상품을 조회합니다.
