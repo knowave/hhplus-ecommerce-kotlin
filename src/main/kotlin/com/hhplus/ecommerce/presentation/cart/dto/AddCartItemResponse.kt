@@ -1,10 +1,11 @@
 package com.hhplus.ecommerce.presentation.cart.dto
 
 import com.hhplus.ecommerce.application.cart.dto.AddCartItemResult
+import java.util.UUID
 
 data class AddCartItemResponse(
-    val cartItemId: Long,
-    val productId: Long,
+    val cartItemId: UUID,
+    val productId: UUID,
     val productName: String,
     val price: Long,
     val quantity: Int,

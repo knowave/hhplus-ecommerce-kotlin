@@ -4,14 +4,16 @@ import com.hhplus.ecommerce.application.cart.dto.*
 import com.hhplus.ecommerce.application.product.ProductService
 import com.hhplus.ecommerce.application.user.UserService
 import com.hhplus.ecommerce.common.exception.*
+import com.hhplus.ecommerce.domain.cart.CartJpaRepository
 import com.hhplus.ecommerce.domain.cart.entity.CartItem
 import org.springframework.stereotype.Service
 import java.time.LocalDateTime
 import java.time.format.DateTimeFormatter
+import java.util.UUID
 
 @Service
 class CartServiceImpl(
-    private val cartRepository: CartRepository,
+    private val cartRepository: CartJpaRepository,
     private val productService: ProductService,
     private val userService: UserService
 ) : CartService {
@@ -21,12 +23,26 @@ class CartServiceImpl(
         private val DATE_FORMATTER: DateTimeFormatter = DateTimeFormatter.ISO_LOCAL_DATE_TIME
     }
 
-    override fun getCart(userId: Long): CartResult {
+    override fun getCart(userId: UUID): CartResult {
         // 사용자 존재 확인
         validateUserExists(userId)
 
         // 사용자의 장바구니 아이템 조회
         val cartItems = cartRepository.findByUserId(userId)
+
+        if (cartItems.isEmpty()) {
+            return CartResult(
+                userId = userId,
+                items = emptyList(),
+                summary = CartSummaryResult(
+                    totalItems = 0,
+                    totalQuantity = 0,
+                    totalAmount = 0L,
+                    availableAmount = 0L,
+                    unavailableCount = 0
+                )
+            )
+        }
 
         // 상품 정보와 함께 응답 생성
         val itemResponses = cartItems.map { cartItem ->
@@ -36,15 +52,15 @@ class CartServiceImpl(
             val subtotal = product.price * cartItem.quantity
 
             CartItemResult(
-                cartItemId = cartItem.id,
-                productId = product.id,
+                cartItemId = cartItem.id!!,
+                productId = product.id!!,
                 productName = product.name,
                 price = product.price,
                 quantity = cartItem.quantity,
                 subtotal = subtotal,
                 stock = product.stock,
                 isAvailable = isAvailable,
-                addedAt = cartItem.addedAt.format(DATE_FORMATTER)
+                addedAt = cartItem.createdAt!!.format(DATE_FORMATTER)
             )
         }
 
@@ -58,7 +74,7 @@ class CartServiceImpl(
         )
     }
 
-    override fun addCartItem(userId: Long, request: AddCartItemCommand): AddCartItemResult {
+    override fun addCartItem(userId: UUID, request: AddCartItemCommand): AddCartItemResult {
         // 사용자 존재 확인
         validateUserExists(userId)
 
@@ -71,7 +87,7 @@ class CartServiceImpl(
         // 품절 상품 확인
         if (product.stock == 0) {
             throw InsufficientStockException(
-                productId = product.id,
+                productId = product.id!!,
                 requested = request.quantity,
                 available = 0
             )
@@ -88,23 +104,20 @@ class CartServiceImpl(
             validateMaxQuantity(newQuantity)
 
             // 재고 체크
-            validateStock(product.id, newQuantity, product.stock)
+            validateStock(product.id!!, newQuantity, product.stock)
 
             // 수량 업데이트
             existingItem.quantity = newQuantity
-            existingItem.updatedAt = LocalDateTime.now()
             cartRepository.save(existingItem)
         } else {
             // 새 아이템 추가
             validateMaxQuantity(request.quantity)
-            validateStock(product.id, request.quantity, product.stock)
+            validateStock(product.id!!, request.quantity, product.stock)
 
             val newItem = CartItem(
-                id = cartRepository.generateId(),
                 userId = userId,
                 productId = request.productId,
-                quantity = request.quantity,
-                addedAt = LocalDateTime.now()
+                quantity = request.quantity
             )
             cartRepository.save(newItem)
         }
@@ -112,24 +125,24 @@ class CartServiceImpl(
         val subtotal = product.price * cartItem.quantity
 
         return AddCartItemResult(
-            cartItemId = cartItem.id,
-            productId = product.id,
+            cartItemId = cartItem.id!!,
+            productId = product.id!!,
             productName = product.name,
             price = product.price,
             quantity = cartItem.quantity,
             subtotal = subtotal,
-            addedAt = cartItem.addedAt.format(DATE_FORMATTER)
+            addedAt = cartItem.createdAt!!.format(DATE_FORMATTER)
         )
     }
 
     override fun updateCartItem(
-        userId: Long,
-        cartItemId: Long,
+        userId: UUID,
+        cartItemId: UUID,
         request: UpdateCartItemCommand
     ): UpdateCartItemResult {
         // 장바구니 아이템 조회
         val cartItem = cartRepository.findById(cartItemId)
-            ?: throw CartItemNotFoundException(cartItemId)
+            .orElseThrow{ CartItemNotFoundException(cartItemId) }
 
         // 권한 확인 (다른 사용자의 장바구니 아이템인지)
         if (cartItem.userId != userId) {
@@ -138,7 +151,7 @@ class CartServiceImpl(
 
         // 수량이 0이면 삭제
         if (request.quantity == 0) {
-            cartRepository.delete(cartItemId)
+            cartRepository.delete(cartItem)
             throw CartItemNotFoundException(cartItemId)
         }
 
@@ -149,41 +162,40 @@ class CartServiceImpl(
         // 상품 조회 및 재고 확인
         val product = productService.findProductById(cartItem.productId)
 
-        validateStock(product.id, request.quantity, product.stock)
+        validateStock(product.id!!, request.quantity, product.stock)
 
         // 수량 업데이트
         cartItem.quantity = request.quantity
-        cartItem.updatedAt = LocalDateTime.now()
         cartRepository.save(cartItem)
 
         val subtotal = product.price * cartItem.quantity
 
         return UpdateCartItemResult(
-            cartItemId = cartItem.id,
-            productId = product.id,
+            cartItemId = cartItem.id!!,
+            productId = product.id!!,
             productName = product.name,
             price = product.price,
             quantity = cartItem.quantity,
             subtotal = subtotal,
-            updatedAt = cartItem.updatedAt.format(DATE_FORMATTER)
+            updatedAt = cartItem.updatedAt!!.format(DATE_FORMATTER)
         )
     }
 
-    override fun deleteCartItem(userId: Long, cartItemId: Long) {
+    override fun deleteCartItem(userId: UUID, cartItemId: UUID) {
         // 장바구니 아이템 조회
         val cartItem = cartRepository.findById(cartItemId)
-            ?: throw CartItemNotFoundException(cartItemId)
+            .orElseThrow { CartItemNotFoundException(cartItemId) }
 
         // 권한 확인
         if (cartItem.userId != userId) {
-            throw ForbiddenException("다른 사용자의 장바구니 아이템입니다.")
+            throw ForbiddenException("access denied cart item")
         }
 
         // 삭제
-        cartRepository.delete(cartItemId)
+        cartRepository.delete(cartItem)
     }
 
-    override fun clearCart(userId: Long) {
+    override fun clearCart(userId: UUID) {
         // 사용자 존재 확인
         validateUserExists(userId)
 
@@ -191,13 +203,12 @@ class CartServiceImpl(
         cartRepository.deleteByUserId(userId)
     }
 
-    override fun deleteCarts(userId: Long, productIds: List<Long>) {
-        val cartItems = cartRepository.findByUserIdAndProductIds(userId, productIds)
-            ?: emptyList()
+    override fun deleteCarts(userId: UUID, productIds: List<UUID>) {
+        val cartItems = cartRepository.findByUserIdAndProductIdIn(userId, productIds)
 
         val cartItemIds = cartItems.map { it.id }
         if (cartItemIds.isNotEmpty()) {
-            cartRepository.deleteManyByIds(cartItemIds)
+            cartRepository.deleteAllById(cartItemIds)
         }
     }
 
@@ -206,7 +217,7 @@ class CartServiceImpl(
     /**
      * 사용자 존재 여부 확인
      */
-    private fun validateUserExists(userId: Long) {
+    private fun validateUserExists(userId: UUID) {
         userService.getUser(userId)
     }
 
@@ -234,7 +245,7 @@ class CartServiceImpl(
     /**
      * 재고 확인
      */
-    private fun validateStock(productId: Long, requested: Int, available: Int) {
+    private fun validateStock(productId: UUID, requested: Int, available: Int) {
         if (requested > available) {
             throw InsufficientStockException(
                 productId = productId,
