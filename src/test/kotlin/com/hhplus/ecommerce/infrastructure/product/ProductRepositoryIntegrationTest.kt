@@ -2,7 +2,7 @@ package com.hhplus.ecommerce.infrastructure.product
 
 import com.hhplus.ecommerce.domain.product.entity.Product
 import com.hhplus.ecommerce.domain.product.entity.ProductCategory
-import com.hhplus.ecommerce.domain.product.ProductRepository
+import com.hhplus.ecommerce.domain.product.repository.ProductRepository
 import io.kotest.core.spec.style.DescribeSpec
 import io.kotest.matchers.collections.shouldContainExactlyInAnyOrder
 import io.kotest.matchers.collections.shouldHaveSize

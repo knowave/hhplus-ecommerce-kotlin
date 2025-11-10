@@ -5,8 +5,11 @@ import com.hhplus.ecommerce.domain.product.entity.Product
 import java.util.UUID
 
 interface ProductService {
-
-    fun getProducts(category: String?, sort: String?, page: Int, size: Int): ProductListResult
+    /**
+     * 상품 목록을 조회합니다.
+     * 카테고리 필터링, 정렬, 페이징을 지원합니다.
+     */
+    fun getProducts(request: GetProductsCommand): ProductListResult
 
     fun getTopProducts(days: Int, limit: Int): TopProductsResult
 
