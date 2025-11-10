@@ -6,7 +6,7 @@ import java.util.UUID
 
 interface UserService {
     // 사용자 잔액 충전
-    fun chargeBalance(userId: UUID, amount: UUID): ChargeBalanceResult
+    fun chargeBalance(userId: UUID, amount: Long): ChargeBalanceResult
 
     // 사용자 생성
     fun createUser(dto: CreateUserCommand): User

@@ -2,7 +2,7 @@ package com.hhplus.ecommerce.application.user
 
 import com.hhplus.ecommerce.application.user.dto.CreateUserCommand
 import com.hhplus.ecommerce.common.exception.*
-import com.hhplus.ecommerce.domain.user.UserRepository
+import com.hhplus.ecommerce.domain.user.repository.UserRepository
 import com.hhplus.ecommerce.domain.user.entity.User
 import io.kotest.assertions.throwables.shouldThrow
 import io.kotest.core.spec.style.DescribeSpec

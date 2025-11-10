@@ -2,15 +2,16 @@ package com.hhplus.ecommerce.application.user
 
 import com.hhplus.ecommerce.application.user.dto.*
 import com.hhplus.ecommerce.common.exception.*
-import com.hhplus.ecommerce.domain.user.UserRepository
+import com.hhplus.ecommerce.domain.user.repository.UserRepository
 import com.hhplus.ecommerce.domain.user.entity.User
+import com.hhplus.ecommerce.domain.user.repository.UserJpaRepository
 import org.springframework.stereotype.Service
-import java.time.LocalDateTime
 import java.time.format.DateTimeFormatter
+import java.util.UUID
 
 @Service
 class UserServiceImpl(
-    private val userRepository: UserRepository
+    private val userRepository: UserJpaRepository
 ) : UserService {
 
     companion object {
@@ -20,8 +21,8 @@ class UserServiceImpl(
         private val DATE_FORMATTER: DateTimeFormatter = DateTimeFormatter.ISO_LOCAL_DATE_TIME
     }
 
-    override fun chargeBalance(userId: Long, amount: Long): ChargeBalanceResult {
-        val user = findUserById(userId)
+    override fun chargeBalance(userId: UUID, amount: Long): ChargeBalanceResult {
+        val user = getUser(userId)
 
         // 충전 금액 유효성 검증
         validateChargeAmount(amount)
@@ -47,8 +48,9 @@ class UserServiceImpl(
         )
     }
 
-    override fun getUser(id: Long): User {
-        return findUserById(id)
+    override fun getUser(id: UUID): User {
+        return userRepository.findById(id)
+            .orElseThrow { UserNotFoundException(id) }
     }
 
     override fun createUser(dto: CreateUserCommand): User {
@@ -66,11 +68,6 @@ class UserServiceImpl(
 
     override fun updateUser(user: User): User {
         return userRepository.save(user)
-    }
-
-    private fun findUserById(userId: Long): User {
-        return userRepository.findById(userId)
-            ?: throw UserNotFoundException(userId)
     }
 
     // 충전 금액의 유효성을 검증

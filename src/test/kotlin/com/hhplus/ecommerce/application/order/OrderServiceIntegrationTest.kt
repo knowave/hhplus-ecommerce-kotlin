@@ -18,7 +18,7 @@ import com.hhplus.ecommerce.infrastructure.order.OrderRepositoryImpl
 import com.hhplus.ecommerce.domain.product.entity.ProductCategory
 import com.hhplus.ecommerce.domain.product.repository.ProductRepository
 import com.hhplus.ecommerce.infrastructure.product.ProductRepositoryImpl
-import com.hhplus.ecommerce.domain.user.UserRepository
+import com.hhplus.ecommerce.domain.user.repository.UserRepository
 import com.hhplus.ecommerce.infrastructure.user.UserRepositoryImpl
 import com.hhplus.ecommerce.domain.coupon.entity.Coupon
 import com.hhplus.ecommerce.domain.coupon.entity.UserCoupon

@@ -13,7 +13,7 @@ import com.hhplus.ecommerce.presentation.order.dto.*
 import com.hhplus.ecommerce.presentation.user.dto.CreateUserRequest
 import com.hhplus.ecommerce.presentation.product.dto.ProductListResponse
 import com.hhplus.ecommerce.domain.user.entity.User
-import com.hhplus.ecommerce.domain.user.UserRepository
+import com.hhplus.ecommerce.domain.user.repository.UserRepository
 
 @SpringBootTest(webEnvironment = SpringBootTest.WebEnvironment.RANDOM_PORT)
 class OrderE2ETest(

@@ -1,4 +1,4 @@
-package com.hhplus.ecommerce.domain.user
+package com.hhplus.ecommerce.domain.user.repository
 
 import com.hhplus.ecommerce.domain.user.entity.User
 import java.util.UUID
