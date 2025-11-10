@@ -21,7 +21,7 @@ import com.hhplus.ecommerce.domain.payment.entity.TransmissionStatus
 import com.hhplus.ecommerce.infrastructure.payment.PaymentRepositoryImpl
 import com.hhplus.ecommerce.domain.product.repository.ProductRepository
 import com.hhplus.ecommerce.infrastructure.product.ProductRepositoryImpl
-import com.hhplus.ecommerce.domain.user.UserRepository
+import com.hhplus.ecommerce.domain.user.repository.UserRepository
 import com.hhplus.ecommerce.infrastructure.user.UserRepositoryImpl
 import com.hhplus.ecommerce.application.order.dto.CreateOrderCommand
 import com.hhplus.ecommerce.application.order.dto.OrderItemCommand

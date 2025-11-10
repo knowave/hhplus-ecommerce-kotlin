@@ -189,12 +189,12 @@ class InvalidCouponDateException(message: String) : BaseException(
 )
 
 // User related
-class UserNotFoundException(userId: Long) : BaseException(
+class UserNotFoundException(userId: UUID) : BaseException(
     errorCode = ErrorCode.USER_NOT_FOUND,
     message = "User not found with id: $userId"
 )
 
-class DuplicateEmailException(email: Long) : BaseException(
+class DuplicateEmailException(email: String) : BaseException(
     errorCode = ErrorCode.DUPLICATE_EMAIL,
     message = "Email already exists: $email"
 )

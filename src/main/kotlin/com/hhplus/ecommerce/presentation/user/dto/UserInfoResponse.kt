@@ -1,15 +1,17 @@
 package com.hhplus.ecommerce.presentation.user.dto
 
-import com.hhplus.ecommerce.domain.user.entity.User
+import com.hhplus.ecommerce.application.user.dto.UserResult
+import java.time.LocalDateTime
+import java.util.UUID
 
 data class UserInfoResponse(
-    val userId: Long,
+    val userId: UUID,
     val balance: Long,
-    val createdAt: String,
-    val updatedAt: String
+    val createdAt: LocalDateTime,
+    val updatedAt: LocalDateTime
 ) {
     companion object {
-        fun from(user: User): UserInfoResponse {
+        fun from(user: UserResult): UserInfoResponse {
             return UserInfoResponse(
                 userId = user.id,
                 balance = user.balance,

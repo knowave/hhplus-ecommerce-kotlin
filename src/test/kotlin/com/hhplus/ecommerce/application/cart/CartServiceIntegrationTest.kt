@@ -7,7 +7,7 @@ import com.hhplus.ecommerce.application.user.UserService
 import com.hhplus.ecommerce.application.user.UserServiceImpl
 import com.hhplus.ecommerce.common.exception.*
 import com.hhplus.ecommerce.domain.product.repository.ProductRepository
-import com.hhplus.ecommerce.domain.user.UserRepository
+import com.hhplus.ecommerce.domain.user.repository.UserRepository
 import com.hhplus.ecommerce.infrastructure.product.ProductRepositoryImpl
 import com.hhplus.ecommerce.infrastructure.user.UserRepositoryImpl
 import io.kotest.assertions.throwables.shouldThrow

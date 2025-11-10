@@ -1,7 +1,7 @@
 package com.hhplus.ecommerce.infrastructure.user
 
 import com.hhplus.ecommerce.domain.user.entity.User
-import com.hhplus.ecommerce.domain.user.UserRepository
+import com.hhplus.ecommerce.domain.user.repository.UserRepository
 import io.kotest.core.spec.style.DescribeSpec
 import io.kotest.matchers.collections.shouldContain
 import io.kotest.matchers.collections.shouldHaveSize
