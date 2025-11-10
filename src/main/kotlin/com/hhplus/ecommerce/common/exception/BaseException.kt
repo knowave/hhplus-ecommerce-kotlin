@@ -11,7 +11,7 @@ open class BaseException(
 ) : RuntimeException(message)
 
 // Product related
-class ProductNotFoundException(productId: Long) : BaseException(
+class ProductNotFoundException(productId: UUID) : BaseException(
     errorCode = ErrorCode.PRODUCT_NOT_FOUND,
     message = "Product not found with id: $productId"
 )

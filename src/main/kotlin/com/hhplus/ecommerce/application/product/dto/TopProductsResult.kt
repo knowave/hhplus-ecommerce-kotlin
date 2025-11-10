@@ -1,5 +1,7 @@
 package com.hhplus.ecommerce.application.product.dto
 
+import java.util.UUID
+
 data class PeriodResult(
     val days: Int,
     val startDate: String,
@@ -8,7 +10,7 @@ data class PeriodResult(
 
 data class TopProductItemResult(
     val rank: Int,
-    val id: Long,
+    val id: UUID,
     val name: String,
     val price: Long,
     val category: String,

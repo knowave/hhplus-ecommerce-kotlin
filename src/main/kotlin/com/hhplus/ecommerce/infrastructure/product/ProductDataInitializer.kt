@@ -1,6 +1,6 @@
 package com.hhplus.ecommerce.infrastructure.product
 
-import com.hhplus.ecommerce.domain.product.ProductJpaRepository
+import com.hhplus.ecommerce.domain.product.repository.ProductJpaRepository
 import com.hhplus.ecommerce.domain.product.entity.Product
 import com.hhplus.ecommerce.domain.product.entity.ProductCategory
 import org.springframework.boot.CommandLineRunner

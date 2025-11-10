@@ -3,86 +3,72 @@ package com.hhplus.ecommerce.application.product
 import com.hhplus.ecommerce.application.product.dto.*
 import com.hhplus.ecommerce.common.exception.ProductNotFoundException
 import com.hhplus.ecommerce.domain.product.entity.ProductCategory
-import com.hhplus.ecommerce.domain.product.ProductRepository
 import com.hhplus.ecommerce.domain.product.entity.Product
+import com.hhplus.ecommerce.domain.product.repository.ProductJpaRepository
+import org.springframework.data.domain.PageRequest
+import org.springframework.data.domain.Sort
 import org.springframework.stereotype.Service
 import java.time.LocalDateTime
 import java.time.format.DateTimeFormatter
+import java.util.UUID
 import kotlin.math.ceil
 
 @Service
 class ProductServiceImpl(
-    private val productRepository: ProductRepository
+    private val productRepository: ProductJpaRepository
 ) : ProductService {
 
     companion object {
         private val DATE_FORMATTER: DateTimeFormatter = DateTimeFormatter.ISO_LOCAL_DATE_TIME
     }
 
-    override fun getProducts(
-        category: String?,
-        sort: String?,
-        page: Int,
-        size: Int
-    ): ProductListResult {
-        // 1. 모든 상품 조회 또는 카테고리 필터링
-        var products: List<Product> = if (category != null) {
-            val productCategory = try {
-                ProductCategory.valueOf(category.uppercase())
+    override fun getProducts(request: GetProductsCommand): ProductListResult {
+        // 1. 카테고리 파싱
+        val productCategory = request.category?.let {
+            try {
+                ProductCategory.valueOf(it.uppercase())
             } catch (e: IllegalArgumentException) {
                 null
             }
-            if (productCategory != null) {
-                productRepository.findByCategory(productCategory)
-            } else {
-                emptyList()
+        }
+
+        // 정렬 조건
+        val sort = when (request.sortBy) {
+            GetProductsCommand.SortBy.PRICE -> {
+                if (request.orderBy == GetProductsCommand.OrderBy.ASC) {
+                    Sort.by(Sort.Direction.ASC, "price")
+                } else {
+                    Sort.by(Sort.Direction.DESC, "price")
+                }
             }
-        } else {
-            productRepository.findAll()
+            GetProductsCommand.SortBy.POPULARITY -> {
+                if (request.orderBy == GetProductsCommand.OrderBy.ASC) {
+                    Sort.by(Sort.Direction.ASC, "salesCount")
+                } else {
+                    Sort.by(Sort.Direction.DESC, "salesCount")
+                }
+            }
+            GetProductsCommand.SortBy.NEWEST -> {
+                if (request.orderBy == GetProductsCommand.OrderBy.ASC) {
+                    Sort.by(Sort.Direction.ASC, "createdAt")
+                } else {
+                    Sort.by(Sort.Direction.DESC, "createdAt")
+                }
+            }
         }
 
-        // 2. 정렬
-        products = when (sort) {
-            "price" -> products.sortedBy { it.price }
-            "popularity" -> products.sortedByDescending { it.salesCount }
-            "newest", null -> products.sortedByDescending { it.createdAt }
-            else -> products.sortedByDescending { it.createdAt }
-        }
+        val pageable = PageRequest.of(request.page, request.size, sort)
+        val productPage = productRepository.findAllWithFilter(productCategory, pageable)
 
-        // 3. 페이지네이션 계산
-        val totalElements = products.size
-        val totalPages = ceil(totalElements.toDouble() / size).toInt()
-        val start = page * size
-        val end = minOf(start + size, totalElements)
-
-        val pagedProducts = if (start < totalElements) {
-            products.subList(start, end)
-        } else {
-            emptyList()
-        }
-
-        // 4. DTO 변환
-        val productsResult = pagedProducts.map { product ->
-            Product(
-                id = product.id,
-                name = product.name,
-                description = product.description,
-                price = product.price,
-                stock = product.stock,
-                salesCount = product.salesCount,
-                category = product.category,
-                createdAt = product.createdAt,
-                updatedAt = product.updatedAt
-            )
-        }
+        val productsResult = productPage.content
 
         val pagination = PaginationResult(
-            currentPage = page,
-            totalPages = totalPages,
-            totalElements = totalElements,
-            size = size,
-            hasNext = page < totalPages - 1,
-            hasPrevious = page > 0
+            currentPage = productPage.number,
+            totalPages = productPage.totalPages,
+            totalElements = productPage.totalElements.toInt(),
+            size = productPage.size,
+            hasNext = productPage.hasNext(),
+            hasPrevious = productPage.hasPrevious()
         )
 
         return ProductListResult(
@@ -90,6 +76,7 @@ class ProductServiceImpl(
             pagination = pagination
         )
     }
+
     override fun getTopProducts(days: Int, limit: Int): TopProductsResult {
         // 1. 모든 상품을 판매량 기준으로 정렬
         val allProducts = productRepository.findAll()
@@ -111,7 +98,7 @@ class ProductServiceImpl(
         val topProductItems = topProducts.mapIndexed { index, product ->
             TopProductItemResult(
                 rank = index + 1,
-                id = product.id,
+                id = product.id!!,
                 name = product.name,
                 price = product.price,
                 category = product.category.name,
@@ -137,9 +124,9 @@ class ProductServiceImpl(
         )
     }
 
-    override fun findProductById(id: Long): Product {
+    override fun findProductById(id: UUID): Product {
         return productRepository.findById(id)
-            ?: throw ProductNotFoundException(id)
+            .orElseThrow { ProductNotFoundException(id) }
     }
 
     override fun updateProduct(product: Product): Product {
