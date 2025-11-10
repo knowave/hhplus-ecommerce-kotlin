@@ -13,6 +13,7 @@ import org.springframework.boot.test.web.server.LocalServerPort
 import org.springframework.http.HttpEntity
 import org.springframework.http.HttpMethod
 import org.springframework.http.HttpStatus
+import java.util.UUID
 
 @SpringBootTest(webEnvironment = SpringBootTest.WebEnvironment.RANDOM_PORT)
 class CartE2ETest(
@@ -97,8 +98,8 @@ class CartE2ETest(
         describe("상품 추가") {
             it("장바구니에 새로운 상품을 추가할 수 있어야 한다") {
                 // Given
-                val userId = 2L // 빈 장바구니를 가진 사용자
-                val request = AddCartItemRequest(productId = 1L, quantity = 2)
+                val userId = UUID.randomUUID() // 빈 장바구니를 가진 사용자
+                val request = AddCartItemRequest(productId = UUID.randomUUID(), quantity = 2)
 
                 // When
                 val response = restTemplate.postForEntity(
@@ -127,8 +128,8 @@ class CartE2ETest(
 
             it("이미 장바구니에 있는 상품을 추가하면 수량이 증가해야 한다") {
                 // Given - 먼저 상품 추가
-                val userId = 2L
-                val productId = 1L
+                val userId = UUID.randomUUID()
+                val productId = UUID.randomUUID()
                 val initialRequest = AddCartItemRequest(productId = productId, quantity = 2)
 
                 val initialResponse = restTemplate.postForEntity(
@@ -161,8 +162,8 @@ class CartE2ETest(
 
             it("재고보다 많은 수량을 추가하면 400을 반환해야 한다") {
                 // Given
-                val userId = 2L
-                val productId = 7L // 운동화 ABC, 재고 45개
+                val userId = UUID.randomUUID()
+                val productId = UUID.randomUUID() // 운동화 ABC, 재고 45개
                 val request = AddCartItemRequest(productId = productId, quantity = 100) // 100 > 45
 
                 // When
@@ -179,7 +180,7 @@ class CartE2ETest(
             it("수량이 0 이하면 400을 반환해야 한다") {
                 // Given
                 val userId = 2L
-                val request = AddCartItemRequest(productId = 1L, quantity = 0)
+                val request = AddCartItemRequest(productId = UUID.randomUUID(), quantity = 0)
 
                 // When
                 val response = restTemplate.postForEntity(
@@ -194,8 +195,8 @@ class CartE2ETest(
 
             it("존재하지 않는 상품을 추가하면 404를 반환해야 한다") {
                 // Given
-                val userId = 2L
-                val request = AddCartItemRequest(productId = 999L, quantity = 1)
+                val userId = UUID.randomUUID()
+                val request = AddCartItemRequest(productId = UUID.randomUUID(), quantity = 1)
 
                 // When
                 val response = restTemplate.postForEntity(
@@ -210,8 +211,8 @@ class CartE2ETest(
 
             it("최대 수량(100)을 초과하면 400을 반환해야 한다") {
                 // Given
-                val userId = 2L
-                val request = AddCartItemRequest(productId = 1L, quantity = 101)
+                val userId = UUID.randomUUID()
+                val request = AddCartItemRequest(productId = UUID.randomUUID(), quantity = 101)
 
                 // When
                 val response = restTemplate.postForEntity(
@@ -231,8 +232,8 @@ class CartE2ETest(
         describe("수량 변경") {
             it("장바구니 아이템의 수량을 변경할 수 있어야 한다") {
                 // Given - 먼저 상품 추가
-                val userId = 2L
-                val addRequest = AddCartItemRequest(productId = 1L, quantity = 2)
+                val userId = UUID.randomUUID()
+                val addRequest = AddCartItemRequest(productId = UUID.randomUUID(), quantity = 2)
                 val addResponse = restTemplate.postForEntity(
                     url("/carts/$userId/items"),
                     addRequest,
@@ -265,8 +266,8 @@ class CartE2ETest(
 
             it("수량을 1로 변경할 수 있어야 한다") {
                 // Given
-                val userId = 2L
-                val addRequest = AddCartItemRequest(productId = 1L, quantity = 10)
+                val userId = UUID.randomUUID()
+                val addRequest = AddCartItemRequest(productId = UUID.randomUUID(), quantity = 10)
                 val addResponse = restTemplate.postForEntity(
                     url("/carts/$userId/items"),
                     addRequest,
@@ -293,8 +294,8 @@ class CartE2ETest(
 
             it("존재하지 않는 장바구니 아이템의 수량을 변경하면 404를 반환해야 한다") {
                 // Given
-                val userId = 2L
-                val invalidCartItemId = 999L
+                val userId = UUID.randomUUID()
+                val invalidCartItemId = UUID.randomUUID()
                 val updateRequest = UpdateCartItemRequest(quantity = 5)
 
                 // When
@@ -311,8 +312,8 @@ class CartE2ETest(
 
             it("수량을 최대값(100)을 초과하여 변경하면 400을 반환해야 한다") {
                 // Given
-                val userId = 2L
-                val addRequest = AddCartItemRequest(productId = 1L, quantity = 2)
+                val userId = UUID.randomUUID()
+                val addRequest = AddCartItemRequest(productId = UUID.randomUUID(), quantity = 2)
                 val addResponse = restTemplate.postForEntity(
                     url("/carts/$userId/items"),
                     addRequest,
@@ -340,8 +341,8 @@ class CartE2ETest(
         describe("아이템 삭제") {
             it("장바구니에서 아이템을 삭제할 수 있어야 한다") {
                 // Given - 먼저 상품 추가
-                val userId = 2L
-                val addRequest = AddCartItemRequest(productId = 1L, quantity = 2)
+                val userId = UUID.randomUUID()
+                val addRequest = AddCartItemRequest(productId = UUID.randomUUID(), quantity = 2)
                 val addResponse = restTemplate.postForEntity(
                     url("/carts/$userId/items"),
                     addRequest,
@@ -359,8 +360,8 @@ class CartE2ETest(
 
             it("존재하지 않는 장바구니 아이템을 삭제하면 404를 반환해야 한다") {
                 // Given
-                val userId = 2L
-                val invalidCartItemId = 999L
+                val userId = UUID.randomUUID()
+                val invalidCartItemId = UUID.randomUUID()
 
                 // When
                 val response = restTemplate.exchange(
@@ -378,15 +379,15 @@ class CartE2ETest(
         describe("장바구니 비우기") {
             it("장바구니를 전체 비울 수 있어야 한다") {
                 // Given - 먼저 상품 여러 개 추가
-                val userId = 2L
+                val userId = UUID.randomUUID()
                 restTemplate.postForEntity(
                     url("/carts/$userId/items"),
-                    AddCartItemRequest(productId = 1L, quantity = 2),
+                    AddCartItemRequest(productId = UUID.randomUUID(), quantity = 2),
                     AddCartItemResponse::class.java
                 )
                 restTemplate.postForEntity(
                     url("/carts/$userId/items"),
-                    AddCartItemRequest(productId = 2L, quantity = 1),
+                    AddCartItemRequest(productId = UUID.randomUUID(), quantity = 1),
                     AddCartItemResponse::class.java
                 )
 
@@ -402,7 +403,7 @@ class CartE2ETest(
 
             it("이미 빈 장바구니를 비워도 정상 처리되어야 한다") {
                 // Given
-                val userId = 2L
+                val userId = UUID.randomUUID()
                 restTemplate.delete(url("/carts/$userId")) // 먼저 비우기
 
                 // When
@@ -416,7 +417,7 @@ class CartE2ETest(
 
             it("존재하지 않는 사용자의 장바구니를 비우면 404를 반환해야 한다") {
                 // Given
-                val invalidUserId = 999L
+                val invalidUserId = UUID.randomUUID()
 
                 // When
                 val response = restTemplate.exchange(
@@ -434,7 +435,7 @@ class CartE2ETest(
         describe("복합 사용 시나리오") {
             it("장바구니 전체 플로우를 순차적으로 수행할 수 있어야 한다") {
                 // Given
-                val userId = 3L
+                val userId = UUID.randomUUID()
 
                 // 1. 빈 장바구니 확인
                 val emptyCartResponse = restTemplate.getForEntity(url("/carts/$userId"), CartResponse::class.java)
@@ -444,7 +445,7 @@ class CartE2ETest(
                 // 2. 상품 3개 추가
                 val addResponse1 = restTemplate.postForEntity(
                     url("/carts/$userId/items"),
-                    AddCartItemRequest(productId = 1L, quantity = 2),
+                    AddCartItemRequest(productId = UUID.randomUUID(), quantity = 2),
                     AddCartItemResponse::class.java
                 )
                 addResponse1.statusCode shouldBe HttpStatus.OK
@@ -452,7 +453,7 @@ class CartE2ETest(
 
                 val addResponse2 = restTemplate.postForEntity(
                     url("/carts/$userId/items"),
-                    AddCartItemRequest(productId = 5L, quantity = 1),
+                    AddCartItemRequest(productId = UUID.randomUUID(), quantity = 1),
                     AddCartItemResponse::class.java
                 )
                 addResponse2.statusCode shouldBe HttpStatus.OK
@@ -460,7 +461,7 @@ class CartE2ETest(
 
                 val addResponse3 = restTemplate.postForEntity(
                     url("/carts/$userId/items"),
-                    AddCartItemRequest(productId = 10L, quantity = 3),
+                    AddCartItemRequest(productId = UUID.randomUUID(), quantity = 3),
                     AddCartItemResponse::class.java
                 )
                 addResponse3.statusCode shouldBe HttpStatus.OK
@@ -505,8 +506,8 @@ class CartE2ETest(
 
             it("같은 상품을 여러 번 추가하면 수량이 누적되어야 한다") {
                 // Given
-                val userId = 3L
-                val productId = 1L
+                val userId = UUID.randomUUID()
+                val productId = UUID.randomUUID()
                 restTemplate.delete(url("/carts/$userId")) // 먼저 비우기
 
                 // When - 같은 상품 3번 추가
@@ -538,32 +539,32 @@ class CartE2ETest(
 
             it("여러 사용자의 장바구니가 독립적으로 관리되어야 한다") {
                 // Given
-                val user1Id = 2L
-                val user2Id = 3L
+                val user1Id = UUID.randomUUID()
+                val user2Id = UUID.randomUUID()
                 restTemplate.delete(url("/carts/$user1Id"))
                 restTemplate.delete(url("/carts/$user2Id"))
 
                 // When - 사용자1은 상품 1, 2 추가
                 restTemplate.postForEntity(
                     url("/carts/$user1Id/items"),
-                    AddCartItemRequest(productId = 1L, quantity = 1),
+                    AddCartItemRequest(productId = UUID.randomUUID(), quantity = 1),
                     AddCartItemResponse::class.java
                 )
                 restTemplate.postForEntity(
                     url("/carts/$user1Id/items"),
-                    AddCartItemRequest(productId = 2L, quantity = 1),
+                    AddCartItemRequest(productId = UUID.randomUUID(), quantity = 1),
                     AddCartItemResponse::class.java
                 )
 
                 // When - 사용자2는 상품 5, 10 추가
                 restTemplate.postForEntity(
                     url("/carts/$user2Id/items"),
-                    AddCartItemRequest(productId = 5L, quantity = 2),
+                    AddCartItemRequest(productId = UUID.randomUUID(), quantity = 2),
                     AddCartItemResponse::class.java
                 )
                 restTemplate.postForEntity(
                     url("/carts/$user2Id/items"),
-                    AddCartItemRequest(productId = 10L, quantity = 3),
+                    AddCartItemRequest(productId = UUID.randomUUID(), quantity = 3),
                     AddCartItemResponse::class.java
                 )
 

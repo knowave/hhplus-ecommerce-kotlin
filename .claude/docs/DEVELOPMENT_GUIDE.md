@@ -11,7 +11,8 @@
 10. JPA를 사용해서 MySQL DB를 사용함.
 11. 각 테이블에 공통적으로 사용될 `id`, `createdAt`, `updatedAt`은 `BaseEntity`를 상속받아서 사용.
 12. 조회가 자주 일어나는 테이블은 index를 사용하여 성능 개선.
-13. InMemoryDB 에서 사용한 `Repository` class와 `RepositoryImpl` class는 legacy로 둔다.
+13. InMemoryDB 에서 사용한 `Repository` class와 `RepositoryImpl` class는 사용하지않고 수정도 하지않는다.
+14. Repository는 `JpaRepository`를 사용할것.
 
 ## 테스트 코드
 1. 테스트 코드는 `kotest`로 진행.
@@ -21,3 +22,4 @@
 5. 테스트 코드 커버리지는 70% 이상이어야 함. 
 6. 테스트 코드를 확인하기 위해 `jacoco`를 사용.
 7. 테스트 코드 70% 이상은 비즈니스 로직이 충족이 되었을 때 가능한 조건.
+8. Repository는 `JpaRepository`를 사용할것.
