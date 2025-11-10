@@ -1,4 +1,4 @@
-package com.hhplus.ecommerce.domain.shipping
+package com.hhplus.ecommerce.domain.shipping.repository
 
 import com.hhplus.ecommerce.domain.shipping.entity.Shipping
 import com.hhplus.ecommerce.domain.shipping.entity.ShippingStatus

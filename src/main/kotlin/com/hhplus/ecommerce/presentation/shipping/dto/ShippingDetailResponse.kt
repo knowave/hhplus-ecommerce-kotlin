@@ -1,14 +1,15 @@
 package com.hhplus.ecommerce.presentation.shipping.dto
 
-import com.hhplus.ecommerce.domain.shipping.entity.Shipping
+import com.hhplus.ecommerce.application.shipping.dto.ShippingResult
 import java.time.LocalDateTime
+import java.util.UUID
 
 /**
  * 배송 조회 응답
  */
 data class ShippingDetailResponse(
-    val shippingId: Long,
-    val orderId: Long,
+    val shippingId: UUID,
+    val orderId: UUID,
     val carrier: String,
     val trackingNumber: String,
     val shippingStartAt: LocalDateTime?,
@@ -21,7 +22,7 @@ data class ShippingDetailResponse(
     val updatedAt: LocalDateTime
 ) {
     companion object {
-        fun from(result: Shipping): ShippingDetailResponse {
+        fun from(result: ShippingResult): ShippingDetailResponse {
             return ShippingDetailResponse(
                 shippingId = result.id,
                 orderId = result.orderId,

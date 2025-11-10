@@ -1,16 +1,17 @@
 package com.hhplus.ecommerce.presentation.shipping.dto
 
+import com.hhplus.ecommerce.application.shipping.dto.ShippingResult
 import com.hhplus.ecommerce.application.shipping.dto.ShippingSummaryDto
 import com.hhplus.ecommerce.application.shipping.dto.UserShippingListResult
 import com.hhplus.ecommerce.application.shipping.dto.UserShippingPageInfoDto
-import com.hhplus.ecommerce.domain.shipping.entity.Shipping
 import java.time.LocalDateTime
+import java.util.UUID
 
 /**
  * 사용자 배송 목록 조회 응답
  */
 data class UserShippingListResponse(
-    val userId: Long,
+    val userId: UUID,
     val items: List<ShippingItem>,
     val page: UserShippingPageInfo,
     val summary: ShippingSummary
@@ -31,8 +32,8 @@ data class UserShippingListResponse(
  * 배송 아이템
  */
 data class ShippingItem(
-    val shippingId: Long,
-    val orderId: Long,
+    val shippingId: UUID,
+    val orderId: UUID,
     val carrier: String,
     val trackingNumber: String,
     val status: String,
@@ -44,7 +45,7 @@ data class ShippingItem(
     val updatedAt: LocalDateTime
 ) {
     companion object {
-        fun from(result: Shipping): ShippingItem {
+        fun from(result: ShippingResult): ShippingItem {
             return ShippingItem(
                 shippingId = result.id,
                 orderId = result.orderId,

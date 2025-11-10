@@ -1,7 +1,7 @@
 package com.hhplus.ecommerce.infrastructure.shipping
 
 import com.hhplus.ecommerce.domain.shipping.entity.Shipping
-import com.hhplus.ecommerce.domain.shipping.ShippingRepository
+import com.hhplus.ecommerce.domain.shipping.repository.ShippingRepository
 import com.hhplus.ecommerce.domain.shipping.entity.ShippingStatus
 import org.springframework.stereotype.Repository
 import java.time.LocalDateTime

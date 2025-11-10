@@ -5,7 +5,7 @@ import com.hhplus.ecommerce.common.exception.AlreadyDeliveredException
 import com.hhplus.ecommerce.common.exception.InvalidStatusTransitionException
 import com.hhplus.ecommerce.common.exception.OrderNotFoundForShippingException
 import com.hhplus.ecommerce.common.exception.ShippingNotFoundException
-import com.hhplus.ecommerce.domain.shipping.ShippingRepository
+import com.hhplus.ecommerce.domain.shipping.repository.ShippingRepository
 import com.hhplus.ecommerce.domain.shipping.entity.Shipping
 import com.hhplus.ecommerce.domain.shipping.entity.ShippingStatus
 import io.kotest.assertions.throwables.shouldThrow
