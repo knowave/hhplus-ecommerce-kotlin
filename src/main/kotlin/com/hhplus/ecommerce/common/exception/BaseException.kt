@@ -64,7 +64,7 @@ class InvalidQuantityException(quantity: Int) : BaseException(
     message = "Invalid quantity: $quantity"
 )
 
-class OrderAlreadyPaidException(orderId: Long) : BaseException(
+class OrderAlreadyPaidException(orderId: UUID) : BaseException(
     errorCode = ErrorCode.ORDER_ALREADY_PAID,
     message = "Order already paid. Order id: $orderId"
 )
@@ -222,12 +222,12 @@ class BalanceLimitExceededException(
 )
 
 // Shipping related
-class ShippingNotFoundException(shippingId: Long) : BaseException(
+class ShippingNotFoundException(shippingId: UUID) : BaseException(
     errorCode = ErrorCode.SHIPPING_NOT_FOUND,
     message = "Shipping not found with id: $shippingId"
 )
 
-class OrderNotFoundForShippingException(orderId: Long) : BaseException(
+class OrderNotFoundForShippingException(orderId: UUID) : BaseException(
     errorCode = ErrorCode.ORDER_NOT_FOUND_FOR_SHIPPING,
     message = "Order not found with id: $orderId"
 )
@@ -242,7 +242,7 @@ class DuplicateTrackingNumberException(trackingNumber: String) : BaseException(
     message = "Tracking number already exists: $trackingNumber"
 )
 
-class ShippingAlreadyExistsException(orderId: Long) : BaseException(
+class ShippingAlreadyExistsException(orderId: UUID) : BaseException(
     errorCode = ErrorCode.SHIPPING_ALREADY_EXISTS,
     message = "Shipping already exists for order id: $orderId"
 )
@@ -252,7 +252,7 @@ class InvalidStatusTransitionException(currentStatus: String, newStatus: String)
     message = "Cannot transition from $currentStatus to $newStatus"
 )
 
-class AlreadyDeliveredException(shippingId: Long) : BaseException(
+class AlreadyDeliveredException(shippingId: UUID) : BaseException(
     errorCode = ErrorCode.ALREADY_DELIVERED,
     message = "Shipping already delivered. Shipping id: $shippingId"
 )

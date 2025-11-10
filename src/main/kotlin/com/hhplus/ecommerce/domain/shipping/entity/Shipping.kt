@@ -24,18 +24,28 @@ class Shipping(
     val estimatedArrivalAt: LocalDateTime,
 
     @Column
-    val deliveredAt: LocalDateTime?,
+    var deliveredAt: LocalDateTime?,
 
     @Enumerated(EnumType.STRING)
     @Column(nullable = false, length = 20)
     var status: ShippingStatus,
 
     @Column(nullable = false)
-    val isDelayed: Boolean = false,
+    var isDelayed: Boolean = false,
 
     @Column(nullable = false)
     val isExpired: Boolean = false
-) : BaseEntity()
+) : BaseEntity() {
+
+    fun updateStatus(newStatus: ShippingStatus, newDeliveredAt: LocalDateTime? = null) {
+        this.status = newStatus
+        
+        if (newStatus == ShippingStatus.DELIVERED && newDeliveredAt != null) {
+            this.deliveredAt = newDeliveredAt
+            this.isDelayed = newDeliveredAt.isAfter(this.estimatedArrivalAt)
+        }
+    }
+}
 
 /**
  * 배송 상태
