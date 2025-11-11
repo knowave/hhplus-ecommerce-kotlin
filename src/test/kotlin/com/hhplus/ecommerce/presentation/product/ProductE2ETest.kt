@@ -1,5 +1,9 @@
 package com.hhplus.ecommerce.presentation.product
 
+import com.hhplus.ecommerce.domain.product.entity.Product
+import com.hhplus.ecommerce.domain.product.entity.ProductCategory
+import com.hhplus.ecommerce.domain.product.repository.ProductJpaRepository
+import com.hhplus.ecommerce.presentation.product.dto.*
 import io.kotest.core.spec.style.DescribeSpec
 import io.kotest.matchers.shouldBe
 import io.kotest.matchers.shouldNotBe
@@ -9,22 +13,185 @@ import org.springframework.boot.test.context.SpringBootTest
 import org.springframework.boot.test.web.client.TestRestTemplate
 import org.springframework.boot.test.web.server.LocalServerPort
 import org.springframework.http.HttpStatus
-import com.hhplus.ecommerce.presentation.product.dto.*
 import java.util.UUID
 
 @SpringBootTest(webEnvironment = SpringBootTest.WebEnvironment.RANDOM_PORT)
 class ProductE2ETest(
     @LocalServerPort private val port: Int,
     private val restTemplate: TestRestTemplate,
-    private val productService: com.hhplus.ecommerce.application.product.ProductService
+    private val productJpaRepository: ProductJpaRepository
 ) : DescribeSpec({
 
     // URL 헬퍼 함수
     fun url(path: String): String = "http://localhost:$port/api$path"
 
+    val testProducts = mutableListOf<UUID>()
+
     beforeSpec {
-        // 테스트용 상품들은 DataInitializer에서 생성됨
-        // E2E 테스트는 전체 시스템 통합 테스트이므로 초기 데이터를 활용
+        // E2E 테스트용 상품 데이터 생성 - 다양한 시나리오를 테스트할 수 있도록 충분한 데이터 생성
+        val productsToCreate = listOf(
+            // ELECTRONICS (5개)
+            Product(
+                name = "노트북 Pro",
+                description = "고성능 노트북",
+                price = 1800000L,
+                stock = 50,
+                category = ProductCategory.ELECTRONICS,
+                specifications = mapOf("cpu" to "Intel i9", "ram" to "32GB"),
+                salesCount = 180
+            ),
+            Product(
+                name = "스마트폰 Galaxy",
+                description = "최신 안드로이드 폰",
+                price = 1300000L,
+                stock = 100,
+                category = ProductCategory.ELECTRONICS,
+                specifications = mapOf("display" to "6.8inch"),
+                salesCount = 250
+            ),
+            Product(
+                name = "태블릿 Ultra",
+                description = "업무용 태블릿",
+                price = 900000L,
+                stock = 40,
+                category = ProductCategory.ELECTRONICS,
+                specifications = emptyMap(),
+                salesCount = 90
+            ),
+            Product(
+                name = "무선 이어폰 Pro",
+                description = "노이즈 캔슬링 이어폰",
+                price = 280000L,
+                stock = 200,
+                category = ProductCategory.ELECTRONICS,
+                specifications = emptyMap(),
+                salesCount = 320
+            ),
+            Product(
+                name = "스마트워치 Series 7",
+                description = "건강 관리 워치",
+                price = 450000L,
+                stock = 80,
+                category = ProductCategory.ELECTRONICS,
+                specifications = emptyMap(),
+                salesCount = 140
+            ),
+            // FASHION (3개)
+            Product(
+                name = "러닝화",
+                description = "가벼운 러닝화",
+                price = 180000L,
+                stock = 200,
+                category = ProductCategory.FASHION,
+                specifications = emptyMap(),
+                salesCount = 130
+            ),
+            Product(
+                name = "블랙 청바지",
+                description = "슬림핏 청바지",
+                price = 95000L,
+                stock = 150,
+                category = ProductCategory.FASHION,
+                specifications = emptyMap(),
+                salesCount = 100
+            ),
+            Product(
+                name = "가죽 코트",
+                description = "프리미엄 가죽",
+                price = 380000L,
+                stock = 30,
+                category = ProductCategory.FASHION,
+                specifications = emptyMap(),
+                salesCount = 60
+            ),
+            // FOOD (2개)
+            Product(
+                name = "유기농 현미",
+                description = "국내산 현미",
+                price = 48000L,
+                stock = 500,
+                category = ProductCategory.FOOD,
+                specifications = emptyMap(),
+                salesCount = 270
+            ),
+            Product(
+                name = "원두 커피 블렌드",
+                description = "아라비카 원두",
+                price = 28000L,
+                stock = 300,
+                category = ProductCategory.FOOD,
+                specifications = emptyMap(),
+                salesCount = 190
+            ),
+            // BOOKS (3개)
+            Product(
+                name = "Effective Java",
+                description = "자바 프로그래밍 바이블",
+                price = 38000L,
+                stock = 100,
+                category = ProductCategory.BOOKS,
+                specifications = emptyMap(),
+                salesCount = 85
+            ),
+            Product(
+                name = "Refactoring",
+                description = "리팩터링 2판",
+                price = 35000L,
+                stock = 80,
+                category = ProductCategory.BOOKS,
+                specifications = emptyMap(),
+                salesCount = 160
+            ),
+            Product(
+                name = "Domain-Driven Design",
+                description = "DDD 핵심 가이드",
+                price = 42000L,
+                stock = 60,
+                category = ProductCategory.BOOKS,
+                specifications = emptyMap(),
+                salesCount = 75
+            ),
+            // HOME (2개)
+            Product(
+                name = "공기청정기 Max",
+                description = "대형 공간용",
+                price = 320000L,
+                stock = 60,
+                category = ProductCategory.HOME,
+                specifications = emptyMap(),
+                salesCount = 55
+            ),
+            Product(
+                name = "로봇 청소기",
+                description = "자동 청소",
+                price = 380000L,
+                stock = 40,
+                category = ProductCategory.HOME,
+                specifications = emptyMap(),
+                salesCount = 70
+            ),
+            // SPORTS (1개)
+            Product(
+                name = "프리미엄 요가 매트",
+                description = "친환경 요가 매트",
+                price = 52000L,
+                stock = 150,
+                category = ProductCategory.SPORTS,
+                specifications = emptyMap(),
+                salesCount = 110
+            )
+        )
+
+        productsToCreate.forEach { product ->
+            val saved = productJpaRepository.save(product)
+            testProducts.add(saved.id!!)
+        }
+    }
+
+    afterSpec {
+        // 테스트 데이터 정리
+        productJpaRepository.deleteAll()
+        testProducts.clear()
     }
 
     describe("Product API E2E Tests") {
@@ -39,7 +206,9 @@ class ProductE2ETest(
                 response.body shouldNotBe null
                 response.body?.let { result ->
                     result.products.shouldNotBeEmpty()
+                    result.products.size shouldBe 16 // 생성한 상품 수
                     result.pagination shouldNotBe null
+                    result.pagination.totalElements shouldBe 16
                 }
             }
 
@@ -56,6 +225,8 @@ class ProductE2ETest(
                     result.products shouldHaveSize 5
                     result.pagination.currentPage shouldBe 0
                     result.pagination.size shouldBe 5
+                    result.pagination.totalElements shouldBe 16
+                    result.pagination.hasNext shouldBe true
                 }
 
                 // When - 두 번째 페이지 조회
@@ -70,6 +241,7 @@ class ProductE2ETest(
                     result.products shouldHaveSize 5
                     result.pagination.currentPage shouldBe 1
                     result.pagination.size shouldBe 5
+                    result.pagination.hasPrevious shouldBe true
                 }
             }
 
@@ -84,8 +256,9 @@ class ProductE2ETest(
                 response.statusCode shouldBe HttpStatus.OK
                 response.body?.let { result ->
                     result.products.shouldNotBeEmpty()
+                    result.products shouldHaveSize 5 // ELECTRONICS 상품 5개
                     result.products.forEach { product ->
-                        product.category shouldBe "ELECTRONICS"
+                        product.category shouldBe ProductCategory.ELECTRONICS
                     }
                 }
             }
@@ -113,8 +286,12 @@ class ProductE2ETest(
                 response.statusCode shouldBe HttpStatus.OK
                 response.body?.let { result ->
                     result.products.shouldNotBeEmpty()
-                    // 정렬 옵션이 적용되어 응답이 반환되는지 확인
-                    // Note: 실제 정렬 로직은 ProductService에서 구현되어야 함
+                    // 가격 오름차순 정렬 확인
+                    if (result.products.size > 1) {
+                        for (i in 0 until result.products.size - 1) {
+                            (result.products[i].price <= result.products[i + 1].price) shouldBe true
+                        }
+                    }
                 }
             }
 
@@ -129,8 +306,12 @@ class ProductE2ETest(
                 response.statusCode shouldBe HttpStatus.OK
                 response.body?.let { result ->
                     result.products.shouldNotBeEmpty()
-                    // 정렬 옵션이 적용되어 응답이 반환되는지 확인
-                    // Note: 실제 정렬 로직은 ProductService에서 구현되어야 함
+                    // 가격 내림차순 정렬 확인
+                    if (result.products.size > 1) {
+                        for (i in 0 until result.products.size - 1) {
+                            (result.products[i].price >= result.products[i + 1].price) shouldBe true
+                        }
+                    }
                 }
             }
 
@@ -144,8 +325,16 @@ class ProductE2ETest(
                 // Then
                 response.statusCode shouldBe HttpStatus.OK
                 response.body?.let { result ->
+                    result.products.shouldNotBeEmpty()
+                    result.products shouldHaveSize 3 // BOOKS 상품 3개
                     result.products.forEach { product ->
-                        product.category shouldBe "BOOKS"
+                        product.category shouldBe ProductCategory.BOOKS
+                    }
+                    // 가격 오름차순 확인
+                    if (result.products.size > 1) {
+                        for (i in 0 until result.products.size - 1) {
+                            (result.products[i].price <= result.products[i + 1].price) shouldBe true
+                        }
                     }
                 }
             }
@@ -190,6 +379,10 @@ class ProductE2ETest(
                     // 판매량이 내림차순으로 정렬되어 있는지 확인
                     val salesCounts = result.products.map { it.salesCount }
                     salesCounts shouldBe salesCounts.sortedDescending()
+
+                    // 가장 많이 팔린 상품이 1등
+                    result.products[0].name shouldBe "무선 이어폰 Pro"
+                    result.products[0].salesCount shouldBe 320
                 }
             }
 
@@ -219,9 +412,8 @@ class ProductE2ETest(
 
         describe("상품 상세 조회") {
             it("상품 ID로 상품 상세 정보를 조회할 수 있어야 한다") {
-                // Given - 상품 목록에서 첫 번째 상품 ID 가져오기
-                val listResponse = restTemplate.getForEntity(url("/products"), ProductListResponse::class.java)
-                val firstProductId = listResponse.body?.products?.first()?.id
+                // Given - 생성한 첫 번째 상품 ID 사용
+                val firstProductId = testProducts.first()
 
                 // When
                 val response = restTemplate.getForEntity(
@@ -234,12 +426,12 @@ class ProductE2ETest(
                 response.body shouldNotBe null
                 response.body?.let { product ->
                     product.id shouldBe firstProductId
-                    product.name shouldNotBe null
-                    product.description shouldNotBe null
-                    (product.price > 0) shouldBe true
-                    (product.stock >= 0) shouldBe true
-                    product.category shouldNotBe null
-                    (product.salesCount >= 0) shouldBe true
+                    product.name shouldBe "노트북 Pro"
+                    product.description shouldBe "고성능 노트북"
+                    product.price shouldBe 1800000L
+                    product.stock shouldBe 50
+                    product.category shouldBe ProductCategory.ELECTRONICS
+                    product.salesCount shouldBe 180
                     product.createdAt shouldNotBe null
                     product.updatedAt shouldNotBe null
                 }
@@ -248,7 +440,7 @@ class ProductE2ETest(
             it("존재하지 않는 상품 ID로 조회 시 404를 반환해야 한다") {
                 // When
                 val response = restTemplate.getForEntity(
-                    url("/products/999999"),
+                    url("/products/${UUID.randomUUID()}"),
                     String::class.java
                 )
 
@@ -258,8 +450,7 @@ class ProductE2ETest(
 
             it("상품 상세 정보에는 specifications 정보가 포함되어야 한다") {
                 // Given
-                val listResponse = restTemplate.getForEntity(url("/products"), ProductListResponse::class.java)
-                val firstProductId = listResponse.body?.products?.first()?.id
+                val firstProductId = testProducts.first()
 
                 // When
                 val response = restTemplate.getForEntity(
@@ -270,14 +461,15 @@ class ProductE2ETest(
                 // Then
                 response.statusCode shouldBe HttpStatus.OK
                 response.body?.specifications shouldNotBe null
+                response.body?.specifications?.get("cpu") shouldBe "Intel i9"
+                response.body?.specifications?.get("ram") shouldBe "32GB"
             }
         }
 
         describe("상품 재고 조회") {
             it("상품 ID로 재고 정보를 조회할 수 있어야 한다") {
                 // Given
-                val listResponse = restTemplate.getForEntity(url("/products"), ProductListResponse::class.java)
-                val firstProductId = listResponse.body?.products?.first()?.id
+                val firstProductId = testProducts.first()
 
                 // When
                 val response = restTemplate.getForEntity(
@@ -290,16 +482,16 @@ class ProductE2ETest(
                 response.body shouldNotBe null
                 response.body?.let { stock ->
                     stock.id shouldBe firstProductId
-                    stock.productName shouldNotBe null
-                    (stock.stock >= 0) shouldBe true
+                    stock.productName shouldBe "노트북 Pro"
+                    stock.stock shouldBe 50
+                    stock.isAvailable shouldBe true
                     stock.lastUpdatedAt shouldNotBe null
                 }
             }
 
             it("재고 정보에는 재고 가용성 여부가 포함되어야 한다") {
                 // Given
-                val listResponse = restTemplate.getForEntity(url("/products"), ProductListResponse::class.java)
-                val firstProductId = listResponse.body?.products?.first()?.id
+                val firstProductId = testProducts.first()
 
                 // When
                 val response = restTemplate.getForEntity(
@@ -321,7 +513,7 @@ class ProductE2ETest(
             it("존재하지 않는 상품의 재고 조회 시 404를 반환해야 한다") {
                 // When
                 val response = restTemplate.getForEntity(
-                    url("/products/999999/stock"),
+                    url("/products/${UUID.randomUUID()}/stock"),
                     String::class.java
                 )
 
@@ -369,8 +561,9 @@ class ProductE2ETest(
                 // Then
                 electronicsResponse.statusCode shouldBe HttpStatus.OK
                 electronicsResponse.body?.products?.forEach { product ->
-                    product.category shouldBe "ELECTRONICS"
+                    product.category shouldBe ProductCategory.ELECTRONICS
                 }
+                electronicsResponse.body?.products?.shouldHaveSize(5)
 
                 // When - BOOKS 카테고리 조회
                 val booksResponse = restTemplate.getForEntity(
@@ -381,8 +574,9 @@ class ProductE2ETest(
                 // Then
                 booksResponse.statusCode shouldBe HttpStatus.OK
                 booksResponse.body?.products?.forEach { product ->
-                    product.category shouldBe "BOOKS"
+                    product.category shouldBe ProductCategory.BOOKS
                 }
+                booksResponse.body?.products?.shouldHaveSize(3)
             }
 
             it("인기 상품 조회 후 해당 상품들의 상세 정보를 확인할 수 있어야 한다") {
@@ -408,6 +602,29 @@ class ProductE2ETest(
                         detail.name shouldBe topProduct.name
                         detail.price shouldBe topProduct.price
                         detail.salesCount shouldBe topProduct.salesCount
+                    }
+                }
+            }
+
+            it("카테고리 + 가격순 정렬 + 페이지네이션 조합 시나리오") {
+                // When - ELECTRONICS 카테고리, 가격순, 첫 페이지
+                val response = restTemplate.getForEntity(
+                    url("/products?category=ELECTRONICS&sort=price_low&page=0&size=3"),
+                    ProductListResponse::class.java
+                )
+
+                // Then
+                response.statusCode shouldBe HttpStatus.OK
+                response.body?.let { result ->
+                    result.products shouldHaveSize 3
+                    result.products.all { it.category == ProductCategory.ELECTRONICS.name } shouldBe true
+                    result.pagination.currentPage shouldBe 0
+                    result.pagination.size shouldBe 3
+                    result.pagination.totalElements shouldBe 5 // ELECTRONICS 총 5개
+
+                    // 가격 오름차순 확인
+                    for (i in 0 until result.products.size - 1) {
+                        (result.products[i].price <= result.products[i + 1].price) shouldBe true
                     }
                 }
             }
