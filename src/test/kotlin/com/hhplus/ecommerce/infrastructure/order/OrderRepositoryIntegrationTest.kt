@@ -4,558 +4,124 @@ import com.hhplus.ecommerce.domain.order.entity.Order
 import com.hhplus.ecommerce.domain.order.entity.OrderItem
 import com.hhplus.ecommerce.domain.order.repository.OrderRepository
 import com.hhplus.ecommerce.domain.order.entity.OrderStatus
+import com.hhplus.ecommerce.domain.order.repository.OrderJpaRepository
+import com.hhplus.ecommerce.domain.product.entity.Product
+import com.hhplus.ecommerce.domain.product.entity.ProductCategory
+import com.hhplus.ecommerce.domain.product.repository.ProductJpaRepository
+import com.hhplus.ecommerce.domain.user.entity.User
+import com.hhplus.ecommerce.domain.user.repository.UserJpaRepository
+import io.kotest.core.extensions.Extension
 import io.kotest.core.spec.style.DescribeSpec
+import io.kotest.extensions.spring.SpringExtension
+import io.kotest.matchers.collections.shouldContainExactlyInAnyOrder
 import io.kotest.matchers.collections.shouldHaveSize
 import io.kotest.matchers.shouldBe
 import io.kotest.matchers.shouldNotBe
+import org.springframework.boot.test.autoconfigure.orm.jpa.DataJpaTest
+import org.springframework.context.annotation.ComponentScan
+import org.springframework.test.context.TestPropertySource
 import java.time.LocalDateTime
+import java.util.UUID
 
-/**
- * OrderRepository 통합 테스트
- *
- * 목적: OrderRepository의 CRUD 동작을 직접 테스트
- * 특징: In-Memory Repository 구현체의 데이터 저장/조회 로직 검증
- */
-class OrderRepositoryIntegrationTest : DescribeSpec({
+@DataJpaTest
+@ComponentScan(basePackages = ["com.hhplus.ecommerce"])
+@TestPropertySource(
+    properties = [
+        "spring.jpa.hibernate.ddl-auto=create-drop",
+        "spring.datasource.url=jdbc:h2:mem:testdb",
+        "spring.datasource.driver-class-name=org.h2.Driver",
+        "spring.jpa.database-platform=org.hibernate.dialect.H2Dialect"
+    ]
+)
+class OrderRepositoryIntegrationTest(
+    private val orderRepository: OrderJpaRepository,
+    private val userRepository: UserJpaRepository,
+    private val productRepository: ProductJpaRepository
+) : DescribeSpec() {
 
-    lateinit var orderRepository: OrderRepository
+    override fun extensions(): List<Extension> = listOf(SpringExtension)
 
-    beforeEach {
-        orderRepository = OrderRepositoryImpl()
-    }
+    private lateinit var user1Id: UUID
+    private lateinit var user2Id: UUID
 
-    describe("OrderRepository 통합 테스트 - save & findById") {
-        context("주문 저장 및 조회") {
-            it("주문을 저장하고 ID로 조회할 수 있다") {
-                // given
-                val orderId = orderRepository.generateId()
-                val orderNumber = orderRepository.generateOrderNumber(orderId)
-                val now = LocalDateTime.now()
+    private lateinit var product1Id: UUID
+    private lateinit var product2Id: UUID
+    private lateinit var product1Name: String
+    private lateinit var product2Name: String
 
-                val orderItems = listOf(
-                    OrderItem(
-                        id = orderRepository.generateItemId(),
-                        productId = 1L,
-                        orderId = orderId,
-                        productName = "노트북",
-                        quantity = 2,
-                        unitPrice = 100000L,
-                        subtotal = 200000L
-                    )
-                )
+    init {
+        beforeEach {
+            val user1 = userRepository.save(User( balance = 500000L ))
+            val user2 = userRepository.save(User( balance = 700000L ))
 
-                val order = Order(
-                    id = orderId,
-                    userId = 100L,
-                    orderNumber = orderNumber,
-                    items = orderItems,
-                    totalAmount = 200000L,
-                    discountAmount = 0L,
-                    finalAmount = 200000L,
-                    appliedCouponId = null,
-                    status = OrderStatus.PENDING,
-                    createdAt = now,
-                    updatedAt = now
-                )
+            val product1 = productRepository.save(Product(
+                name = "무선 이어폰 XYZ",
+                description = "노이즈 캔슬링 기능이 탑재된 프리미엄 이어폰",
+                price = 150000L,
+                stock = 80,
+                category = ProductCategory.ELECTRONICS,
+                specifications = mapOf("battery" to "24 hours", "bluetooth" to "5.2", "anc" to "active"),
+                salesCount = 250,
+            ))
+            val product2 = productRepository.save(Product(
+                name = "운동화 ABC",
+                description = "편안한 착용감의 러닝화",
+                price = 89000L,
+                stock = 45,
+                category = ProductCategory.FASHION,
+                specifications = mapOf("size" to "230-290mm", "material" to "mesh"),
+                salesCount = 180,
+            ))
 
-                // when
-                orderRepository.save(order)
-                val foundOrder = orderRepository.findById(orderId)
+            user1Id = user1.id!!
+            user2Id = user2.id!!
 
-                // then
-                foundOrder shouldNotBe null
-                foundOrder!!.id shouldBe orderId
-                foundOrder.userId shouldBe 100L
-                foundOrder.orderNumber shouldBe orderNumber
-                foundOrder.items.size shouldBe 1
-                foundOrder.totalAmount shouldBe 200000L
-                foundOrder.finalAmount shouldBe 200000L
-                foundOrder.status shouldBe OrderStatus.PENDING
-            }
-
-            it("여러 상품을 포함한 주문을 저장하고 조회할 수 있다") {
-                // given
-                val orderId = orderRepository.generateId()
-                val orderNumber = orderRepository.generateOrderNumber(orderId)
-                val now = LocalDateTime.now()
-
-                val orderItems = listOf(
-                    OrderItem(
-                        id = orderRepository.generateItemId(),
-                        productId = 1L,
-                        orderId = orderId,
-                        productName = "노트북",
-                        quantity = 1,
-                        unitPrice = 100000L,
-                        subtotal = 100000L
-                    ),
-                    OrderItem(
-                        id = orderRepository.generateItemId(),
-                        productId = 2L,
-                        orderId = orderId,
-                        productName = "마우스",
-                        quantity = 2,
-                        unitPrice = 30000L,
-                        subtotal = 60000L
-                    ),
-                    OrderItem(
-                        id = orderRepository.generateItemId(),
-                        productId = 3L,
-                        orderId = orderId,
-                        productName = "키보드",
-                        quantity = 1,
-                        unitPrice = 50000L,
-                        subtotal = 50000L
-                    )
-                )
-
-                val order = Order(
-                    id = orderId,
-                    userId = 100L,
-                    orderNumber = orderNumber,
-                    items = orderItems,
-                    totalAmount = 210000L,
-                    discountAmount = 0L,
-                    finalAmount = 210000L,
-                    appliedCouponId = null,
-                    status = OrderStatus.PENDING,
-                    createdAt = now,
-                    updatedAt = now
-                )
-
-                // when
-                orderRepository.save(order)
-                val foundOrder = orderRepository.findById(orderId)
-
-                // then
-                foundOrder shouldNotBe null
-                foundOrder!!.items shouldHaveSize 3
-                foundOrder.items[0].productName shouldBe "노트북"
-                foundOrder.items[1].productName shouldBe "마우스"
-                foundOrder.items[2].productName shouldBe "키보드"
-                foundOrder.totalAmount shouldBe 210000L
-            }
-
-            it("쿠폰이 적용된 주문을 저장하고 조회할 수 있다") {
-                // given
-                val orderId = orderRepository.generateId()
-                val orderNumber = orderRepository.generateOrderNumber(orderId)
-                val now = LocalDateTime.now()
-
-                val orderItems = listOf(
-                    OrderItem(
-                        id = orderRepository.generateItemId(),
-                        productId = 1L,
-                        orderId = orderId,
-                        productName = "노트북",
-                        quantity = 1,
-                        unitPrice = 100000L,
-                        subtotal = 100000L
-                    )
-                )
-
-                val order = Order(
-                    id = orderId,
-                    userId = 100L,
-                    orderNumber = orderNumber,
-                    items = orderItems,
-                    totalAmount = 100000L,
-                    discountAmount = 10000L, // 10% 할인
-                    finalAmount = 90000L,
-                    appliedCouponId = 1L,
-                    status = OrderStatus.PENDING,
-                    createdAt = now,
-                    updatedAt = now
-                )
-
-                // when
-                orderRepository.save(order)
-                val foundOrder = orderRepository.findById(orderId)
-
-                // then
-                foundOrder shouldNotBe null
-                foundOrder!!.appliedCouponId shouldBe 1L
-                foundOrder.discountAmount shouldBe 10000L
-                foundOrder.finalAmount shouldBe 90000L
-            }
-
-            it("주문을 업데이트할 수 있다") {
-                // given - 주문 생성
-                val orderId = orderRepository.generateId()
-                val orderNumber = orderRepository.generateOrderNumber(orderId)
-                val now = LocalDateTime.now()
-
-                val orderItems = listOf(
-                    OrderItem(
-                        id = orderRepository.generateItemId(),
-                        productId = 1L,
-                        orderId = orderId,
-                        productName = "노트북",
-                        quantity = 1,
-                        unitPrice = 100000L,
-                        subtotal = 100000L
-                    )
-                )
-
-                val order = Order(
-                    id = orderId,
-                    userId = 100L,
-                    orderNumber = orderNumber,
-                    items = orderItems,
-                    totalAmount = 100000L,
-                    discountAmount = 0L,
-                    finalAmount = 100000L,
-                    appliedCouponId = null,
-                    status = OrderStatus.PENDING,
-                    createdAt = now,
-                    updatedAt = now
-                )
-
-                orderRepository.save(order)
-
-                // when - 주문 상태 변경
-                order.markAsPaid()
-                orderRepository.save(order)
-
-                // then
-                val updatedOrder = orderRepository.findById(orderId)
-                updatedOrder shouldNotBe null
-                updatedOrder!!.status shouldBe OrderStatus.PAID
-            }
+            product1Id = product1.id!!
+            product2Id = product2.id!!
+            product1Name = product1.name
+            product2Name = product2.name
         }
 
-        context("존재하지 않는 주문 조회") {
-            it("존재하지 않는 ID로 조회 시 null을 반환한다") {
-                // when
-                val foundOrder = orderRepository.findById(999L)
-
-                // then
-                foundOrder shouldBe null
-            }
-        }
-    }
-
-    describe("OrderRepository 통합 테스트 - findByUserId") {
-        context("사용자별 주문 조회") {
-            it("특정 사용자의 모든 주문을 조회할 수 있다") {
+        describe("OrderRepository 통합 테스트") {
+            it("findByUserIdAndStatus - 특정 유저의 특정 상태만 조회") {
                 // given
-                val userId = 100L
-                val now = LocalDateTime.now()
-
-                // 첫 번째 주문
-                val order1 = createOrder(
-                    orderRepository = orderRepository,
-                    userId = userId,
-                    totalAmount = 50000L,
-                    status = OrderStatus.PENDING,
-                    createdAt = now.minusHours(2)
+                val orders = listOf(
+                    Order(userId = user1Id, status = OrderStatus.PAID, totalAmount = 10000, discountAmount = 0, finalAmount = 10000, orderNumber = "ORDER-1001"),
+                    Order(userId = user2Id, status = OrderStatus.PENDING, totalAmount = 5000, discountAmount = 0, finalAmount = 5000, orderNumber = "ORDER-1002"),
                 )
-                orderRepository.save(order1)
 
-                // 두 번째 주문
-                val order2 = createOrder(
-                    orderRepository = orderRepository,
-                    userId = userId,
-                    totalAmount = 100000L,
-                    status = OrderStatus.PAID,
-                    createdAt = now.minusHours(1)
-                )
-                orderRepository.save(order2)
-
-                // 세 번째 주문
-                val order3 = createOrder(
-                    orderRepository = orderRepository,
-                    userId = userId,
-                    totalAmount = 75000L,
-                    status = OrderStatus.CANCELLED,
-                    createdAt = now
-                )
-                orderRepository.save(order3)
+                orders[0].items.add(OrderItem(userId = user1Id, order = orders[0], productId = product1Id, productName = product1Name, quantity = 2, unitPrice = 5000, subtotal = 10000))
+                orders[1].items.add(OrderItem(userId = user2Id, order = orders[1], productId = product2Id, productName = product2Name, quantity = 1, unitPrice = 5000, subtotal = 5000))
+                orderRepository.saveAll(orders)
 
                 // when
-                val orders = orderRepository.findByUserId(userId)
+                val result = orderRepository.findByUserIdAndStatus(user1Id, OrderStatus.PAID)
 
                 // then
-                orders shouldHaveSize 3
-                // 최신순 정렬 확인
-                orders[0].id shouldBe order3.id
-                orders[1].id shouldBe order2.id
-                orders[2].id shouldBe order1.id
+                result.size shouldBe 1
+                result.first().orderNumber shouldBe "ORDER-1001"
+                result.first().items.size shouldBe 1
+                result.first().items.first().unitPrice shouldBe 5000
             }
 
-            it("다른 사용자의 주문은 조회되지 않는다") {
+            it("findByUserId - 특정 유저의 주문 조회") {
                 // given
-                val user1Id = 100L
-                val user2Id = 200L
-                val now = LocalDateTime.now()
-
-                // 사용자 1의 주문
-                val order1 = createOrder(
-                    orderRepository = orderRepository,
-                    userId = user1Id,
-                    totalAmount = 50000L,
-                    status = OrderStatus.PENDING,
-                    createdAt = now
+                val orders = listOf(
+                    Order(userId = user1Id, status = OrderStatus.PAID, totalAmount = 10000, discountAmount = 0, finalAmount = 10000, orderNumber = "ORDER-1001"),
+                    Order(userId = user2Id, status = OrderStatus.PENDING, totalAmount = 5000, discountAmount = 0, finalAmount = 5000, orderNumber = "ORDER-1002"),
                 )
-                orderRepository.save(order1)
 
-                // 사용자 2의 주문
-                val order2 = createOrder(
-                    orderRepository = orderRepository,
-                    userId = user2Id,
-                    totalAmount = 100000L,
-                    status = OrderStatus.PAID,
-                    createdAt = now
-                )
-                orderRepository.save(order2)
+                orders[0].items.add(OrderItem(userId = user1Id, order = orders[0], productId = product1Id, productName = product1Name, quantity = 2, unitPrice = 5000, subtotal = 10000))
+                orders[1].items.add(OrderItem(userId = user2Id, order = orders[1], productId = product2Id, productName = product2Name, quantity = 1, unitPrice = 5000, subtotal = 5000))
+                orderRepository.saveAll(orders)
 
                 // when
-                val user1Orders = orderRepository.findByUserId(user1Id)
-                val user2Orders = orderRepository.findByUserId(user2Id)
+                val result = orderRepository.findByUserId(user1Id)
 
                 // then
-                user1Orders shouldHaveSize 1
-                user1Orders[0].userId shouldBe user1Id
-
-                user2Orders shouldHaveSize 1
-                user2Orders[0].userId shouldBe user2Id
+                result.size shouldBe 2
+                result.map { it.orderNumber } shouldContainExactlyInAnyOrder listOf("ORDER-1001", "ORDER-1002")
             }
-
-            it("주문이 없는 사용자는 빈 리스트를 반환한다") {
-                // when
-                val orders = orderRepository.findByUserId(999L)
-
-                // then
-                orders shouldHaveSize 0
-            }
-        }
-    }
-
-    describe("OrderRepository 통합 테스트 - findByUserIdAndStatus") {
-        context("사용자별 상태별 주문 조회") {
-            it("특정 사용자의 특정 상태 주문만 조회할 수 있다") {
-                // given
-                val userId = 100L
-                val now = LocalDateTime.now()
-
-                // PENDING 주문
-                val pendingOrder = createOrder(
-                    orderRepository = orderRepository,
-                    userId = userId,
-                    totalAmount = 50000L,
-                    status = OrderStatus.PENDING,
-                    createdAt = now.minusHours(2)
-                )
-                orderRepository.save(pendingOrder)
-
-                // PAID 주문 2개
-                val paidOrder1 = createOrder(
-                    orderRepository = orderRepository,
-                    userId = userId,
-                    totalAmount = 100000L,
-                    status = OrderStatus.PAID,
-                    createdAt = now.minusHours(1)
-                )
-                orderRepository.save(paidOrder1)
-
-                val paidOrder2 = createOrder(
-                    orderRepository = orderRepository,
-                    userId = userId,
-                    totalAmount = 75000L,
-                    status = OrderStatus.PAID,
-                    createdAt = now
-                )
-                orderRepository.save(paidOrder2)
-
-                // CANCELLED 주문
-                val cancelledOrder = createOrder(
-                    orderRepository = orderRepository,
-                    userId = userId,
-                    totalAmount = 30000L,
-                    status = OrderStatus.CANCELLED,
-                    createdAt = now.minusMinutes(30)
-                )
-                orderRepository.save(cancelledOrder)
-
-                // when
-                val pendingOrders = orderRepository.findByUserIdAndStatus(userId, OrderStatus.PENDING)
-                val paidOrders = orderRepository.findByUserIdAndStatus(userId, OrderStatus.PAID)
-                val cancelledOrders = orderRepository.findByUserIdAndStatus(userId, OrderStatus.CANCELLED)
-
-                // then
-                pendingOrders shouldHaveSize 1
-                pendingOrders[0].status shouldBe OrderStatus.PENDING
-
-                paidOrders shouldHaveSize 2
-                paidOrders.all { it.status == OrderStatus.PAID } shouldBe true
-
-                cancelledOrders shouldHaveSize 1
-                cancelledOrders[0].status shouldBe OrderStatus.CANCELLED
-            }
-
-            it("해당 상태의 주문이 없으면 빈 리스트를 반환한다") {
-                // given
-                val userId = 100L
-                val now = LocalDateTime.now()
-
-                // PENDING 주문만 생성
-                val order = createOrder(
-                    orderRepository = orderRepository,
-                    userId = userId,
-                    totalAmount = 50000L,
-                    status = OrderStatus.PENDING,
-                    createdAt = now
-                )
-                orderRepository.save(order)
-
-                // when - PAID 주문 조회
-                val paidOrders = orderRepository.findByUserIdAndStatus(userId, OrderStatus.PAID)
-
-                // then
-                paidOrders shouldHaveSize 0
-            }
-
-            it("최신순으로 정렬되어 반환된다") {
-                // given
-                val userId = 100L
-                val now = LocalDateTime.now()
-
-                val order1 = createOrder(
-                    orderRepository = orderRepository,
-                    userId = userId,
-                    totalAmount = 50000L,
-                    status = OrderStatus.PAID,
-                    createdAt = now.minusHours(3)
-                )
-                orderRepository.save(order1)
-
-                val order2 = createOrder(
-                    orderRepository = orderRepository,
-                    userId = userId,
-                    totalAmount = 60000L,
-                    status = OrderStatus.PAID,
-                    createdAt = now.minusHours(2)
-                )
-                orderRepository.save(order2)
-
-                val order3 = createOrder(
-                    orderRepository = orderRepository,
-                    userId = userId,
-                    totalAmount = 70000L,
-                    status = OrderStatus.PAID,
-                    createdAt = now.minusHours(1)
-                )
-                orderRepository.save(order3)
-
-                // when
-                val orders = orderRepository.findByUserIdAndStatus(userId, OrderStatus.PAID)
-
-                // then
-                orders shouldHaveSize 3
-                // 최신순 확인
-                orders[0].id shouldBe order3.id
-                orders[1].id shouldBe order2.id
-                orders[2].id shouldBe order1.id
-            }
-        }
-    }
-
-    describe("OrderRepository 통합 테스트 - ID 생성") {
-        context("ID 생성 기능") {
-            it("generateId()로 고유한 주문 ID를 생성할 수 있다") {
-                // when
-                val id1 = orderRepository.generateId()
-                val id2 = orderRepository.generateId()
-                val id3 = orderRepository.generateId()
-
-                // then
-                id1 shouldNotBe id2
-                id2 shouldNotBe id3
-                id1 shouldNotBe id3
-
-                // ID가 증가하는지 확인
-                id2 shouldBe id1 + 1
-                id3 shouldBe id2 + 1
-            }
-
-            it("generateItemId()로 고유한 주문 아이템 ID를 생성할 수 있다") {
-                // when
-                val itemId1 = orderRepository.generateItemId()
-                val itemId2 = orderRepository.generateItemId()
-                val itemId3 = orderRepository.generateItemId()
-
-                // then
-                itemId1 shouldNotBe itemId2
-                itemId2 shouldNotBe itemId3
-                itemId1 shouldNotBe itemId3
-
-                // ID가 증가하는지 확인
-                itemId2 shouldBe itemId1 + 1
-                itemId3 shouldBe itemId2 + 1
-            }
-
-            it("generateOrderNumber()로 형식에 맞는 주문번호를 생성할 수 있다") {
-                // when
-                val orderId = 1001L
-                val orderNumber = orderRepository.generateOrderNumber(orderId)
-
-                // then
-                orderNumber shouldNotBe null
-                orderNumber.startsWith("ORD-") shouldBe true
-                orderNumber.contains("-$orderId") shouldBe true
-                // 형식: ORD-YYYYMMDD-orderId
-                orderNumber.split("-").size shouldBe 3
-            }
-
-            it("다른 주문 ID에 대해 다른 주문번호를 생성한다") {
-                // when
-                val orderNumber1 = orderRepository.generateOrderNumber(1001L)
-                val orderNumber2 = orderRepository.generateOrderNumber(1002L)
-
-                // then
-                orderNumber1 shouldNotBe orderNumber2
-                orderNumber1.endsWith("-1001") shouldBe true
-                orderNumber2.endsWith("-1002") shouldBe true
-            }
-        }
-    }
-}) {
-    companion object {
-        fun createOrder(
-            orderRepository: OrderRepository,
-            userId: Long,
-            totalAmount: Long,
-            status: OrderStatus,
-            createdAt: LocalDateTime
-        ): Order {
-            val orderId = orderRepository.generateId()
-            val orderNumber = orderRepository.generateOrderNumber(orderId)
-
-            val orderItems = listOf(
-                OrderItem(
-                    id = orderRepository.generateItemId(),
-                    productId = 1L,
-                    orderId = orderId,
-                    productName = "테스트 상품",
-                    quantity = 1,
-                    unitPrice = totalAmount,
-                    subtotal = totalAmount
-                )
-            )
-
-            return Order(
-                id = orderId,
-                userId = userId,
-                orderNumber = orderNumber,
-                items = orderItems,
-                totalAmount = totalAmount,
-                discountAmount = 0L,
-                finalAmount = totalAmount,
-                appliedCouponId = null,
-                status = status,
-                createdAt = createdAt,
-                updatedAt = createdAt
-            )
         }
     }
 }
