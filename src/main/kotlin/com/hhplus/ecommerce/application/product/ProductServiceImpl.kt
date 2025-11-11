@@ -132,4 +132,13 @@ class ProductServiceImpl(
     override fun updateProduct(product: Product): Product {
         return productRepository.save(product)
     }
+
+    override fun findByIdWithLock(id: UUID): Product {
+        return productRepository.findByIdWithLock(id)
+            .orElseThrow { ProductNotFoundException(id) }
+    }
+
+    override fun findAllByIdWithLock(ids: List<UUID>): List<Product> {
+        return productRepository.findAllByIdWithLock(ids)
+    }
 }

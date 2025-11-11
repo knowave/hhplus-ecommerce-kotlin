@@ -22,78 +22,75 @@ import kotlin.math.max
 @Service
 class CouponServiceImpl(
     private val couponRepository: CouponJpaRepository,
-    private val userCouponRepository: UserCouponJpaRepository,
-    private val lockManager: com.hhplus.ecommerce.common.lock.LockManager
+    private val userCouponRepository: UserCouponJpaRepository
 ) : CouponService {
 
     private val DATE_FORMATTER = DateTimeFormatter.ofPattern("yyyy-MM-dd")
     private val DATETIME_FORMATTER = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss")
 
+    @org.springframework.transaction.annotation.Transactional
     override fun issueCoupon(couponId: UUID, request: IssueCouponCommand): IssueCouponResult {
-        // Coupon Lock을 사용하여 동시 발급을 제어합니다.
-        return lockManager.executeWithCouponLock(couponId) {
-            // 쿠폰 조회
-            val coupon = couponRepository.findById(couponId)
-                .orElseThrow{ CouponNotFoundException(couponId) }
+        // 비관적 락을 사용하여 쿠폰 조회 (동시 발급 제어)
+        val coupon = couponRepository.findByIdWithLock(couponId)
+            .orElseThrow{ CouponNotFoundException(couponId) }
 
-            // 1) 중복 발급 검증 (1인 1매 제한)
-            val existingUserCoupon = userCouponRepository.findByIdAndUserId(request.userId, couponId)
+        // 1) 중복 발급 검증 (1인 1매 제한)
+        val existingUserCoupon = userCouponRepository.findByIdAndUserId(request.userId, couponId)
 
-            if (existingUserCoupon != null) {
-                throw CouponAlreadyIssuedException(request.userId, couponId)
-            }
-
-            // 2) 발급 기간 검증
-            val today = LocalDate.now()
-            val startDate = LocalDate.parse(coupon.startDate.toString(), DATE_FORMATTER)
-            val endDate = LocalDate.parse(coupon.endDate.toString(), DATE_FORMATTER)
-
-            if (today.isBefore(startDate)) {
-                throw InvalidCouponDateException("The coupon issuance period has not started.")
-            }
-            if (today.isAfter(endDate)) {
-                throw InvalidCouponDateException("The coupon issuance period has ended.")
-            }
-
-            // 3) 재고 검증 (동시성 제어의 핵심)
-            if (coupon.issuedQuantity >= coupon.totalQuantity) {
-                throw CouponSoldOutException(couponId)
-            }
-
-            // 4) 발급 수량 증가 (원자적 연산 보장)
-            coupon.issuedQuantity++
-            couponRepository.save(coupon)
-
-            // 5) 사용자 쿠폰 생성
-            // issuedQuantity 증가와 실제 쿠폰 생성이 원자적으로 처리되어야 재고 불일치 방지
-            val now = LocalDateTime.now()
-            val expiresAt = now.plusDays(coupon.validityDays.toLong())
-
-            val userCoupon = UserCoupon(
-                userId = request.userId,
-                couponId = couponId,
-                status = CouponStatus.AVAILABLE,
-                issuedAt = LocalDateTime.now(),
-                expiresAt = expiresAt,
-                usedAt = null
-            )
-
-            userCouponRepository.save(userCoupon)
-
-            // 6) 응답 생성
-            IssueCouponResult(
-                userCouponId = userCoupon.id!!,
-                userId = userCoupon.userId,
-                couponId = coupon.id!!,
-                couponName = coupon.name,
-                discountRate = coupon.discountRate,
-                status = userCoupon.status.name,
-                issuedAt = userCoupon.issuedAt.toString(),
-                expiresAt = userCoupon.expiresAt.toString(),
-                remainingQuantity = coupon.totalQuantity - coupon.issuedQuantity,
-                totalQuantity = coupon.totalQuantity
-            )
+        if (existingUserCoupon != null) {
+            throw CouponAlreadyIssuedException(request.userId, couponId)
         }
+
+        // 2) 발급 기간 검증
+        val today = LocalDate.now()
+        val startDate = LocalDate.parse(coupon.startDate.toString(), DATE_FORMATTER)
+        val endDate = LocalDate.parse(coupon.endDate.toString(), DATE_FORMATTER)
+
+        if (today.isBefore(startDate)) {
+            throw InvalidCouponDateException("The coupon issuance period has not started.")
+        }
+        if (today.isAfter(endDate)) {
+            throw InvalidCouponDateException("The coupon issuance period has ended.")
+        }
+
+        // 3) 재고 검증 (동시성 제어의 핵심)
+        if (coupon.issuedQuantity >= coupon.totalQuantity) {
+            throw CouponSoldOutException(couponId)
+        }
+
+        // 4) 발급 수량 증가 (비관적 락으로 원자적 연산 보장)
+        coupon.issuedQuantity++
+        couponRepository.save(coupon)
+
+        // 5) 사용자 쿠폰 생성
+        // issuedQuantity 증가와 실제 쿠폰 생성이 원자적으로 처리되어야 재고 불일치 방지
+        val now = LocalDateTime.now()
+        val expiresAt = now.plusDays(coupon.validityDays.toLong())
+
+        val userCoupon = UserCoupon(
+            userId = request.userId,
+            couponId = couponId,
+            status = CouponStatus.AVAILABLE,
+            issuedAt = LocalDateTime.now(),
+            expiresAt = expiresAt,
+            usedAt = null
+        )
+
+        userCouponRepository.save(userCoupon)
+
+        // 6) 응답 생성
+        return IssueCouponResult(
+            userCouponId = userCoupon.id!!,
+            userId = userCoupon.userId,
+            couponId = coupon.id!!,
+            couponName = coupon.name,
+            discountRate = coupon.discountRate,
+            status = userCoupon.status.name,
+            issuedAt = userCoupon.issuedAt.toString(),
+            expiresAt = userCoupon.expiresAt.toString(),
+            remainingQuantity = coupon.totalQuantity - coupon.issuedQuantity,
+            totalQuantity = coupon.totalQuantity
+        )
     }
 
     override fun getAvailableCoupons(): AvailableCouponItemResult {
@@ -261,6 +258,11 @@ class CouponServiceImpl(
 
     override fun updateUserCoupon(userCoupon: UserCoupon): UserCoupon {
         return userCouponRepository.save(userCoupon)
+    }
+
+    override fun findByIdWithLock(id: UUID): Coupon {
+        return couponRepository.findByIdWithLock(id)
+            .orElseThrow { CouponNotFoundException(id) }
     }
 
     private fun parseDateTimeFlexible(dateTimeStr: String): LocalDateTime {

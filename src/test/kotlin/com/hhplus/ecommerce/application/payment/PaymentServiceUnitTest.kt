@@ -38,7 +38,6 @@ class PaymentServiceUnitTest : DescribeSpec({
     lateinit var userService: UserService
     lateinit var productService: ProductService
     lateinit var couponService: CouponService
-    lateinit var lockManager: LockManager
     lateinit var paymentService: PaymentService
     lateinit var shippingService: ShippingService
 
@@ -50,7 +49,6 @@ class PaymentServiceUnitTest : DescribeSpec({
         userService = mockk(relaxed = true)
         productService = mockk(relaxed = true)
         couponService = mockk(relaxed = true)
-        lockManager = mockk(relaxed = true)
         shippingService = mockk(relaxed = true)
 
         paymentService = PaymentServiceImpl(
@@ -61,7 +59,6 @@ class PaymentServiceUnitTest : DescribeSpec({
             productService,
             couponService,
             shippingService,
-            lockManager,
         )
     }
 

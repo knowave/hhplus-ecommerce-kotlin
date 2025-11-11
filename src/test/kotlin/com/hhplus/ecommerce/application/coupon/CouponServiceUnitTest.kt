@@ -26,7 +26,6 @@ import java.util.UUID
 class CouponServiceUnitTest : DescribeSpec({
     lateinit var couponRepository: CouponJpaRepository
     lateinit var userCouponRepository: UserCouponJpaRepository
-    lateinit var lockManager: com.hhplus.ecommerce.common.lock.LockManager
     lateinit var couponService: CouponServiceImpl
     val dateFormatter: DateTimeFormatter = DateTimeFormatter.ofPattern("yyyy-MM-dd")
     val dateTimeFormatter: DateTimeFormatter = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss")
@@ -34,8 +33,7 @@ class CouponServiceUnitTest : DescribeSpec({
     beforeEach {
         couponRepository = mockk()
         userCouponRepository = mockk()
-        lockManager = com.hhplus.ecommerce.common.lock.LockManager()
-        couponService = CouponServiceImpl(couponRepository, userCouponRepository, lockManager)
+        couponService = CouponServiceImpl(couponRepository, userCouponRepository)
     }
 
     describe("CouponService 단위 테스트 - issueCoupon") {
