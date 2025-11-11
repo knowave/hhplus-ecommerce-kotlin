@@ -341,19 +341,27 @@ class OrderServiceUnitTest : DescribeSpec({
                 val productId = UUID.randomUUID()
 
                 val product = createProduct(name = "노트북", price = 100000L, stock = 5, category = ProductCategory.ELECTRONICS)
-                val orderItems = listOf(
-                    OrderItem(productId = productId, orderId = orderId, productName = "노트북", quantity = 2, unitPrice = 100000L, subtotal = 200000L)
-                )
+
                 val order = Order(
                     userId = userId,
                     orderNumber = "ORD-20251103-001001",
-                    items = orderItems,
                     totalAmount = 200000L,
                     discountAmount = 0L,
                     finalAmount = 200000L,
                     appliedCouponId = null,
                     status = OrderStatus.PENDING
                 )
+
+                val orderItem = OrderItem(
+                    productId = productId,
+                    userId = userId,
+                    order = order,
+                    productName = "노트북",
+                    quantity = 2,
+                    unitPrice = 100000L,
+                    subtotal = 200000L
+                )
+                order.items.add(orderItem)
 
                 val command = CancelOrderCommand(userId)
 
@@ -396,20 +404,28 @@ class OrderServiceUnitTest : DescribeSpec({
                 val orderId = UUID.randomUUID()
                 val ownerId = UUID.randomUUID()
                 val otherUserId = UUID.randomUUID()
+                val productId = UUID.randomUUID()
 
-                val orderItems = listOf(
-                    OrderItem(productId = UUID.randomUUID(), orderId = orderId, productName = "노트북", quantity = 1, unitPrice = 100000L, subtotal = 100000L)
-                )
                 val order = Order(
                     userId = ownerId,
                     orderNumber = "ORD-20251103-001001",
-                    items = orderItems,
                     totalAmount = 100000L,
                     discountAmount = 0L,
                     finalAmount = 100000L,
                     appliedCouponId = null,
                     status = OrderStatus.PENDING
                 )
+
+                val orderItem = OrderItem(
+                    productId = productId,
+                    userId = ownerId,
+                    order = order,
+                    productName = "노트북",
+                    quantity = 1,
+                    unitPrice = 100000L,
+                    subtotal = 100000L
+                )
+                order.items.add(orderItem)
 
                 val command = CancelOrderCommand(otherUserId)
 
