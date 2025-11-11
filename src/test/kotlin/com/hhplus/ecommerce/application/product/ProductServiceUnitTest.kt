@@ -2,7 +2,7 @@ package com.hhplus.ecommerce.application.product
 
 import com.hhplus.ecommerce.application.product.dto.GetProductsCommand
 import com.hhplus.ecommerce.domain.product.entity.ProductCategory
-import com.hhplus.ecommerce.domain.product.repository.ProductRepository
+import com.hhplus.ecommerce.domain.product.repository.ProductJpaRepository
 import com.hhplus.ecommerce.domain.product.entity.Product
 import io.kotest.core.spec.style.DescribeSpec
 import io.kotest.matchers.collections.shouldBeEmpty
@@ -12,14 +12,12 @@ import io.kotest.matchers.shouldNotBe
 import io.mockk.every
 import io.mockk.mockk
 import io.mockk.verify
-import java.time.LocalDateTime
-import java.time.format.DateTimeFormatter
-import java.util.UUID
+import org.springframework.data.domain.PageImpl
+import org.springframework.data.domain.PageRequest
 
 class ProductServiceUnitTest : DescribeSpec({
-    lateinit var productRepository: ProductRepository
+    lateinit var productRepository: ProductJpaRepository
     lateinit var productService: ProductServiceImpl
-    val dateFormatter: DateTimeFormatter = DateTimeFormatter.ISO_LOCAL_DATE_TIME
 
     beforeEach {
         productRepository = mockk(relaxed = true)
@@ -35,27 +33,26 @@ class ProductServiceUnitTest : DescribeSpec({
                     createProduct("상품2", 20000L, 200, ProductCategory.FASHION, 30),
                     createProduct("상품3", 15000L, 150, ProductCategory.FOOD, 70)
                 )
+                val pageRequest = PageRequest.of(0, 20)
+                val page = PageImpl(products, pageRequest, products.size.toLong())
 
-                every { productRepository.findAll() } returns products
+                every { productRepository.findAllWithFilter(null, any()) } returns page
 
                 // when
                 val result = productService.getProducts(GetProductsCommand(
-                    orderBy = GetProductsCommand.OrderBy.ASC
+                    sortBy = GetProductsCommand.SortBy.NEWEST,
+                    orderBy = GetProductsCommand.OrderBy.DESC
                 ))
 
                 // then
                 result.products shouldHaveSize 3
-                // 최신순이므로 상품3, 상품2, 상품1 순서
-                result.products[0].name shouldBe "상품3"
-                result.products[1].name shouldBe "상품2"
-                result.products[2].name shouldBe "상품1"
                 result.pagination.totalElements shouldBe 3
                 result.pagination.totalPages shouldBe 1
                 result.pagination.currentPage shouldBe 0
                 result.pagination.hasNext shouldBe false
                 result.pagination.hasPrevious shouldBe false
 
-                verify(exactly = 1) { productRepository.findAll() }
+                verify(exactly = 1) { productRepository.findAllWithFilter(null, any()) }
             }
         }
 
@@ -66,23 +63,23 @@ class ProductServiceUnitTest : DescribeSpec({
                     createProduct("노트북", 1500000L, 50, ProductCategory.ELECTRONICS, 100),
                     createProduct("스마트폰", 1200000L, 100, ProductCategory.ELECTRONICS, 150)
                 )
+                val pageRequest = PageRequest.of(0, 10)
+                val page = PageImpl(electronicsProducts, pageRequest, electronicsProducts.size.toLong())
 
-                every { productRepository.findByCategory(ProductCategory.ELECTRONICS) } returns electronicsProducts
+                every { productRepository.findAllWithFilter(ProductCategory.ELECTRONICS, any()) } returns page
 
                 // when
-                val result = productService.getProducts(
+                val result = productService.getProducts(GetProductsCommand(
                     category = "ELECTRONICS",
-                    sort = null,
                     page = 0,
                     size = 10
-                )
+                ))
 
                 // then
                 result.products shouldHaveSize 2
                 result.products.all { it.category == ProductCategory.ELECTRONICS } shouldBe true
 
-                verify(exactly = 1) { productRepository.findByCategory(ProductCategory.ELECTRONICS) }
-                verify(exactly = 0) { productRepository.findAll() }
+                verify(exactly = 1) { productRepository.findAllWithFilter(ProductCategory.ELECTRONICS, any()) }
             }
 
             it("소문자 카테고리명도 대문자로 변환하여 조회한다") {
@@ -90,22 +87,23 @@ class ProductServiceUnitTest : DescribeSpec({
                 val fashionProducts = listOf(
                     createProduct("청바지", 79000L, 200, ProductCategory.FASHION, 120)
                 )
+                val pageRequest = PageRequest.of(0, 10)
+                val page = PageImpl(fashionProducts, pageRequest, fashionProducts.size.toLong())
 
-                every { productRepository.findByCategory(ProductCategory.FASHION) } returns fashionProducts
+                every { productRepository.findAllWithFilter(ProductCategory.FASHION, any()) } returns page
 
                 // when
-                val result = productService.getProducts(
+                val result = productService.getProducts(GetProductsCommand(
                     category = "fashion", // 소문자
-                    sort = null,
                     page = 0,
                     size = 10
-                )
+                ))
 
                 // then
                 result.products shouldHaveSize 1
                 result.products[0].category shouldBe ProductCategory.FASHION
 
-                verify(exactly = 1) { productRepository.findByCategory(ProductCategory.FASHION) }
+                verify(exactly = 1) { productRepository.findAllWithFilter(ProductCategory.FASHION, any()) }
             }
         }
 
@@ -118,84 +116,65 @@ class ProductServiceUnitTest : DescribeSpec({
 
             it("가격순으로 정렬한다 (오름차순)") {
                 // given
-                every { productRepository.findAll() } returns products
+                val pageRequest = PageRequest.of(0, 10)
+                val page = PageImpl(products, pageRequest, products.size.toLong())
+
+                every { productRepository.findAllWithFilter(null, any()) } returns page
 
                 // when
-                val result = productService.getProducts(
-                    category = null,
-                    sort = "price",
+                val result = productService.getProducts(GetProductsCommand(
+                    sortBy = GetProductsCommand.SortBy.PRICE,
+                    orderBy = GetProductsCommand.OrderBy.ASC,
                     page = 0,
                     size = 10
-                )
+                ))
 
                 // then
                 result.products shouldHaveSize 3
-                result.products[0].price shouldBe 10000L
-                result.products[1].price shouldBe 20000L
-                result.products[2].price shouldBe 30000L
 
-                verify(exactly = 1) { productRepository.findAll() }
+                verify(exactly = 1) { productRepository.findAllWithFilter(null, any()) }
             }
 
             it("인기순으로 정렬한다 (판매량 내림차순)") {
                 // given
-                every { productRepository.findAll() } returns products
+                val pageRequest = PageRequest.of(0, 10)
+                val page = PageImpl(products, pageRequest, products.size.toLong())
+
+                every { productRepository.findAllWithFilter(null, any()) } returns page
 
                 // when
-                val result = productService.getProducts(
-                    category = null,
-                    sort = "popularity",
+                val result = productService.getProducts(GetProductsCommand(
+                    sortBy = GetProductsCommand.SortBy.POPULARITY,
+                    orderBy = GetProductsCommand.OrderBy.DESC,
                     page = 0,
                     size = 10
-                )
+                ))
 
                 // then
                 result.products shouldHaveSize 3
-                result.products[0].name shouldBe "상품2" // 판매량 200
-                result.products[1].name shouldBe "상품3" // 판매량 100
-                result.products[2].name shouldBe "상품1" // 판매량 50
 
-                verify(exactly = 1) { productRepository.findAll() }
+                verify(exactly = 1) { productRepository.findAllWithFilter(null, any()) }
             }
 
             it("최신순으로 정렬한다 (명시적으로 newest 지정)") {
                 // given
-                every { productRepository.findAll() } returns products
+                val pageRequest = PageRequest.of(0, 10)
+                val page = PageImpl(products, pageRequest, products.size.toLong())
+
+                every { productRepository.findAllWithFilter(null, any()) } returns page
 
                 // when
-                val result = productService.getProducts(
-                    category = null,
-                    sort = "newest",
+                val result = productService.getProducts(GetProductsCommand(
+                    sortBy = GetProductsCommand.SortBy.NEWEST,
+                    orderBy = GetProductsCommand.OrderBy.DESC,
                     page = 0,
                     size = 10
-                )
+                ))
 
                 // then
                 result.products shouldHaveSize 3
-                result.products[0].name shouldBe "상품3" // 가장 최근
-                result.products[1].name shouldBe "상품2"
-                result.products[2].name shouldBe "상품1"
 
-                verify(exactly = 1) { productRepository.findAll() }
-            }
-
-            it("알 수 없는 정렬 옵션은 기본값(최신순)으로 처리한다") {
-                // given
-                every { productRepository.findAll() } returns products
-
-                // when
-                val result = productService.getProducts(
-                    category = null,
-                    sort = "unknown_sort",
-                    page = 0,
-                    size = 10
-                )
-
-                // then
-                result.products shouldHaveSize 3
-                result.products[0].name shouldBe "상품3" // 최신순
-
-                verify(exactly = 1) { productRepository.findAll() }
+                verify(exactly = 1) { productRepository.findAllWithFilter(null, any()) }
             }
         }
 
@@ -212,15 +191,16 @@ class ProductServiceUnitTest : DescribeSpec({
 
             it("첫 페이지를 정상적으로 조회한다") {
                 // given
-                every { productRepository.findAll() } returns manyProducts
+                val pageRequest = PageRequest.of(0, 5)
+                val page = PageImpl(manyProducts.take(5), pageRequest, manyProducts.size.toLong())
+
+                every { productRepository.findAllWithFilter(null, any()) } returns page
 
                 // when
-                val result = productService.getProducts(
-                    category = null,
-                    sort = null,
+                val result = productService.getProducts(GetProductsCommand(
                     page = 0,
                     size = 5
-                )
+                ))
 
                 // then
                 result.products shouldHaveSize 5
@@ -230,20 +210,21 @@ class ProductServiceUnitTest : DescribeSpec({
                 result.pagination.hasNext shouldBe true
                 result.pagination.hasPrevious shouldBe false
 
-                verify(exactly = 1) { productRepository.findAll() }
+                verify(exactly = 1) { productRepository.findAllWithFilter(null, any()) }
             }
 
             it("중간 페이지를 정상적으로 조회한다") {
                 // given
-                every { productRepository.findAll() } returns manyProducts
+                val pageRequest = PageRequest.of(1, 5)
+                val page = PageImpl(manyProducts.subList(5, 10), pageRequest, manyProducts.size.toLong())
+
+                every { productRepository.findAllWithFilter(null, any()) } returns page
 
                 // when
-                val result = productService.getProducts(
-                    category = null,
-                    sort = null,
+                val result = productService.getProducts(GetProductsCommand(
                     page = 1,
                     size = 5
-                )
+                ))
 
                 // then
                 result.products shouldHaveSize 5
@@ -251,20 +232,21 @@ class ProductServiceUnitTest : DescribeSpec({
                 result.pagination.hasNext shouldBe true
                 result.pagination.hasPrevious shouldBe true
 
-                verify(exactly = 1) { productRepository.findAll() }
+                verify(exactly = 1) { productRepository.findAllWithFilter(null, any()) }
             }
 
             it("마지막 페이지를 정상적으로 조회한다") {
                 // given
-                every { productRepository.findAll() } returns manyProducts
+                val pageRequest = PageRequest.of(2, 5)
+                val page = PageImpl(manyProducts.subList(10, 15), pageRequest, manyProducts.size.toLong())
+
+                every { productRepository.findAllWithFilter(null, any()) } returns page
 
                 // when
-                val result = productService.getProducts(
-                    category = null,
-                    sort = null,
+                val result = productService.getProducts(GetProductsCommand(
                     page = 2,
                     size = 5
-                )
+                ))
 
                 // then
                 result.products shouldHaveSize 5
@@ -272,7 +254,7 @@ class ProductServiceUnitTest : DescribeSpec({
                 result.pagination.hasNext shouldBe false
                 result.pagination.hasPrevious shouldBe true
 
-                verify(exactly = 1) { productRepository.findAll() }
+                verify(exactly = 1) { productRepository.findAllWithFilter(null, any()) }
             }
         }
     }
