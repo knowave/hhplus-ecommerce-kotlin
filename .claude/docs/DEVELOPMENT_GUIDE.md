@@ -23,4 +23,5 @@
 6. 테스트 코드를 확인하기 위해 `jacoco`를 사용.
 7. 테스트 코드 70% 이상은 비즈니스 로직이 충족이 되었을 때 가능한 조건.
 8. Repository는 `JpaRepository`를 사용할것.
-9. 각 도메인의 service/repository 통합테스트, E2E 테스트는 JPA InMemoryDB를 사용할것.
+9. 각 도메인의 service/repository 통합테스트, E2E 테스트는 JPA InMemoryDB를 사용할 것.
+10. 각 도에인의 통합테스트와 E2E 테스트는 반드시 테스트용 데이터를 생성할 것.

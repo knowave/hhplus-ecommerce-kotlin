@@ -67,7 +67,7 @@ class PaymentServiceIntegrationTest(
     private lateinit var product2Id: UUID
 
     init {
-        beforeEach {
+        beforeSpec {
             // 테스트용 사용자 생성
             val createUserCommand = CreateUserCommand(balance = 2000000L)
             val savedUser = userService.createUser(createUserCommand)
@@ -100,7 +100,7 @@ class PaymentServiceIntegrationTest(
         }
 
         afterEach {
-            // 테스트 데이터 정리
+            // 각 테스트 후 결제 데이터만 정리
             transmissionJpaRepository.deleteAll()
             paymentJpaRepository.deleteAll()
         }
