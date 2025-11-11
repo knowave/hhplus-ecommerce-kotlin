@@ -1,6 +1,8 @@
 package com.hhplus.ecommerce.application.shipping
 
 import com.hhplus.ecommerce.application.shipping.dto.*
+import com.hhplus.ecommerce.domain.shipping.entity.Shipping
+import java.time.LocalDateTime
 import java.util.UUID
 
 /**
@@ -33,4 +35,9 @@ interface ShippingService {
         page: Int,
         size: Int
     ): UserShippingListResult
+
+    /**
+     * 배송 생성
+     */
+    fun createShipping(orderId: UUID, carrier: String): Shipping
 }

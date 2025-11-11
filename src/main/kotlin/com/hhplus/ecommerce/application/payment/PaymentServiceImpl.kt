@@ -4,6 +4,7 @@ import com.hhplus.ecommerce.application.coupon.CouponService
 import com.hhplus.ecommerce.application.order.OrderService
 import com.hhplus.ecommerce.application.payment.dto.*
 import com.hhplus.ecommerce.application.product.ProductService
+import com.hhplus.ecommerce.application.shipping.ShippingService
 import com.hhplus.ecommerce.application.user.UserService
 import com.hhplus.ecommerce.common.exception.*
 import com.hhplus.ecommerce.common.lock.LockManager
@@ -21,7 +22,7 @@ import java.util.UUID
  * 결제 서비스 구현체
  *
  * 비즈니스 정책에 따른 결제 처리:
- * 1. 결제 성공: 잔액 차감 → 주문 상태 변경(PAID) → 데이터 전송 레코드 생성(PENDING)
+ * 1. 결제 성공: 잔액 차감 → 주문 상태 변경(PAID) → shipping 생성 (PENDING) → 데이터 전송 레코드 생성(PENDING)
  * 2. 결제 실패: 재고 복원 → 쿠폰 복원 → 주문 취소(CANCELLED)
  */
 @Service
@@ -32,6 +33,7 @@ class PaymentServiceImpl(
     private val userService: UserService,
     private val productService: ProductService,
     private val couponService: CouponService,
+    private val shippingService: ShippingService,
     private val lockManager: LockManager
 ) : PaymentService {
 
@@ -101,6 +103,8 @@ class PaymentServiceImpl(
         )
 
         transmissionRepository.save(transmission)
+
+        shippingService.createShipping(orderId, "CJ대한통운")
 
         // 8. 응답 생성
         return ProcessPaymentResult(

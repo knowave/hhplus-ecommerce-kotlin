@@ -237,6 +237,11 @@ class InvalidEstimatedDateException(message: String) : BaseException(
     message = message
 )
 
+class InvalidCarrierException(carrier: String) : BaseException(
+    errorCode = ErrorCode.INVALID_ESTIMATED_DATE,
+    message = "carrier is invalid value"
+)
+
 class DuplicateTrackingNumberException(trackingNumber: String) : BaseException(
     errorCode = ErrorCode.DUPLICATE_TRACKING_NUMBER,
     message = "Tracking number already exists: $trackingNumber"

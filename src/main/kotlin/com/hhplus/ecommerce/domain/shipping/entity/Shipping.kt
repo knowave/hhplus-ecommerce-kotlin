@@ -18,13 +18,13 @@ class Shipping(
     val trackingNumber: String,
 
     @Column
-    val shippingStartAt: LocalDateTime?,
+    val shippingStartAt: LocalDateTime? = null,
 
     @Column(nullable = false)
     val estimatedArrivalAt: LocalDateTime,
 
     @Column
-    var deliveredAt: LocalDateTime?,
+    var deliveredAt: LocalDateTime? = null,
 
     @Enumerated(EnumType.STRING)
     @Column(nullable = false, length = 20)
