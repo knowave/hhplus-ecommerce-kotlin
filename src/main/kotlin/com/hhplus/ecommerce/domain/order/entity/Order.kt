@@ -51,7 +51,7 @@ class Order(
     val finalAmount: Long,
 
     @Column(columnDefinition = "BINARY(16)")
-    val appliedCouponId: UUID?,
+    val appliedCouponId: UUID? = null,
 
     @Enumerated(EnumType.STRING)
     @Column(nullable = false, length = 20)

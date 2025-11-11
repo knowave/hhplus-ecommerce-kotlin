@@ -129,6 +129,10 @@ class CartRepositoryIntegrationTest(
                 }
             }
 
+            afterEach{
+                cartJpaRepository.deleteAll()
+            }
+
             context("예외 케이스") {
                 it("장바구니가 비어있는 사용자는 빈 리스트를 반환한다") {
                     // given
