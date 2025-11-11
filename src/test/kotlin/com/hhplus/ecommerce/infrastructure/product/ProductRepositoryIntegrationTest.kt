@@ -284,96 +284,241 @@ class ProductRepositoryIntegrationTest(
         }
     }
 
-    describe("ProductRepository 통합 테스트 - findAllWithFilter") {
+    describe("ProductJpaRepository 통합 테스트 - findAllWithFilter") {
         context("카테고리 필터링") {
             it("ELECTRONICS 카테고리의 상품만 조회한다") {
+                // given
+                val pageable = org.springframework.data.domain.PageRequest.of(0, 10)
+
                 // when
-                val products = productJpaRepository.findAll()
-                    .filter { it.category == ProductCategory.ELECTRONICS }
+                val page = productJpaRepository.findAllWithFilter(ProductCategory.ELECTRONICS, pageable)
 
                 // then
-                products.size shouldBe 3
-                products.all { it.category == ProductCategory.ELECTRONICS } shouldBe true
-                products.map { it.id } shouldContainExactlyInAnyOrder listOf(testProducts[0], testProducts[1], testProducts[2])
+                page.content.size shouldBe 3
+                page.content.all { it.category == ProductCategory.ELECTRONICS } shouldBe true
+                page.content.map { it.id } shouldContainExactlyInAnyOrder listOf(testProducts[0], testProducts[1], testProducts[2])
+                page.totalElements shouldBe 3
             }
 
             it("FASHION 카테고리의 상품만 조회한다") {
+                // given
+                val pageable = org.springframework.data.domain.PageRequest.of(0, 10)
+
                 // when
-                val products = productJpaRepository.findAll()
-                    .filter { it.category == ProductCategory.FASHION }
+                val page = productJpaRepository.findAllWithFilter(ProductCategory.FASHION, pageable)
 
                 // then
-                products.size shouldBe 2
-                products.all { it.category == ProductCategory.FASHION } shouldBe true
+                page.content.size shouldBe 2
+                page.content.all { it.category == ProductCategory.FASHION } shouldBe true
+                page.totalElements shouldBe 2
             }
 
             it("FOOD 카테고리의 상품만 조회한다") {
+                // given
+                val pageable = org.springframework.data.domain.PageRequest.of(0, 10)
+
                 // when
-                val products = productJpaRepository.findAll()
-                    .filter { it.category == ProductCategory.FOOD }
+                val page = productJpaRepository.findAllWithFilter(ProductCategory.FOOD, pageable)
 
                 // then
-                products.size shouldBe 2
-                products.all { it.category == ProductCategory.FOOD } shouldBe true
+                page.content.size shouldBe 2
+                page.content.all { it.category == ProductCategory.FOOD } shouldBe true
+                page.totalElements shouldBe 2
             }
 
             it("BOOKS 카테고리의 상품만 조회한다") {
+                // given
+                val pageable = org.springframework.data.domain.PageRequest.of(0, 10)
+
                 // when
-                val products = productJpaRepository.findAll()
-                    .filter { it.category == ProductCategory.BOOKS }
+                val page = productJpaRepository.findAllWithFilter(ProductCategory.BOOKS, pageable)
 
                 // then
-                products.size shouldBe 2
-                products.all { it.category == ProductCategory.BOOKS } shouldBe true
+                page.content.size shouldBe 2
+                page.content.all { it.category == ProductCategory.BOOKS } shouldBe true
+                page.totalElements shouldBe 2
             }
 
             it("HOME 카테고리의 상품만 조회한다") {
+                // given
+                val pageable = org.springframework.data.domain.PageRequest.of(0, 10)
+
                 // when
-                val products = productJpaRepository.findAll()
-                    .filter { it.category == ProductCategory.HOME }
+                val page = productJpaRepository.findAllWithFilter(ProductCategory.HOME, pageable)
 
                 // then
-                products.size shouldBe 2
-                products.all { it.category == ProductCategory.HOME } shouldBe true
+                page.content.size shouldBe 2
+                page.content.all { it.category == ProductCategory.HOME } shouldBe true
+                page.totalElements shouldBe 2
             }
 
             it("SPORTS 카테고리의 상품만 조회한다") {
+                // given
+                val pageable = org.springframework.data.domain.PageRequest.of(0, 10)
+
                 // when
-                val products = productJpaRepository.findAll()
-                    .filter { it.category == ProductCategory.SPORTS }
+                val page = productJpaRepository.findAllWithFilter(ProductCategory.SPORTS, pageable)
 
                 // then
-                products.size shouldBe 2
-                products.all { it.category == ProductCategory.SPORTS } shouldBe true
+                page.content.size shouldBe 2
+                page.content.all { it.category == ProductCategory.SPORTS } shouldBe true
+                page.totalElements shouldBe 2
             }
 
             it("BEAUTY 카테고리의 상품만 조회한다") {
+                // given
+                val pageable = org.springframework.data.domain.PageRequest.of(0, 10)
+
                 // when
-                val products = productJpaRepository.findAll()
-                    .filter { it.category == ProductCategory.BEAUTY }
+                val page = productJpaRepository.findAllWithFilter(ProductCategory.BEAUTY, pageable)
 
                 // then
-                products.size shouldBe 2
-                products.all { it.category == ProductCategory.BEAUTY } shouldBe true
+                page.content.size shouldBe 2
+                page.content.all { it.category == ProductCategory.BEAUTY } shouldBe true
+                page.totalElements shouldBe 2
+            }
+
+            it("category가 null이면 모든 상품을 조회한다") {
+                // given
+                val pageable = org.springframework.data.domain.PageRequest.of(0, 20)
+
+                // when
+                val page = productJpaRepository.findAllWithFilter(null, pageable)
+
+                // then
+                page.content.size shouldBe 15
+                page.totalElements shouldBe 15
+
+                // 모든 카테고리가 포함되어야 함
+                val categories = page.content.map { it.category }.toSet()
+                categories.contains(ProductCategory.ELECTRONICS) shouldBe true
+                categories.contains(ProductCategory.FASHION) shouldBe true
+                categories.contains(ProductCategory.FOOD) shouldBe true
+                categories.contains(ProductCategory.BOOKS) shouldBe true
+                categories.contains(ProductCategory.HOME) shouldBe true
+                categories.contains(ProductCategory.SPORTS) shouldBe true
+                categories.contains(ProductCategory.BEAUTY) shouldBe true
+            }
+        }
+
+        context("페이징") {
+            it("페이지 크기에 맞게 상품을 조회한다") {
+                // given - 첫 페이지, 크기 5
+                val pageable = org.springframework.data.domain.PageRequest.of(0, 5)
+
+                // when
+                val page = productJpaRepository.findAllWithFilter(null, pageable)
+
+                // then
+                page.content.size shouldBe 5
+                page.totalElements shouldBe 15
+                page.totalPages shouldBe 3
+                page.isFirst shouldBe true
+                page.isLast shouldBe false
+            }
+
+            it("두 번째 페이지를 조회한다") {
+                // given - 두 번째 페이지, 크기 5
+                val pageable = org.springframework.data.domain.PageRequest.of(1, 5)
+
+                // when
+                val page = productJpaRepository.findAllWithFilter(null, pageable)
+
+                // then
+                page.content.size shouldBe 5
+                page.number shouldBe 1 // 페이지 번호
+                page.totalElements shouldBe 15
+                page.isFirst shouldBe false
+                page.isLast shouldBe false
+            }
+
+            it("마지막 페이지를 조회한다") {
+                // given - 세 번째 페이지, 크기 5
+                val pageable = org.springframework.data.domain.PageRequest.of(2, 5)
+
+                // when
+                val page = productJpaRepository.findAllWithFilter(null, pageable)
+
+                // then
+                page.content.size shouldBe 5
+                page.number shouldBe 2
+                page.isFirst shouldBe false
+                page.isLast shouldBe true
+            }
+
+            it("카테고리 필터와 페이징을 함께 사용한다") {
+                // given - ELECTRONICS 카테고리, 페이지 크기 2
+                val pageable = org.springframework.data.domain.PageRequest.of(0, 2)
+
+                // when
+                val page = productJpaRepository.findAllWithFilter(ProductCategory.ELECTRONICS, pageable)
+
+                // then
+                page.content.size shouldBe 2
+                page.totalElements shouldBe 3 // ELECTRONICS 총 3개
+                page.totalPages shouldBe 2 // 2개씩 나누면 2페이지
+                page.content.all { it.category == ProductCategory.ELECTRONICS } shouldBe true
+            }
+        }
+
+        context("예외 케이스") {
+            it("존재하지 않는 카테고리로 조회하면 빈 페이지를 반환한다") {
+                // given
+                val pageable = org.springframework.data.domain.PageRequest.of(0, 10)
+
+                // 모든 상품을 삭제하고 다른 카테고리만 남김
+                productJpaRepository.deleteAll()
+                productJpaRepository.save(Product(
+                    name = "테스트 상품",
+                    description = "테스트",
+                    price = 10000L,
+                    stock = 10,
+                    category = ProductCategory.ELECTRONICS,
+                    specifications = emptyMap(),
+                    salesCount = 0
+                ))
+
+                // when - FASHION 카테고리 조회 (존재하지 않음)
+                val page = productJpaRepository.findAllWithFilter(ProductCategory.FASHION, pageable)
+
+                // then
+                page.content.size shouldBe 0
+                page.totalElements shouldBe 0
+                page.isEmpty shouldBe true
+            }
+
+            it("범위를 벗어난 페이지를 조회하면 빈 페이지를 반환한다") {
+                // given - 존재하지 않는 페이지 번호
+                val pageable = org.springframework.data.domain.PageRequest.of(100, 10)
+
+                // when
+                val page = productJpaRepository.findAllWithFilter(null, pageable)
+
+                // then
+                page.content.size shouldBe 0
+                page.number shouldBe 100
             }
         }
 
         context("데이터 정합성") {
             it("카테고리별 조회 결과의 합이 전체 조회 결과와 일치한다") {
+                // given
+                val pageable = org.springframework.data.domain.PageRequest.of(0, 100)
+
                 // when
-                val allProducts = productJpaRepository.findAll()
-                val electronics = allProducts.filter { it.category == ProductCategory.ELECTRONICS }
-                val fashion = allProducts.filter { it.category == ProductCategory.FASHION }
-                val food = allProducts.filter { it.category == ProductCategory.FOOD }
-                val books = allProducts.filter { it.category == ProductCategory.BOOKS }
-                val home = allProducts.filter { it.category == ProductCategory.HOME }
-                val sports = allProducts.filter { it.category == ProductCategory.SPORTS }
-                val beauty = allProducts.filter { it.category == ProductCategory.BEAUTY }
+                val allProducts = productJpaRepository.findAllWithFilter(null, pageable)
+                val electronics = productJpaRepository.findAllWithFilter(ProductCategory.ELECTRONICS, pageable)
+                val fashion = productJpaRepository.findAllWithFilter(ProductCategory.FASHION, pageable)
+                val food = productJpaRepository.findAllWithFilter(ProductCategory.FOOD, pageable)
+                val books = productJpaRepository.findAllWithFilter(ProductCategory.BOOKS, pageable)
+                val home = productJpaRepository.findAllWithFilter(ProductCategory.HOME, pageable)
+                val sports = productJpaRepository.findAllWithFilter(ProductCategory.SPORTS, pageable)
+                val beauty = productJpaRepository.findAllWithFilter(ProductCategory.BEAUTY, pageable)
 
                 // then
-                val totalByCategoryCount = electronics.size + fashion.size + food.size +
-                        books.size + home.size + sports.size + beauty.size
-                totalByCategoryCount shouldBe allProducts.size
+                val totalByCategoryCount = electronics.totalElements + fashion.totalElements + food.totalElements +
+                        books.totalElements + home.totalElements + sports.totalElements + beauty.totalElements
+                totalByCategoryCount shouldBe allProducts.totalElements
                 totalByCategoryCount shouldBe 15
             }
         }
@@ -517,30 +662,27 @@ class ProductRepositoryIntegrationTest(
     describe("ProductRepository 통합 테스트 - 복합 시나리오") {
         context("실제 비즈니스 흐름") {
             it("상품 조회 -> 재고 확인 -> 재고 차감 -> 판매량 증가 플로우") {
-                // 1. 상품 조회
+                // 상품 조회
                 val productId = testProducts[0]
                 val product = productJpaRepository.findById(productId)
                 product.isPresent shouldBe true
 
-                // 2. 재고 확인
+                // 재고 확인
                 val originalStock = product.get().stock
                 val orderQuantity = 3
                 originalStock shouldNotBe 0 // 재고가 있어야 함
 
-                // 3. 재고 차감
+                // 재고 차감
                 product.get().stock = originalStock - orderQuantity
 
-                // 4. 판매량 증가
+                // 판매량 증가
                 val originalSalesCount = product.get().salesCount
                 product.get().salesCount = originalSalesCount + orderQuantity
 
-                // 5. 업데이트 시간 갱신
-                product.get().updatedAt = LocalDateTime.now().format(dateFormatter)
-
-                // 6. 저장
+                // 저장
                 productJpaRepository.save(product.get())
 
-                // 7. 검증
+                // 검증
                 val updated = productJpaRepository.findById(productId).get()
                 updated.stock shouldBe (originalStock - orderQuantity)
                 updated.salesCount shouldBe (originalSalesCount + orderQuantity)

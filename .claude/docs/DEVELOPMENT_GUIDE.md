@@ -13,6 +13,7 @@
 12. 조회가 자주 일어나는 테이블은 index를 사용하여 성능 개선.
 13. InMemoryDB 에서 사용한 `Repository` class와 `RepositoryImpl` class는 사용하지않고 수정도 하지않는다.
 14. Repository는 `JpaRepository`를 사용할것.
+15. 동시성 제어는 Transaction을 사용
 
 ## 테스트 코드
 1. 테스트 코드는 `kotest`로 진행.

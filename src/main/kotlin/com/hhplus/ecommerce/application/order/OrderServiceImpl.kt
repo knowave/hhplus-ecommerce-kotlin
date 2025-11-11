@@ -6,14 +6,12 @@ import com.hhplus.ecommerce.application.order.dto.*
 import com.hhplus.ecommerce.application.product.ProductService
 import com.hhplus.ecommerce.application.user.UserService
 import com.hhplus.ecommerce.common.exception.*
-import com.hhplus.ecommerce.common.lock.LockManager
-import com.hhplus.ecommerce.domain.order.repository.OrderRepository
 import com.hhplus.ecommerce.domain.product.entity.Product
 import com.hhplus.ecommerce.domain.coupon.entity.*
-import com.hhplus.ecommerce.presentation.order.dto.*
 import com.hhplus.ecommerce.domain.order.entity.*
 import com.hhplus.ecommerce.domain.order.repository.OrderJpaRepository
 import org.springframework.stereotype.Service
+import org.springframework.transaction.annotation.Transactional
 import java.time.LocalDate
 import java.time.LocalDateTime
 import java.time.format.DateTimeFormatter
@@ -26,14 +24,14 @@ class OrderServiceImpl(
     private val productService: ProductService,
     private val couponService: CouponService,
     private val userService: UserService,
-    private val cartService: CartService,
-    private val lockManager: LockManager
+    private val cartService: CartService
 ) : OrderService {
 
     companion object {
         private val DATE_FORMATTER: DateTimeFormatter = DateTimeFormatter.ISO_LOCAL_DATE_TIME
     }
 
+    @Transactional
     override fun createOrder(request: CreateOrderCommand): CreateOrderResult {
         // 1. 요청 검증
         validateOrderRequest(request)
@@ -43,7 +41,7 @@ class OrderServiceImpl(
         val products = validateAndGetProducts(request.items)
 
         // 4. 재고 차감 (비즈니스 정책: 주문 생성 시점에 즉시 차감)
-        deductStock(request.items, products)
+        deductStock(request.items)
 
         // 5. 쿠폰 검증 및 사용 처리
         val userCoupon = if (request.couponId != null) {
@@ -235,6 +233,7 @@ class OrderServiceImpl(
         )
     }
 
+    @org.springframework.transaction.annotation.Transactional
     override fun cancelOrder(orderId: UUID, request: CancelOrderCommand): CancelOrderResult {
         val order = orderRepository.findById(orderId)
             .orElseThrow { OrderNotFoundException(orderId) }
@@ -322,19 +321,22 @@ class OrderServiceImpl(
     /**
      * 재고 차감 (비즈니스 정책: 주문 생성 시점에 즉시 차감)
      *
-     * Product Lock을 사용하여 동시성을 제어합니다.
-     * 데드락 방지를 위해 productId를 정렬하여 항상 동일한 순서로 Lock을 획득합니다.
+     * 비관적 락을 사용하여 동시성을 제어합니다.
+     * 데드락 방지를 위해 productId를 정렬하여 조회합니다. (findAllByIdWithLock에서 ORDER BY)
      * Product 도메인 엔티티의 deductStock() 메서드를 사용하여 재고를 차감합니다.
      */
-    private fun deductStock(items: List<OrderItemCommand>, products: Map<UUID, Product>) {
-        val productIds = items.map { it.productId }
+    private fun deductStock(items: List<OrderItemCommand>) {
+        // 비관적 락으로 상품 조회 (데드락 방지를 위해 ID 정렬됨)
+        val productIds = items.map { it.productId }.distinct().sorted()
+        val lockedProducts = productService.findAllByIdWithLock(productIds)
 
-        lockManager.executeWithProductLocks(productIds) {
-            items.forEach { item ->
-                val product = products[item.productId]!!
-                product.deductStock(item.quantity)
-                productService.updateProduct(product)
-            }
+        // 재고 차감
+        items.forEach { item ->
+            val product = lockedProducts.find { it.id == item.productId }
+                ?: throw ProductNotFoundException(item.productId)
+
+            product.deductStock(item.quantity)
+            productService.updateProduct(product)
         }
     }
 
@@ -374,44 +376,48 @@ class OrderServiceImpl(
     /**
      * 재고 복원
      *
-     * Product Lock을 사용하여 동시성을 제어합니다.
+     * 비관적 락을 사용하여 동시성을 제어합니다.
      * Product 도메인 엔티티의 restoreStock() 메서드를 사용하여 재고를 복원합니다.
      */
     private fun restoreStock(items: List<OrderItem>): List<RestoredStockItemDto> {
-        val productIds = items.map { it.productId }
+        // 비관적 락으로 상품 조회 (데드락 방지를 위해 ID 정렬됨)
+        val productIds = items.map { it.productId }.distinct().sorted()
+        val lockedProducts = productService.findAllByIdWithLock(productIds)
 
-        return lockManager.executeWithProductLocks(productIds) {
-            items.map { item ->
-                val product = productService.findProductById(item.productId)
+        // 재고 복원
+        return items.map { item ->
+            val product = lockedProducts.find { it.id == item.productId }
+                ?: throw ProductNotFoundException(item.productId)
 
-                product.restoreStock(item.quantity)  // 도메인 메서드 사용
-                productService.updateProduct(product)
+            product.restoreStock(item.quantity)  // 도메인 메서드 사용
+            productService.updateProduct(product)
 
-                RestoredStockItemDto(
-                    productId = item.productId,
-                    quantity = item.quantity
-                )
-            }
+            RestoredStockItemDto(
+                productId = item.productId,
+                quantity = item.quantity
+            )
         }
     }
 
     /**
      * 쿠폰 복원 (만료되지 않은 경우만)
      * UserCoupon 도메인 엔티티의 restore() 메서드를 사용하여 쿠폰을 복원합니다.
+     *
+     * 비관적 락을 사용하여 동시성을 제어합니다.
      */
     private fun restoreCoupon(couponId: UUID, userId: UUID): RestoredCouponInfoDto {
+        // 비관적 락으로 쿠폰 조회
+        couponService.findByIdWithLock(couponId)
+
+        // 사용자 쿠폰 조회 및 복원
         val userCoupon = couponService.findUserCoupon(userId, couponId)
+        userCoupon.restore()  // 도메인 메서드 사용 (만료 체크 포함)
+        couponService.updateUserCoupon(userCoupon)
 
-        return lockManager.executeWithCouponLock(couponId) {
-            // 쿠폰 복원 처리 (만료 체크 포함)
-            userCoupon.restore()
-            couponService.updateUserCoupon(userCoupon)
-
-            RestoredCouponInfoDto(
-                couponId = couponId,
-                status = userCoupon.status.name
-            )
-        }
+        return RestoredCouponInfoDto(
+            couponId = couponId,
+            status = userCoupon.status.name
+        )
     }
 
     private fun generateOrderNumber(): String {

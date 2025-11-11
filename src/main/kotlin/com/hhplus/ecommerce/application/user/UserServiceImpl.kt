@@ -70,6 +70,11 @@ class UserServiceImpl(
         return userRepository.save(user)
     }
 
+    override fun findByIdWithLock(id: UUID): User {
+        return userRepository.findByIdWithLock(id)
+            .orElseThrow { UserNotFoundException(id) }
+    }
+
     // 충전 금액의 유효성을 검증
     private fun validateChargeAmount(amount: Long) {
         when {

@@ -7,13 +7,13 @@ import com.hhplus.ecommerce.application.product.ProductService
 import com.hhplus.ecommerce.application.shipping.ShippingService
 import com.hhplus.ecommerce.application.user.UserService
 import com.hhplus.ecommerce.common.exception.*
-import com.hhplus.ecommerce.common.lock.LockManager
 import com.hhplus.ecommerce.domain.coupon.repository.CouponStatus
 import com.hhplus.ecommerce.domain.order.entity.*
 import com.hhplus.ecommerce.domain.payment.entity.*
 import com.hhplus.ecommerce.domain.payment.repository.DataTransmissionJpaRepository
 import com.hhplus.ecommerce.domain.payment.repository.PaymentJpaRepository
 import org.springframework.stereotype.Service
+import org.springframework.transaction.annotation.Transactional
 import java.time.LocalDateTime
 import java.time.format.DateTimeFormatter
 import java.util.UUID
@@ -33,14 +33,14 @@ class PaymentServiceImpl(
     private val userService: UserService,
     private val productService: ProductService,
     private val couponService: CouponService,
-    private val shippingService: ShippingService,
-    private val lockManager: LockManager
+    private val shippingService: ShippingService
 ) : PaymentService {
 
     companion object {
         private val DATE_FORMATTER: DateTimeFormatter = DateTimeFormatter.ISO_LOCAL_DATE_TIME
     }
 
+    @Transactional
     override fun processPayment(orderId: UUID, request: ProcessPaymentCommand): ProcessPaymentResult {
         // 1. 주문 조회 및 검증
         val order = orderService.getOrder(orderId)
@@ -61,22 +61,23 @@ class PaymentServiceImpl(
             throw AlreadyPaidException(orderId)
         }
 
-        // 2. 잔액 차감 (User Lock 사용)
+        // 2. 잔액 차감 (비관적 락 사용)
         val paymentAmount = order.finalAmount
-        val (previousBalance, currentBalance) = lockManager.executeWithUserLock(request.userId) {
-            val user = userService.getUser(request.userId)
+        val (previousBalance, currentBalance) = try {
+            // 비관적 락으로 사용자 조회
+            val user = userService.findByIdWithLock(request.userId)
+
             val previousBalance = user.balance
 
             // 잔액 차감 (User 도메인 메서드 사용)
-            try {
-                user.deduct(paymentAmount)  // 도메인 메서드 사용 (검증 포함)
-                userService.updateUser(user)
-                Pair(previousBalance, user.balance)
-            } catch (e: InsufficientBalanceException) {
-                // 결제 실패 시 보상 트랜잭션
-                handlePaymentFailure(order)
-                throw e
-            }
+            user.deduct(paymentAmount)  // 도메인 메서드 사용 (검증 포함)
+            userService.updateUser(user)
+
+            Pair(previousBalance, user.balance)
+        } catch (e: InsufficientBalanceException) {
+            // 결제 실패 시 보상 트랜잭션
+            handlePaymentFailure(order)
+            throw e
         }
 
         // 5. 주문 상태 변경 (PENDING → PAID) - 도메인 메서드 사용
@@ -239,6 +240,7 @@ class PaymentServiceImpl(
      *
      * 주문 상태 변경, 재고 복구, 쿠폰 복구는 OrderService의 책임입니다.
      */
+    @org.springframework.transaction.annotation.Transactional
     override fun cancelPayment(paymentId: UUID, request: CancelPaymentCommand): CancelPaymentResult {
         // 1. 결제 조회 및 검증
         val payment = paymentRepository.findById(paymentId)
@@ -262,17 +264,17 @@ class PaymentServiceImpl(
         // 2. 주문 조회 (응답에만 사용)
         val order = orderService.getOrder(payment.orderId)
 
-        // 3. 잔액 환불 (User Lock 사용)
+        // 3. 잔액 환불 (비관적 락 사용)
         val refundAmount = payment.amount
-        val (previousBalance, currentBalance) = lockManager.executeWithUserLock(request.userId) {
-            val user = userService.getUser(request.userId)
 
-            val previousBalance = user.balance
-            user.refund(refundAmount)  // User 도메인 메서드 사용
-            userService.updateUser(user)
+        // 비관적 락으로 사용자 조회
+        val user = userService.findByIdWithLock(request.userId)
 
-            Pair(previousBalance, user.balance)
-        }
+        val previousBalance = user.balance
+        user.refund(refundAmount)  // User 도메인 메서드 사용
+        userService.updateUser(user)
+
+        val currentBalance = user.balance
 
         // 4. 결제 상태 변경 (SUCCESS → CANCELLED)
         val now = LocalDateTime.now()
@@ -301,28 +303,31 @@ class PaymentServiceImpl(
      * 결제 실패 시 보상 트랜잭션 처리
      * 비즈니스 정책: 재고 복원 → 쿠폰 복원 → 주문 취소
      *
-     * Product Lock을 사용하여 재고 복원의 동시성을 제어합니다.
+     * 비관적 락을 사용하여 재고 복원의 동시성을 제어합니다.
      * 각 도메인 엔티티의 비즈니스 로직 메서드를 사용합니다.
      */
     private fun handlePaymentFailure(order: Order) {
-        // 1. 재고 복원 (Product Lock 사용, 도메인 메서드 사용)
-        val productIds = order.items.map { it.productId }
-        lockManager.executeWithProductLocks(productIds) {
-            order.items.forEach { item ->
-                val product = productService.findProductById(item.productId)
-                product.restoreStock(item.quantity)  // 도메인 메서드 사용
-                productService.updateProduct(product)
-            }
+        // 1. 재고 복원 (비관적 락 사용, 도메인 메서드 사용)
+        val productIds = order.items.map { it.productId }.distinct().sorted()
+        val lockedProducts = productService.findAllByIdWithLock(productIds)
+
+        order.items.forEach { item ->
+            val product = lockedProducts.find { it.id == item.productId }
+                ?: throw ProductNotFoundException(item.productId)
+
+            product.restoreStock(item.quantity)  // 도메인 메서드 사용
+            productService.updateProduct(product)
         }
 
-        // 2. 쿠폰 복원 (도메인 메서드 사용)
+        // 2. 쿠폰 복원 (비관적 락 사용, 도메인 메서드 사용)
         if (order.appliedCouponId != null) {
             val userCoupon = couponService.findUserCoupon(order.userId, order.appliedCouponId!!)
             if (userCoupon.status == CouponStatus.USED) {
-                lockManager.executeWithCouponLock(order.appliedCouponId!!) {
-                    userCoupon.restore()  // 도메인 메서드 사용 (만료 체크 포함)
-                    couponService.updateUserCoupon(userCoupon)
-                }
+                // 비관적 락으로 쿠폰 조회
+                couponService.findByIdWithLock(order.appliedCouponId!!)
+
+                userCoupon.restore()  // 도메인 메서드 사용 (만료 체크 포함)
+                couponService.updateUserCoupon(userCoupon)
             }
         }
 

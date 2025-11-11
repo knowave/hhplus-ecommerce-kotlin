@@ -46,7 +46,6 @@ class OrderServiceUnitTest : DescribeSpec({
     lateinit var userService: UserService
     lateinit var orderService: OrderServiceImpl
     lateinit var cartService: CartService
-    lateinit var lockManager: LockManager
 
     val dateFormatter = DateTimeFormatter.ISO_LOCAL_DATE_TIME
 
@@ -56,15 +55,13 @@ class OrderServiceUnitTest : DescribeSpec({
         couponService = mockk(relaxed = true)
         userService = mockk(relaxed = true)
         cartService = mockk(relaxed = true)
-        lockManager = LockManager() // 실제 LockManager 인스턴스 사용
 
         orderService = OrderServiceImpl(
             orderRepository = orderRepository,
             productService = productService,
             couponService = couponService,
             userService = userService,
-            cartService = cartService,
-            lockManager = lockManager
+            cartService = cartService
         )
     }
 
