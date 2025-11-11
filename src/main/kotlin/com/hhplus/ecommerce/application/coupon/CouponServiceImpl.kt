@@ -97,7 +97,7 @@ class CouponServiceImpl(
     }
 
     override fun getAvailableCoupons(): AvailableCouponItemResult {
-        val availableCoupons = couponRepository.findAvailableCoupons()
+        val availableCoupons = couponRepository.findAvailableCoupons(LocalDateTime.now())
 
         val couponItems = availableCoupons.map { coupon ->
             AvailableCouponItemDto(

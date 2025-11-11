@@ -9,10 +9,10 @@ import java.util.UUID
 
 interface CouponJpaRepository : JpaRepository<Coupon, UUID> {
     @Query("""
-        SELECT c FROM coupon c
+        SELECT c FROM Coupon c
         WHERE c.startDate <= :now
         AND c.endDate >= :now
         AND c.issuedQuantity < c.totalQuantity
     """)
-    fun findAvailableCoupons(@Param("now") now: LocalDateTime = LocalDateTime.now()): List<Coupon>
+    fun findAvailableCoupons(@Param("now") now: LocalDateTime): List<Coupon>
 }
