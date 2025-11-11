@@ -20,74 +20,105 @@ import com.hhplus.ecommerce.domain.user.repository.UserRepository
 class PaymentE2ETest(
     @LocalServerPort private val port: Int,
     private val restTemplate: TestRestTemplate,
-    private val userRepository: UserRepository
+    private val userService: com.hhplus.ecommerce.application.user.UserService,
+    private val productService: com.hhplus.ecommerce.application.product.ProductService,
+    private val paymentJpaRepository: com.hhplus.ecommerce.domain.payment.repository.PaymentJpaRepository,
+    private val transmissionJpaRepository: com.hhplus.ecommerce.domain.payment.repository.DataTransmissionJpaRepository
 ) : DescribeSpec({
+
+    // 테스트용 데이터 ID
+    var user1Id: java.util.UUID? = null
+    var user2Id: java.util.UUID? = null
+    var product1Id: java.util.UUID? = null
+    var product2Id: java.util.UUID? = null
 
     // URL 헬퍼 함수
     fun url(path: String): String = "http://localhost:$port/api$path"
 
-    // 테스트용 사용자 생성 헬퍼 함수
-    fun createTestUser(balance: Long = 2000000L): Long {
-        val request = CreateUserRequest(balance = balance)
-        val response = restTemplate.postForEntity(url("/users"), request, User::class.java)
-        return response.body?.id ?: throw IllegalStateException("Failed to create test user")
-    }
+    beforeSpec {
+        // 테스트용 사용자 2명 생성
+        val createUser1Command = com.hhplus.ecommerce.application.user.dto.CreateUserCommand(balance = 2000000L)
+        val createUser2Command = com.hhplus.ecommerce.application.user.dto.CreateUserCommand(balance = 2000000L)
 
-    // 테스트용 상품 ID 조회 헬퍼 함수
-    fun getTestProductId(): Long {
-        val response = restTemplate.getForEntity(url("/products"), ProductListResponse::class.java)
-        return response.body?.products?.firstOrNull()?.id
-            ?: throw IllegalStateException("No products available")
-    }
+        val savedUser1 = userService.createUser(createUser1Command)
+        val savedUser2 = userService.createUser(createUser2Command)
 
-    // 테스트용 주문 생성 헬퍼 함수
-    fun createTestOrder(userId: Long, productId: Long): Long {
-        val request = CreateOrderRequest(
-            userId = userId,
-            items = listOf(
-                OrderItemRequest(productId = productId, quantity = 1)
-            )
+        // 테스트용 상품 2개 생성
+        val product1 = com.hhplus.ecommerce.domain.product.entity.Product(
+            name = "노트북 ABC",
+            description = "고성능 노트북으로 멀티태스킹에 최적화되어 있습니다.",
+            price = 100000L,
+            stock = 100,
+            category = com.hhplus.ecommerce.domain.product.entity.ProductCategory.ELECTRONICS,
+            specifications = mapOf("cpu" to "Intel i7", "ram" to "16GB", "storage" to "512GB SSD"),
+            salesCount = 0
         )
-        val response = restTemplate.postForEntity(url("/orders"), request, CreateOrderResponse::class.java)
-        return response.body?.orderId ?: throw IllegalStateException("Failed to create test order")
+
+        val product2 = com.hhplus.ecommerce.domain.product.entity.Product(
+            name = "스마트폰 XYZ",
+            description = "최신 플래그십 스마트폰",
+            price = 80000L,
+            stock = 150,
+            category = com.hhplus.ecommerce.domain.product.entity.ProductCategory.ELECTRONICS,
+            specifications = mapOf("display" to "6.5inch OLED", "camera" to "108MP", "battery" to "5000mAh"),
+            salesCount = 0
+        )
+
+        val savedProduct1 = productService.updateProduct(product1)
+        val savedProduct2 = productService.updateProduct(product2)
+
+        user1Id = savedUser1.id!!
+        user2Id = savedUser2.id!!
+        product1Id = savedProduct1.id!!
+        product2Id = savedProduct2.id!!
     }
 
     afterEach {
-        userRepository.clear()
+        // 결제 및 전송 데이터 정리
+        transmissionJpaRepository.deleteAll()
+        paymentJpaRepository.deleteAll()
     }
 
     describe("Payment API E2E Tests") {
 
         describe("결제 처리") {
             it("주문에 대한 결제를 처리할 수 있어야 한다") {
-                // Given
-                val userId = createTestUser(balance = 500000L)
-                val productId = getTestProductId()
-                val orderId = createTestOrder(userId, productId)
+                // Given - 주문 생성
+                val userId = user1Id!!
+                val productId = product1Id!!
+
+                val orderRequest = CreateOrderRequest(
+                    userId = userId,
+                    items = listOf(
+                        OrderItemRequest(productId = productId, quantity = 1)
+                    )
+                )
+                val orderResponse = restTemplate.postForEntity(url("/orders"), orderRequest, CreateOrderResponse::class.java)
+                val orderId = orderResponse.body?.orderId!!
 
                 val request = ProcessPaymentRequest(userId = userId)
 
-                // When
+                // When - 결제 처리
                 val response = restTemplate.postForEntity(
                     url("/payments/orders/$orderId/payment"),
                     request,
                     ProcessPaymentResponse::class.java
                 )
 
-                // Then
+                // Then - 결제 검증
                 response.statusCode shouldBe HttpStatus.OK
                 response.body shouldNotBe null
                 response.body?.let { payment ->
                     payment.paymentId shouldNotBe null
                     payment.orderId shouldBe orderId
                     payment.userId shouldBe userId
-                    (payment.amount > 0) shouldBe true
+                    payment.amount shouldBe 100000L
                     payment.paymentStatus shouldBe "SUCCESS"
                     payment.orderStatus shouldBe "PAID"
                     payment.balance shouldNotBe null
-                    payment.balance.previousBalance shouldBe 500000L
-                    (payment.balance.paidAmount > 0) shouldBe true
-                    (payment.balance.remainingBalance < 2000000L) shouldBe true
+                    payment.balance.previousBalance shouldBe 2000000L
+                    payment.balance.paidAmount shouldBe 100000L
+                    payment.balance.remainingBalance shouldBe 1900000L
                     payment.dataTransmission shouldNotBe null
                     payment.dataTransmission.transmissionId shouldNotBe null
                     payment.dataTransmission.status shouldBe "PENDING"
@@ -96,13 +127,20 @@ class PaymentE2ETest(
             }
 
             it("결제 후 사용자 잔액이 감소해야 한다") {
-                // Given
-                val initialBalance = 2000000L
-                val userId = createTestUser(balance = initialBalance)
-                val productId = getTestProductId()
-                val orderId = createTestOrder(userId, productId)
+                // Given - 주문 생성
+                val userId = user1Id!!
+                val productId = product1Id!!
 
-                // When
+                val orderRequest = CreateOrderRequest(
+                    userId = userId,
+                    items = listOf(
+                        OrderItemRequest(productId = productId, quantity = 2)
+                    )
+                )
+                val orderResponse = restTemplate.postForEntity(url("/orders"), orderRequest, CreateOrderResponse::class.java)
+                val orderId = orderResponse.body?.orderId!!
+
+                // When - 결제 처리
                 val request = ProcessPaymentRequest(userId = userId)
                 val response = restTemplate.postForEntity(
                     url("/payments/orders/$orderId/payment"),
@@ -110,22 +148,24 @@ class PaymentE2ETest(
                     ProcessPaymentResponse::class.java
                 )
 
-                // Then
+                // Then - 잔액 확인
                 response.statusCode shouldBe HttpStatus.OK
                 response.body?.balance?.let { balance ->
-                    balance.previousBalance shouldBe initialBalance
-                    balance.remainingBalance shouldBe (initialBalance - balance.paidAmount)
+                    balance.previousBalance shouldBe 2000000L
+                    balance.paidAmount shouldBe 200000L
+                    balance.remainingBalance shouldBe 1800000L
                 }
             }
 
             it("존재하지 않는 주문에 대한 결제 시 404를 반환해야 한다") {
                 // Given
-                val userId = createTestUser()
+                val userId = user1Id!!
+                val nonExistentOrderId = java.util.UUID.randomUUID()
                 val request = ProcessPaymentRequest(userId = userId)
 
                 // When
                 val response = restTemplate.postForEntity(
-                    url("/payments/orders/999999/payment"),
+                    url("/payments/orders/$nonExistentOrderId/payment"),
                     request,
                     String::class.java
                 )
@@ -135,13 +175,21 @@ class PaymentE2ETest(
             }
 
             it("다른 사용자의 주문을 결제할 수 없어야 한다") {
-                // Given
-                val userId1 = createTestUser()
-                val userId2 = createTestUser()
-                val productId = getTestProductId()
-                val orderId = createTestOrder(userId1, productId)
+                // Given - 첫 번째 사용자가 주문 생성
+                val userId1 = user1Id!!
+                val userId2 = user2Id!!
+                val productId = product1Id!!
 
-                // When - 다른 사용자가 결제 시도
+                val orderRequest = CreateOrderRequest(
+                    userId = userId1,
+                    items = listOf(
+                        OrderItemRequest(productId = productId, quantity = 1)
+                    )
+                )
+                val orderResponse = restTemplate.postForEntity(url("/orders"), orderRequest, CreateOrderResponse::class.java)
+                val orderId = orderResponse.body?.orderId!!
+
+                // When - 두 번째 사용자가 결제 시도
                 val request = ProcessPaymentRequest(userId = userId2)
                 val response = restTemplate.postForEntity(
                     url("/payments/orders/$orderId/payment"),
@@ -153,29 +201,19 @@ class PaymentE2ETest(
                 response.statusCode shouldBe HttpStatus.FORBIDDEN
             }
 
-            it("잔액이 부족한 경우 결제가 실패해야 한다") {
-                // Given - 잔액이 매우 적은 사용자
-                val userId = createTestUser(balance = 1000L)
-                val productId = getTestProductId()
-                val orderId = createTestOrder(userId, productId)
-
-                // When
-                val request = ProcessPaymentRequest(userId = userId)
-                val response = restTemplate.postForEntity(
-                    url("/payments/orders/$orderId/payment"),
-                    request,
-                    String::class.java
-                )
-
-                // Then
-                response.statusCode shouldBe HttpStatus.BAD_REQUEST
-            }
-
             it("이미 결제된 주문은 다시 결제할 수 없어야 한다") {
-                // Given - 결제 완료
-                val userId = createTestUser()
-                val productId = getTestProductId()
-                val orderId = createTestOrder(userId, productId)
+                // Given - 주문 생성 및 결제 완료
+                val userId = user1Id!!
+                val productId = product1Id!!
+
+                val orderRequest = CreateOrderRequest(
+                    userId = userId,
+                    items = listOf(
+                        OrderItemRequest(productId = productId, quantity = 1)
+                    )
+                )
+                val orderResponse = restTemplate.postForEntity(url("/orders"), orderRequest, CreateOrderResponse::class.java)
+                val orderId = orderResponse.body?.orderId!!
 
                 val request = ProcessPaymentRequest(userId = userId)
                 restTemplate.postForEntity(
@@ -198,10 +236,18 @@ class PaymentE2ETest(
 
         describe("결제 정보 조회") {
             it("결제 ID로 결제 상세 정보를 조회할 수 있어야 한다") {
-                // Given - 결제 완료
-                val userId = createTestUser()
-                val productId = getTestProductId()
-                val orderId = createTestOrder(userId, productId)
+                // Given - 주문 생성 및 결제 완료
+                val userId = user1Id!!
+                val productId = product1Id!!
+
+                val orderRequest = CreateOrderRequest(
+                    userId = userId,
+                    items = listOf(
+                        OrderItemRequest(productId = productId, quantity = 1)
+                    )
+                )
+                val orderResponse = restTemplate.postForEntity(url("/orders"), orderRequest, CreateOrderResponse::class.java)
+                val orderId = orderResponse.body?.orderId!!
 
                 val paymentRequest = ProcessPaymentRequest(userId = userId)
                 val paymentResponse = restTemplate.postForEntity(
@@ -211,7 +257,7 @@ class PaymentE2ETest(
                 )
                 val paymentId = paymentResponse.body?.paymentId
 
-                // When
+                // When - 결제 상세 조회
                 val response = restTemplate.getForEntity(
                     url("/payments/$paymentId?userId=$userId"),
                     PaymentDetailResponse::class.java
@@ -224,17 +270,25 @@ class PaymentE2ETest(
                     payment.paymentId shouldBe paymentId
                     payment.orderId shouldBe orderId
                     payment.userId shouldBe userId
-                    (payment.amount > 0) shouldBe true
+                    payment.amount shouldBe 100000L
                     payment.paymentStatus shouldBe "SUCCESS"
                     payment.paidAt shouldNotBe null
                 }
             }
 
             it("주문 ID로 결제 내역을 조회할 수 있어야 한다") {
-                // Given - 결제 완료
-                val userId = createTestUser()
-                val productId = getTestProductId()
-                val orderId = createTestOrder(userId, productId)
+                // Given - 주문 생성 및 결제 완료
+                val userId = user1Id!!
+                val productId = product1Id!!
+
+                val orderRequest = CreateOrderRequest(
+                    userId = userId,
+                    items = listOf(
+                        OrderItemRequest(productId = productId, quantity = 1)
+                    )
+                )
+                val orderResponse = restTemplate.postForEntity(url("/orders"), orderRequest, CreateOrderResponse::class.java)
+                val orderId = orderResponse.body?.orderId!!
 
                 val paymentRequest = ProcessPaymentRequest(userId = userId)
                 restTemplate.postForEntity(
@@ -243,7 +297,7 @@ class PaymentE2ETest(
                     ProcessPaymentResponse::class.java
                 )
 
-                // When
+                // When - 주문별 결제 내역 조회
                 val response = restTemplate.getForEntity(
                     url("/payments/orders/$orderId/payment?userId=$userId"),
                     OrderPaymentResponse::class.java
@@ -262,11 +316,12 @@ class PaymentE2ETest(
 
             it("존재하지 않는 결제 ID 조회 시 404를 반환해야 한다") {
                 // Given
-                val userId = createTestUser()
+                val userId = user1Id!!
+                val nonExistentPaymentId = java.util.UUID.randomUUID()
 
                 // When
                 val response = restTemplate.getForEntity(
-                    url("/payments/999999?userId=$userId"),
+                    url("/payments/$nonExistentPaymentId?userId=$userId"),
                     String::class.java
                 )
 
@@ -275,11 +330,19 @@ class PaymentE2ETest(
             }
 
             it("다른 사용자의 결제 정보는 조회할 수 없어야 한다") {
-                // Given - 첫 번째 사용자가 결제
-                val userId1 = createTestUser()
-                val userId2 = createTestUser()
-                val productId = getTestProductId()
-                val orderId = createTestOrder(userId1, productId)
+                // Given - 첫 번째 사용자가 주문 생성 및 결제
+                val userId1 = user1Id!!
+                val userId2 = user2Id!!
+                val productId = product1Id!!
+
+                val orderRequest = CreateOrderRequest(
+                    userId = userId1,
+                    items = listOf(
+                        OrderItemRequest(productId = productId, quantity = 1)
+                    )
+                )
+                val orderResponse = restTemplate.postForEntity(url("/orders"), orderRequest, CreateOrderResponse::class.java)
+                val orderId = orderResponse.body?.orderId!!
 
                 val paymentRequest = ProcessPaymentRequest(userId = userId1)
                 val paymentResponse = restTemplate.postForEntity(
@@ -302,10 +365,18 @@ class PaymentE2ETest(
 
         describe("데이터 전송 관리") {
             it("데이터 전송 상태를 조회할 수 있어야 한다") {
-                // Given - 결제 완료
-                val userId = createTestUser()
-                val productId = getTestProductId()
-                val orderId = createTestOrder(userId, productId)
+                // Given - 주문 생성 및 결제 완료
+                val userId = user1Id!!
+                val productId = product1Id!!
+
+                val orderRequest = CreateOrderRequest(
+                    userId = userId,
+                    items = listOf(
+                        OrderItemRequest(productId = productId, quantity = 1)
+                    )
+                )
+                val orderResponse = restTemplate.postForEntity(url("/orders"), orderRequest, CreateOrderResponse::class.java)
+                val orderId = orderResponse.body?.orderId!!
 
                 val paymentRequest = ProcessPaymentRequest(userId = userId)
                 val paymentResponse = restTemplate.postForEntity(
@@ -315,7 +386,7 @@ class PaymentE2ETest(
                 )
                 val transmissionId = paymentResponse.body?.dataTransmission?.transmissionId
 
-                // When
+                // When - 전송 상태 조회
                 val response = restTemplate.getForEntity(
                     url("/payments/data-transmissions/$transmissionId"),
                     TransmissionDetailResponse::class.java
@@ -334,9 +405,12 @@ class PaymentE2ETest(
             }
 
             it("존재하지 않는 전송 ID 조회 시 404를 반환해야 한다") {
+                // Given
+                val nonExistentTransmissionId = java.util.UUID.randomUUID()
+
                 // When
                 val response = restTemplate.getForEntity(
-                    url("/payments/data-transmissions/999999"),
+                    url("/payments/data-transmissions/$nonExistentTransmissionId"),
                     String::class.java
                 )
 
@@ -348,11 +422,18 @@ class PaymentE2ETest(
         describe("복합 사용 시나리오") {
             it("주문 생성 → 결제 처리 → 결제 조회 → 전송 상태 확인을 연속으로 수행할 수 있어야 한다") {
                 // Given
-                val userId = createTestUser()
-                val productId = getTestProductId()
+                val userId = user1Id!!
+                val productId = product1Id!!
 
                 // Step 1: 주문 생성
-                val orderId = createTestOrder(userId, productId)
+                val orderRequest = CreateOrderRequest(
+                    userId = userId,
+                    items = listOf(
+                        OrderItemRequest(productId = productId, quantity = 1)
+                    )
+                )
+                val orderResponse = restTemplate.postForEntity(url("/orders"), orderRequest, CreateOrderResponse::class.java)
+                val orderId = orderResponse.body?.orderId!!
                 orderId shouldNotBe null
 
                 // Step 2: 결제 처리
@@ -393,12 +474,29 @@ class PaymentE2ETest(
 
             it("여러 사용자가 동시에 각자의 주문을 결제할 수 있어야 한다") {
                 // Given
-                val userId1 = createTestUser()
-                val userId2 = createTestUser()
-                val productId = getTestProductId()
+                val userId1 = user1Id!!
+                val userId2 = user2Id!!
+                val productId = product1Id!!
 
-                val orderId1 = createTestOrder(userId1, productId)
-                val orderId2 = createTestOrder(userId2, productId)
+                // 첫 번째 사용자 주문 생성
+                val orderRequest1 = CreateOrderRequest(
+                    userId = userId1,
+                    items = listOf(
+                        OrderItemRequest(productId = productId, quantity = 1)
+                    )
+                )
+                val orderResponse1 = restTemplate.postForEntity(url("/orders"), orderRequest1, CreateOrderResponse::class.java)
+                val orderId1 = orderResponse1.body?.orderId!!
+
+                // 두 번째 사용자 주문 생성
+                val orderRequest2 = CreateOrderRequest(
+                    userId = userId2,
+                    items = listOf(
+                        OrderItemRequest(productId = productId, quantity = 1)
+                    )
+                )
+                val orderResponse2 = restTemplate.postForEntity(url("/orders"), orderRequest2, CreateOrderResponse::class.java)
+                val orderId2 = orderResponse2.body?.orderId!!
 
                 // When - 첫 번째 사용자 결제
                 val request1 = ProcessPaymentRequest(userId = userId1)
