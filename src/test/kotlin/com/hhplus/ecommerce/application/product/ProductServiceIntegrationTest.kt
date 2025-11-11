@@ -36,8 +36,10 @@ class ProductServiceIntegrationTest(
     private val testProducts = mutableListOf<UUID>()
 
     init {
-        beforeSpec {
-            // 테스트용 상품 생성 - 각 카테고리별로 충분한 데이터 생성
+        beforeEach {
+            // 각 테스트마다 독립적으로 테스트용 상품 생성
+            testProducts.clear()
+
             val productsToCreate = listOf(
                 // ELECTRONICS (5개)
                 Product(
@@ -186,12 +188,6 @@ class ProductServiceIntegrationTest(
                 val saved = productJpaRepository.save(product)
                 testProducts.add(saved.id!!)
             }
-        }
-
-        afterSpec {
-            // 테스트 데이터 정리
-            productJpaRepository.deleteAll()
-            testProducts.clear()
         }
 
     describe("ProductService 통합 테스트 - 상품 조회") {
