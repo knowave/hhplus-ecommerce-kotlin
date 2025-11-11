@@ -23,6 +23,7 @@ import io.kotest.matchers.shouldBe
 import io.kotest.matchers.shouldNotBe
 import io.mockk.*
 import java.time.LocalDateTime
+import java.util.UUID
 
 class PaymentServiceUnitTest : DescribeSpec({
     lateinit var paymentRepository: PaymentRepository
@@ -55,26 +56,23 @@ class PaymentServiceUnitTest : DescribeSpec({
         context("정상 케이스") {
             it("주문에 대한 결제를 성공적으로 처리한다") {
                 // given
-                val orderId = 1L
-                val userId = 100L
+                val orderId = UUID.randomUUID()
+                val userId = UUID.randomUUID()
+                val paymentId = UUID.randomUUID()
+                val transmissionId = UUID.randomUUID()
                 val amount = 50000L
                 val now = LocalDateTime.now()
 
                 val user = User(
-                    id = userId,
-                    balance = 100000L,
-                    createdAt = "2025-11-03T00:00:00",
-                    updatedAt = "2025-11-03T00:00:00"
+                    balance = 100000L
                 )
 
                 val order = Order(
-                    id = orderId,
                     userId = userId,
                     orderNumber = "ORD-20251103-001",
                     items = listOf(
                         OrderItem(
-                            id = 1L,
-                            productId = 1L,
+                            productId = UUID.randomUUID(),
                             orderId = orderId,
                             productName = "Test Product",
                             quantity = 1,
@@ -86,9 +84,7 @@ class PaymentServiceUnitTest : DescribeSpec({
                     discountAmount = 0L,
                     finalAmount = amount,
                     appliedCouponId = null,
-                    status = OrderStatus.PENDING,
-                    createdAt = now,
-                    updatedAt = now
+                    status = OrderStatus.PENDING
                 )
 
                 val command = ProcessPaymentCommand(userId = userId)
@@ -102,16 +98,16 @@ class PaymentServiceUnitTest : DescribeSpec({
                     val savedOrder = firstArg<Order>()
                     savedOrder.copy()
                 }
-                every { paymentRepository.generateId() } returns 1L
+                every { paymentRepository.generateId() } returns paymentId
                 every { paymentRepository.save(any()) } answers { firstArg() }
-                every { paymentRepository.generateTransmissionId() } returns 1L
+                every { paymentRepository.generateTransmissionId() } returns transmissionId
                 every { paymentRepository.saveTransmission(any()) } answers { firstArg() }
 
                 // when
                 val result = paymentService.processPayment(orderId, command)
 
                 // then
-                result.paymentId shouldBe 1L
+                result.paymentId shouldBe paymentId
                 result.orderId shouldBe orderId
                 result.userId shouldBe userId
                 result.amount shouldBe amount
@@ -128,8 +124,8 @@ class PaymentServiceUnitTest : DescribeSpec({
         context("예외 케이스") {
             it("존재하지 않는 주문에 대한 결제 시 OrderNotFoundException 발생") {
                 // given
-                val orderId = 999L
-                val command = ProcessPaymentCommand(userId = 1L)
+                val orderId = UUID.randomUUID()
+                val command = ProcessPaymentCommand(userId = UUID.randomUUID())
 
                 every { orderService.getOrder(orderId) } throws OrderNotFoundException(orderId)
 
@@ -141,19 +137,16 @@ class PaymentServiceUnitTest : DescribeSpec({
 
             it("다른 사용자의 주문 결제 시 ForbiddenException 발생") {
                 // given
-                val orderId = 1L
-                val userId = 100L
-                val otherUserId = 200L
-                val now = LocalDateTime.now()
+                val orderId = UUID.randomUUID()
+                val userId = UUID.randomUUID()
+                val otherUserId = UUID.randomUUID()
 
                 val order = Order(
-                    id = orderId,
                     userId = userId,
                     orderNumber = "ORD-001",
                     items = listOf(
                         OrderItem(
-                            id = 1L,
-                            productId = 1L,
+                            productId = UUID.randomUUID(),
                             orderId = orderId,
                             productName = "Test Product",
                             quantity = 1,
@@ -165,9 +158,7 @@ class PaymentServiceUnitTest : DescribeSpec({
                     discountAmount = 0L,
                     finalAmount = 50000L,
                     appliedCouponId = null,
-                    status = OrderStatus.PENDING,
-                    createdAt = now,
-                    updatedAt = now
+                    status = OrderStatus.PENDING
                 )
 
                 val command = ProcessPaymentCommand(userId = otherUserId)
