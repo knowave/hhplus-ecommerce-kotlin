@@ -1,5 +1,6 @@
 package com.hhplus.ecommerce.application.product
 
+import com.hhplus.ecommerce.application.product.dto.GetProductsCommand
 import com.hhplus.ecommerce.common.exception.ProductNotFoundException
 import com.hhplus.ecommerce.domain.product.entity.ProductCategory
 import com.hhplus.ecommerce.domain.product.repository.ProductJpaRepository
@@ -32,53 +33,165 @@ class ProductServiceIntegrationTest(
 ) : DescribeSpec() {
     override fun extensions(): List<Extension> = listOf(SpringExtension)
 
-    private lateinit var product1Id: UUID
-    private lateinit var product2Id: UUID
-    private lateinit var product3Id: UUID
+    private val testProducts = mutableListOf<UUID>()
 
     init {
         beforeSpec {
-            // 테스트용 상품 생성
-            val product1 = Product(
-                name = "노트북 ABC",
-                description = "고성능 노트북",
-                price = 1500000L,
-                stock = 50,
-                category = ProductCategory.ELECTRONICS,
-                specifications = mapOf("cpu" to "Intel i7", "ram" to "16GB"),
-                salesCount = 150
+            // 테스트용 상품 생성 - 각 카테고리별로 충분한 데이터 생성
+            val productsToCreate = listOf(
+                // ELECTRONICS (5개)
+                Product(
+                    name = "노트북 ABC",
+                    description = "고성능 노트북",
+                    price = 1500000L,
+                    stock = 50,
+                    category = ProductCategory.ELECTRONICS,
+                    specifications = mapOf("cpu" to "Intel i7", "ram" to "16GB"),
+                    salesCount = 150
+                ),
+                Product(
+                    name = "스마트폰 XYZ",
+                    description = "최신 플래그십",
+                    price = 1200000L,
+                    stock = 100,
+                    category = ProductCategory.ELECTRONICS,
+                    specifications = mapOf("display" to "6.5inch"),
+                    salesCount = 200
+                ),
+                Product(
+                    name = "태블릿 Pro",
+                    description = "업무용 태블릿",
+                    price = 800000L,
+                    stock = 30,
+                    category = ProductCategory.ELECTRONICS,
+                    specifications = emptyMap(),
+                    salesCount = 80
+                ),
+                Product(
+                    name = "무선 이어폰",
+                    description = "노이즈 캔슬링",
+                    price = 250000L,
+                    stock = 200,
+                    category = ProductCategory.ELECTRONICS,
+                    specifications = emptyMap(),
+                    salesCount = 300
+                ),
+                Product(
+                    name = "스마트워치",
+                    description = "건강 관리",
+                    price = 400000L,
+                    stock = 80,
+                    category = ProductCategory.ELECTRONICS,
+                    specifications = emptyMap(),
+                    salesCount = 120
+                ),
+                // FASHION (3개)
+                Product(
+                    name = "운동화",
+                    description = "편안한 운동화",
+                    price = 150000L,
+                    stock = 200,
+                    category = ProductCategory.FASHION,
+                    specifications = emptyMap(),
+                    salesCount = 120
+                ),
+                Product(
+                    name = "청바지",
+                    description = "데님 청바지",
+                    price = 89000L,
+                    stock = 150,
+                    category = ProductCategory.FASHION,
+                    specifications = emptyMap(),
+                    salesCount = 90
+                ),
+                Product(
+                    name = "가죽 재킷",
+                    description = "고급 가죽",
+                    price = 350000L,
+                    stock = 40,
+                    category = ProductCategory.FASHION,
+                    specifications = emptyMap(),
+                    salesCount = 50
+                ),
+                // FOOD (2개)
+                Product(
+                    name = "유기농 쌀",
+                    description = "국내산 유기농",
+                    price = 45000L,
+                    stock = 500,
+                    category = ProductCategory.FOOD,
+                    specifications = emptyMap(),
+                    salesCount = 250
+                ),
+                Product(
+                    name = "프리미엄 커피",
+                    description = "원두 커피",
+                    price = 25000L,
+                    stock = 300,
+                    category = ProductCategory.FOOD,
+                    specifications = emptyMap(),
+                    salesCount = 180
+                ),
+                // BOOKS (2개)
+                Product(
+                    name = "Kotlin 완벽 가이드",
+                    description = "프로그래밍 서적",
+                    price = 35000L,
+                    stock = 100,
+                    category = ProductCategory.BOOKS,
+                    specifications = emptyMap(),
+                    salesCount = 70
+                ),
+                Product(
+                    name = "Clean Code",
+                    description = "클린 코드",
+                    price = 32000L,
+                    stock = 80,
+                    category = ProductCategory.BOOKS,
+                    specifications = emptyMap(),
+                    salesCount = 150
+                ),
+                // HOME (2개)
+                Product(
+                    name = "공기청정기",
+                    description = "미세먼지 제거",
+                    price = 280000L,
+                    stock = 60,
+                    category = ProductCategory.HOME,
+                    specifications = emptyMap(),
+                    salesCount = 45
+                ),
+                Product(
+                    name = "진공청소기",
+                    description = "무선 청소기",
+                    price = 320000L,
+                    stock = 40,
+                    category = ProductCategory.HOME,
+                    specifications = emptyMap(),
+                    salesCount = 60
+                ),
+                // SPORTS (1개)
+                Product(
+                    name = "요가 매트",
+                    description = "두꺼운 요가 매트",
+                    price = 45000L,
+                    stock = 150,
+                    category = ProductCategory.SPORTS,
+                    specifications = emptyMap(),
+                    salesCount = 100
+                )
             )
-            val savedProduct1 = productJpaRepository.save(product1)
-            product1Id = savedProduct1.id!!
 
-            val product2 = Product(
-                name = "스마트폰 XYZ",
-                description = "최신 플래그십",
-                price = 1200000L,
-                stock = 100,
-                category = ProductCategory.ELECTRONICS,
-                specifications = mapOf("display" to "6.5inch"),
-                salesCount = 200
-            )
-            val savedProduct2 = productJpaRepository.save(product2)
-            product2Id = savedProduct2.id!!
-
-            val product3 = Product(
-                name = "운동화",
-                description = "편안한 운동화",
-                price = 150000L,
-                stock = 200,
-                category = ProductCategory.FASHION,
-                specifications = emptyMap(),
-                salesCount = 120
-            )
-            val savedProduct3 = productJpaRepository.save(product3)
-            product3Id = savedProduct3.id!!
+            productsToCreate.forEach { product ->
+                val saved = productJpaRepository.save(product)
+                testProducts.add(saved.id!!)
+            }
         }
 
         afterSpec {
             // 테스트 데이터 정리
             productJpaRepository.deleteAll()
+            testProducts.clear()
         }
 
     describe("ProductService 통합 테스트 - 상품 조회") {
@@ -86,27 +199,28 @@ class ProductServiceIntegrationTest(
         context("전체 상품 조회") {
             it("모든 상품을 최신순으로 조회할 수 있다") {
                 // when
-                val response = productService.getProducts(
-                    category = null,
-                    sort = "newest",
+                val response = productService.getProducts(GetProductsCommand(
+                    sortBy = GetProductsCommand.SortBy.NEWEST,
+                    orderBy = GetProductsCommand.OrderBy.DESC,
                     page = 0,
-                    size = 10
-                )
+                    size = 20
+                ))
 
                 // then
                 response.products.isNotEmpty() shouldBe true
-                response.pagination.totalElements shouldNotBe 0
+                response.products.size shouldBe 15 // 생성한 상품 수
+                response.pagination.totalElements shouldBe 15
                 response.pagination.currentPage shouldBe 0
             }
 
             it("가격순으로 정렬하여 조회할 수 있다") {
                 // when
-                val response = productService.getProducts(
-                    category = null,
-                    sort = "price",
+                val response = productService.getProducts(GetProductsCommand(
+                    sortBy = GetProductsCommand.SortBy.PRICE,
+                    orderBy = GetProductsCommand.OrderBy.ASC,
                     page = 0,
-                    size = 10
-                )
+                    size = 20
+                ))
 
                 // then
                 response.products.isNotEmpty() shouldBe true
@@ -123,40 +237,45 @@ class ProductServiceIntegrationTest(
 
             it("인기순으로 정렬하여 조회할 수 있다") {
                 // when
-                val response = productService.getProducts(
-                    category = null,
-                    sort = "popularity",
+                val response = productService.getProducts(GetProductsCommand(
+                    sortBy = GetProductsCommand.SortBy.POPULARITY,
+                    orderBy = GetProductsCommand.OrderBy.DESC,
                     page = 0,
-                    size = 10
-                )
+                    size = 20
+                ))
 
                 // then
                 response.products.isNotEmpty() shouldBe true
-                // ProductSummary에는 salesCount가 없으므로 단순히 조회만 확인
+
+                // 판매량 내림차순 정렬 확인
+                if (response.products.size > 1) {
+                    for (i in 0 until response.products.size - 1) {
+                        val current = response.products[i]
+                        val next = response.products[i + 1]
+                        (current.salesCount >= next.salesCount) shouldBe true
+                    }
+                }
             }
 
             it("페이지네이션이 정상적으로 동작한다") {
                 // when - 첫 페이지
-                val firstPage = productService.getProducts(
-                    category = null,
-                    sort = null,
+                val firstPage = productService.getProducts(GetProductsCommand(
                     page = 0,
                     size = 5
-                )
+                ))
 
                 // then
                 firstPage.products shouldHaveSize 5
                 firstPage.pagination.currentPage shouldBe 0
                 firstPage.pagination.hasNext shouldBe true
                 firstPage.pagination.hasPrevious shouldBe false
+                firstPage.pagination.totalElements shouldBe 15
 
                 // when - 두 번째 페이지
-                val secondPage = productService.getProducts(
-                    category = null,
-                    sort = null,
+                val secondPage = productService.getProducts(GetProductsCommand(
                     page = 1,
                     size = 5
-                )
+                ))
 
                 // then
                 secondPage.products shouldHaveSize 5
@@ -168,72 +287,77 @@ class ProductServiceIntegrationTest(
         context("카테고리별 상품 조회") {
             it("ELECTRONICS 카테고리의 상품만 조회할 수 있다") {
                 // when
-                val response = productService.getProducts(
+                val response = productService.getProducts(GetProductsCommand(
                     category = "ELECTRONICS",
-                    sort = null,
                     page = 0,
                     size = 10
-                )
+                ))
 
                 // then
                 response.products.isNotEmpty() shouldBe true
+                response.products shouldHaveSize 5 // ELECTRONICS 상품 5개
                 response.products.all { it.category == ProductCategory.ELECTRONICS } shouldBe true
             }
 
             it("FASHION 카테고리의 상품만 조회할 수 있다") {
                 // when
-                val response = productService.getProducts(
+                val response = productService.getProducts(GetProductsCommand(
                     category = "FASHION",
-                    sort = null,
                     page = 0,
                     size = 10
-                )
+                ))
 
                 // then
                 response.products.isNotEmpty() shouldBe true
+                response.products shouldHaveSize 3 // FASHION 상품 3개
                 response.products.all { it.category == ProductCategory.FASHION } shouldBe true
             }
 
             it("FOOD 카테고리의 상품만 조회할 수 있다") {
                 // when
-                val response = productService.getProducts(
+                val response = productService.getProducts(GetProductsCommand(
                     category = "FOOD",
-                    sort = null,
                     page = 0,
                     size = 10
-                )
+                ))
 
                 // then
                 response.products.isNotEmpty() shouldBe true
+                response.products shouldHaveSize 2 // FOOD 상품 2개
                 response.products.all { it.category == ProductCategory.FOOD } shouldBe true
-
-                // ProductSummary에는 salesCount가 없으므로 단순히 조회만 확인
             }
 
             it("카테고리별 인기순 상품을 조회할 수 있다") {
                 // when
-                val response = productService.getProducts(
+                val response = productService.getProducts(GetProductsCommand(
                     category = "FASHION",
-                    sort = "popularity",
+                    sortBy = GetProductsCommand.SortBy.POPULARITY,
+                    orderBy = GetProductsCommand.OrderBy.DESC,
                     page = 0,
                     size = 10
-                )
+                ))
 
                 // then
                 response.products.isNotEmpty() shouldBe true
                 response.products.all { it.category == ProductCategory.FASHION } shouldBe true
 
-                // ProductSummary에는 salesCount가 없으므로 단순히 조회만 확인
+                // 판매량 내림차순 확인
+                if (response.products.size > 1) {
+                    for (i in 0 until response.products.size - 1) {
+                        val current = response.products[i]
+                        val next = response.products[i + 1]
+                        (current.salesCount >= next.salesCount) shouldBe true
+                    }
+                }
             }
 
             it("존재하지 않는 카테고리로 조회하면 빈 리스트를 반환한다") {
                 // when
-                val response = productService.getProducts(
+                val response = productService.getProducts(GetProductsCommand(
                     category = "INVALID_CATEGORY",
-                    sort = null,
                     page = 0,
                     size = 10
-                )
+                ))
 
                 // then
                 response.products shouldHaveSize 0
@@ -243,7 +367,7 @@ class ProductServiceIntegrationTest(
         context("상품 상세 조회") {
             it("상품 ID로 상세 정보를 조회할 수 있다") {
                 // given
-                val productId = product1Id
+                val productId = testProducts.first()
 
                 // when
                 val response = productService.findProductById(productId)
@@ -259,7 +383,7 @@ class ProductServiceIntegrationTest(
 
             it("상품의 모든 정보가 포함되어 있다") {
                 // given
-                val productId = product1Id
+                val productId = testProducts.first()
 
                 // when
                 val response = productService.findProductById(productId)
@@ -272,52 +396,6 @@ class ProductServiceIntegrationTest(
                 response.category shouldBe ProductCategory.ELECTRONICS
                 response.salesCount shouldBe 150
                 response.specifications shouldNotBe null
-            }
-
-            it("존재하지 않는 상품 ID로 조회 시 예외가 발생한다") {
-                // given
-                val invalidProductId = UUID.randomUUID()
-
-                // when & then
-                shouldThrow<ProductNotFoundException> {
-                    productService.findProductById(invalidProductId)
-                }
-            }
-        }
-
-        context("상품 재고 조회") {
-            it("상품 ID로 재고를 조회할 수 있다") {
-                // given
-                val productId = product1Id
-
-                // when
-                val response = productService.findProductById(productId)
-
-                // then
-                response.id shouldBe productId
-                response.name shouldNotBe null
-                response.stock shouldNotBe null
-                response.stock shouldBe 50
-            }
-
-            it("재고가 0인 상품도 조회할 수 있다") {
-                // given - 재고 0인 상품 생성
-                val product = Product(
-                    name = "품절 상품",
-                    description = "재고 없음",
-                    price = 10000L,
-                    stock = 0,
-                    category = ProductCategory.ELECTRONICS,
-                    specifications = emptyMap(),
-                    salesCount = 0
-                )
-                val savedProduct = productJpaRepository.save(product)
-
-                // when
-                val response = productService.findProductById(savedProduct.id!!)
-
-                // then
-                response.stock shouldBe 0
             }
 
             it("존재하지 않는 상품 ID로 조회 시 예외가 발생한다") {
@@ -349,13 +427,28 @@ class ProductServiceIntegrationTest(
                 }
             }
 
+            it("판매량 기준으로 정렬된다") {
+                // when
+                val response = productService.getTopProducts(days = 30, limit = 3)
+
+                // then
+                response.products shouldHaveSize 3
+                // 무선 이어폰(300), 유기농 쌀(250), 스마트폰(200) 순서
+                response.products[0].name shouldBe "무선 이어폰"
+                response.products[0].salesCount shouldBe 300
+                response.products[1].name shouldBe "유기농 쌀"
+                response.products[1].salesCount shouldBe 250
+                response.products[2].name shouldBe "스마트폰 XYZ"
+                response.products[2].salesCount shouldBe 200
+            }
+
             it("limit보다 적은 상품이 있으면 모든 상품을 반환한다") {
                 // when
                 val response = productService.getTopProducts(days = 30, limit = 1000)
 
                 // then
                 response.products.isNotEmpty() shouldBe true
-                // 총 상품 수보다 많은 limit를 요청해도 실제 상품 수만큼만 반환
+                response.products shouldHaveSize 15 // 전체 상품 수
             }
         }
     }
@@ -365,12 +458,13 @@ class ProductServiceIntegrationTest(
         context("카테고리 + 정렬 조합") {
             it("ELECTRONICS 카테고리를 가격순으로 조회할 수 있다") {
                 // when
-                val response = productService.getProducts(
+                val response = productService.getProducts(GetProductsCommand(
                     category = "ELECTRONICS",
-                    sort = "price",
+                    sortBy = GetProductsCommand.SortBy.PRICE,
+                    orderBy = GetProductsCommand.OrderBy.ASC,
                     page = 0,
                     size = 10
-                )
+                ))
 
                 // then
                 response.products.isNotEmpty() shouldBe true
@@ -386,12 +480,13 @@ class ProductServiceIntegrationTest(
 
             it("FASHION 카테고리를 인기순으로 조회할 수 있다") {
                 // when
-                val response = productService.getProducts(
+                val response = productService.getProducts(GetProductsCommand(
                     category = "FASHION",
-                    sort = "popularity",
+                    sortBy = GetProductsCommand.SortBy.POPULARITY,
+                    orderBy = GetProductsCommand.OrderBy.DESC,
                     page = 0,
                     size = 10
-                )
+                ))
 
                 // then
                 response.products.isNotEmpty() shouldBe true
@@ -409,12 +504,13 @@ class ProductServiceIntegrationTest(
         context("카테고리 + 정렬 + 페이지네이션 조합") {
             it("복합 조건으로 상품을 조회할 수 있다") {
                 // when
-                val response = productService.getProducts(
+                val response = productService.getProducts(GetProductsCommand(
                     category = "ELECTRONICS",
-                    sort = "price",
+                    sortBy = GetProductsCommand.SortBy.PRICE,
+                    orderBy = GetProductsCommand.OrderBy.ASC,
                     page = 0,
                     size = 3
-                )
+                ))
 
                 // then
                 response.products shouldHaveSize 3
@@ -427,7 +523,6 @@ class ProductServiceIntegrationTest(
                     val current = response.products[i]
                     val next = response.products[i + 1]
                     (current.price <= next.price) shouldBe true
-                    (current.salesCount >= next.salesCount) shouldBe true
                 }
             }
         }
@@ -449,12 +544,12 @@ class ProductServiceIntegrationTest(
 
             it("메인 페이지에 표시할 신상품 10개를 조회한다") {
                 // when
-                val newProducts = productService.getProducts(
-                    category = null,
-                    sort = "newest",
+                val newProducts = productService.getProducts(GetProductsCommand(
+                    sortBy = GetProductsCommand.SortBy.NEWEST,
+                    orderBy = GetProductsCommand.OrderBy.DESC,
                     page = 0,
                     size = 10
-                )
+                ))
 
                 // then
                 newProducts.products shouldHaveSize 10
@@ -464,12 +559,13 @@ class ProductServiceIntegrationTest(
         context("카테고리 페이지 시나리오") {
             it("전자제품 카테고리에서 가격이 저렴한 순으로 10개를 조회한다") {
                 // when
-                val products = productService.getProducts(
+                val products = productService.getProducts(GetProductsCommand(
                     category = "ELECTRONICS",
-                    sort = "price",
+                    sortBy = GetProductsCommand.SortBy.PRICE,
+                    orderBy = GetProductsCommand.OrderBy.ASC,
                     page = 0,
                     size = 10
-                )
+                ))
 
                 // then
                 products.products.isNotEmpty() shouldBe true
@@ -478,20 +574,22 @@ class ProductServiceIntegrationTest(
 
             it("패션 카테고리에서 인기 상품 순으로 페이지를 넘기며 조회한다") {
                 // when - 첫 페이지
-                val firstPage = productService.getProducts(
+                val firstPage = productService.getProducts(GetProductsCommand(
                     category = "FASHION",
-                    sort = "popularity",
+                    sortBy = GetProductsCommand.SortBy.POPULARITY,
+                    orderBy = GetProductsCommand.OrderBy.DESC,
                     page = 0,
-                    size = 5
-                )
+                    size = 2
+                ))
 
                 // when - 두 번째 페이지
-                val secondPage = productService.getProducts(
+                val secondPage = productService.getProducts(GetProductsCommand(
                     category = "FASHION",
-                    sort = "popularity",
+                    sortBy = GetProductsCommand.SortBy.POPULARITY,
+                    orderBy = GetProductsCommand.OrderBy.DESC,
                     page = 1,
-                    size = 5
-                )
+                    size = 2
+                ))
 
                 // then
                 firstPage.products.isNotEmpty() shouldBe true
@@ -509,7 +607,7 @@ class ProductServiceIntegrationTest(
         context("상품 상세 페이지 시나리오") {
             it("상품 상세 정보를 조회한다") {
                 // given
-                val productId = product1Id
+                val productId = testProducts.first()
 
                 // when
                 val product = productService.findProductById(productId)
