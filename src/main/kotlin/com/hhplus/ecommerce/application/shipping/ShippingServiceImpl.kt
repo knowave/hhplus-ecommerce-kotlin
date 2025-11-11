@@ -2,6 +2,7 @@ package com.hhplus.ecommerce.application.shipping
 
 import com.hhplus.ecommerce.application.shipping.dto.*
 import com.hhplus.ecommerce.common.exception.AlreadyDeliveredException
+import com.hhplus.ecommerce.common.exception.InvalidCarrierException
 import com.hhplus.ecommerce.common.exception.InvalidEstimatedDateException
 import com.hhplus.ecommerce.common.exception.InvalidStatusTransitionException
 import com.hhplus.ecommerce.common.exception.OrderNotFoundForShippingException
@@ -9,7 +10,6 @@ import com.hhplus.ecommerce.common.exception.ShippingNotFoundException
 import com.hhplus.ecommerce.domain.shipping.repository.ShippingJpaRepository
 import com.hhplus.ecommerce.domain.shipping.entity.Shipping
 import com.hhplus.ecommerce.domain.shipping.entity.ShippingStatus
-import com.hhplus.ecommerce.presentation.shipping.dto.*
 import org.springframework.data.domain.PageRequest
 import org.springframework.stereotype.Service
 import java.time.LocalDateTime
@@ -152,6 +152,26 @@ class ShippingServiceImpl(
             page = pageInfo,
             summary = summary
         )
+    }
+
+    override fun createShipping(orderId: UUID, carrier: String): Shipping {
+        require(carriers.contains(carrier)) {
+            throw InvalidCarrierException(carrier)
+        }
+
+        val now = LocalDateTime.now()
+        val estimatedArrivalAt = now.plusDays(7)
+        val datePart = now.toLocalDate().toString()
+
+        val shipping = Shipping(
+            orderId = orderId,
+            carrier = carrier,
+            trackingNumber = "TRACK${datePart}-${carrier}",
+            estimatedArrivalAt = estimatedArrivalAt,
+            status = ShippingStatus.PENDING,
+        )
+
+        return shippingRepository.save(shipping)
     }
 
     /**

@@ -17,8 +17,11 @@ import com.hhplus.ecommerce.domain.payment.entity.TransmissionStatus
 import com.hhplus.ecommerce.domain.user.entity.User
 import com.hhplus.ecommerce.application.payment.dto.CancelPaymentCommand
 import com.hhplus.ecommerce.application.payment.dto.ProcessPaymentCommand
+import com.hhplus.ecommerce.application.shipping.ShippingService
 import com.hhplus.ecommerce.domain.payment.repository.DataTransmissionJpaRepository
 import com.hhplus.ecommerce.domain.payment.repository.PaymentJpaRepository
+import com.hhplus.ecommerce.domain.shipping.entity.Shipping
+import com.hhplus.ecommerce.domain.shipping.entity.ShippingStatus
 import io.kotest.assertions.throwables.shouldThrow
 import io.kotest.core.spec.style.DescribeSpec
 import io.kotest.matchers.shouldBe
@@ -37,6 +40,7 @@ class PaymentServiceUnitTest : DescribeSpec({
     lateinit var couponService: CouponService
     lateinit var lockManager: LockManager
     lateinit var paymentService: PaymentService
+    lateinit var shippingService: ShippingService
 
     beforeEach {
         // 모든 의존성을 Mock으로 생성
@@ -47,6 +51,7 @@ class PaymentServiceUnitTest : DescribeSpec({
         productService = mockk(relaxed = true)
         couponService = mockk(relaxed = true)
         lockManager = mockk(relaxed = true)
+        shippingService = mockk(relaxed = true)
 
         paymentService = PaymentServiceImpl(
             paymentRepository,
@@ -55,7 +60,8 @@ class PaymentServiceUnitTest : DescribeSpec({
             userService,
             productService,
             couponService,
-            lockManager
+            shippingService,
+            lockManager,
         )
     }
 
@@ -80,6 +86,19 @@ class PaymentServiceUnitTest : DescribeSpec({
                     appliedCouponId = null,
                     status = OrderStatus.PENDING
                 )
+
+                val now = LocalDateTime.now()
+                val estimatedArrivalAt = now.plusDays(7)
+                val shipping = Shipping(
+                    orderId = orderId,
+                    carrier = "CJ대한통운",
+                    trackingNumber = "trackingNumber",
+                    shippingStartAt = null,
+                    estimatedArrivalAt = estimatedArrivalAt,
+                    deliveredAt = now,
+                    status = ShippingStatus.PENDING
+                )
+
                 // id 설정
                 val orderField = Order::class.java.getDeclaredField("id")
                 orderField.isAccessible = true
@@ -97,6 +116,7 @@ class PaymentServiceUnitTest : DescribeSpec({
                 every { userService.getUser(userId) } returns user
                 every { userService.updateUser(any()) } returns user
                 every { orderService.updateOrder(any()) } returns order
+                every { shippingService.createShipping(order.id!!, "") } returns shipping
 
                 val savedPayment = Payment(
                     orderId = orderId,
