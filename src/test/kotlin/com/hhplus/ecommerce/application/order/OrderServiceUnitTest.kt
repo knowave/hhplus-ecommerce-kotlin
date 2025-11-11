@@ -15,7 +15,7 @@ import com.hhplus.ecommerce.common.exception.ProductNotFoundException
 import com.hhplus.ecommerce.common.exception.UserNotFoundException
 import com.hhplus.ecommerce.common.lock.LockManager
 import com.hhplus.ecommerce.domain.coupon.repository.CouponStatus
-import com.hhplus.ecommerce.domain.order.repository.OrderRepository
+import com.hhplus.ecommerce.domain.order.repository.OrderJpaRepository
 import com.hhplus.ecommerce.domain.product.entity.ProductCategory
 import com.hhplus.ecommerce.domain.coupon.entity.Coupon
 import com.hhplus.ecommerce.domain.coupon.entity.UserCoupon
@@ -35,10 +35,12 @@ import io.mockk.slot
 import io.mockk.verify
 import java.time.LocalDateTime
 import java.time.format.DateTimeFormatter
+import java.util.Optional
+import java.util.UUID
 
 class OrderServiceUnitTest : DescribeSpec({
 
-    lateinit var orderRepository: OrderRepository
+    lateinit var orderRepository: OrderJpaRepository
     lateinit var productService: ProductService
     lateinit var couponService: CouponService
     lateinit var userService: UserService
@@ -71,14 +73,13 @@ class OrderServiceUnitTest : DescribeSpec({
         context("정상적인 주문 생성") {
             it("쿠폰 없이 주문을 생성할 수 있다") {
                 // given
-                val userId = 100L
-                val productId = 1L
+                val userId = UUID.randomUUID()
+                val productId = UUID.randomUUID()
                 val quantity = 2
                 val unitPrice = 10000L
-                val now = LocalDateTime.now().format(dateFormatter)
 
-                val user = createUser(userId, 100000L, now, now)
-                val product = createProduct(productId, "노트북", unitPrice, 10, ProductCategory.ELECTRONICS, 0, now, now)
+                val user = createUser(balance = 100000L)
+                val product = createProduct(name = "노트북", price = unitPrice, stock = 10, category = ProductCategory.ELECTRONICS)
 
                 val command = CreateOrderCommand(
                     userId = userId,
@@ -89,9 +90,6 @@ class OrderServiceUnitTest : DescribeSpec({
                 every { userService.getUser(userId) } returns user
                 every { productService.findProductById(productId) } returns product
                 every { productService.updateProduct(any()) } returns product
-                every { orderRepository.generateId() } returns 1001L
-                every { orderRepository.generateItemId() } returns 1L
-                every { orderRepository.generateOrderNumber(1001L) } returns "ORD-20251103-001001"
 
                 val orderSlot = slot<Order>()
                 every { orderRepository.save(capture(orderSlot)) } answers { orderSlot.captured }
@@ -100,9 +98,9 @@ class OrderServiceUnitTest : DescribeSpec({
                 val response = orderService.createOrder(command)
 
                 // then
-                response.orderId shouldBe 1001L
+                response.orderId shouldNotBe null
                 response.userId shouldBe userId
-                response.orderNumber shouldBe "ORD-20251103-001001"
+                response.orderNumber shouldNotBe null
                 response.items.size shouldBe 1
                 response.items[0].productId shouldBe productId
                 response.items[0].quantity shouldBe quantity
@@ -119,19 +117,17 @@ class OrderServiceUnitTest : DescribeSpec({
 
             it("쿠폰을 사용하여 주문을 생성할 수 있다") {
                 // given
-                val userId = 100L
-                val productId = 1L
-                val couponId = 10L
+                val userId = UUID.randomUUID()
+                val productId = UUID.randomUUID()
+                val couponId = UUID.randomUUID()
                 val quantity = 1
                 val unitPrice = 100000L
                 val discountRate = 10
-                val now = LocalDateTime.now().format(dateFormatter)
 
-                val user = createUser(userId, 100000L, now, now)
-                val product = createProduct(productId, "노트북", unitPrice, 10, ProductCategory.ELECTRONICS, 0, now, now)
-                val coupon = createCoupon(couponId, "10% 할인 쿠폰", discountRate, 100, 50, "2025-01-01", "2025-12-31", 30, now)
-                val expiresAt = LocalDateTime.now().plusDays(30).format(dateFormatter)
-                val userCoupon = createUserCoupon(1L, userId, couponId, CouponStatus.AVAILABLE, now, expiresAt, null)
+                val user = createUser(balance = 100000L)
+                val product = createProduct(name = "노트북", price = unitPrice, stock = 10, category = ProductCategory.ELECTRONICS)
+                val coupon = createCoupon(name = "10% 할인 쿠폰", discountRate = discountRate, totalQuantity = 100, issuedQuantity = 50)
+                val userCoupon = createUserCoupon(userId = userId, couponId = couponId, status = CouponStatus.AVAILABLE)
 
                 val command = CreateOrderCommand(
                     userId = userId,
@@ -143,9 +139,6 @@ class OrderServiceUnitTest : DescribeSpec({
                 every { productService.findProductById(productId) } returns product
                 every { couponService.findUserCoupon(userId, couponId) } returns userCoupon
                 every { couponService.findCouponById(couponId) } returns coupon
-                every { orderRepository.generateId() } returns 1001L
-                every { orderRepository.generateItemId() } returns 1L
-                every { orderRepository.generateOrderNumber(1001L) } returns "ORD-20251103-001001"
 
                 val orderSlot = slot<Order>()
                 every { orderRepository.save(capture(orderSlot)) } answers { orderSlot.captured }
@@ -172,8 +165,8 @@ class OrderServiceUnitTest : DescribeSpec({
             it("수량이 0 이하이면 예외가 발생한다") {
                 // given
                 val command = CreateOrderCommand(
-                    userId = 100L,
-                    items = listOf(OrderItemCommand(1L, 0)),
+                    userId = UUID.randomUUID(),
+                    items = listOf(OrderItemCommand(UUID.randomUUID(), 0)),
                     couponId = null
                 )
 
@@ -185,10 +178,10 @@ class OrderServiceUnitTest : DescribeSpec({
 
             it("존재하지 않는 사용자는 주문할 수 없다") {
                 // given
-                val userId = 999L
+                val userId = UUID.randomUUID()
                 val command = CreateOrderCommand(
                     userId = userId,
-                    items = listOf(OrderItemCommand(1L, 1)),
+                    items = listOf(OrderItemCommand(UUID.randomUUID(), 1)),
                     couponId = null
                 )
 
@@ -203,16 +196,15 @@ class OrderServiceUnitTest : DescribeSpec({
 
             it("존재하지 않는 상품은 주문할 수 없다") {
                 // given
-                val userId = 100L
-                val productId = 999L
-                val now = LocalDateTime.now().format(dateFormatter)
+                val userId = UUID.randomUUID()
+                val productId = UUID.randomUUID()
                 val command = CreateOrderCommand(
                     userId = userId,
                     items = listOf(OrderItemCommand(productId, 1)),
                     couponId = null
                 )
 
-                val user = createUser(userId, 100000L, now, now)
+                val user = createUser(balance = 100000L)
                 every { userService.getUser(userId) } returns user
 
                 // productService.findProductById가 ProductNotFoundException을 던지도록 모킹
@@ -226,17 +218,16 @@ class OrderServiceUnitTest : DescribeSpec({
 
             it("재고가 부족하면 주문할 수 없다") {
                 // given
-                val userId = 100L
-                val productId = 1L
-                val now = LocalDateTime.now().format(dateFormatter)
+                val userId = UUID.randomUUID()
+                val productId = UUID.randomUUID()
                 val command = CreateOrderCommand(
                     userId = userId,
                     items = listOf(OrderItemCommand(productId, 10)),
                     couponId = null
                 )
 
-                val user = createUser(userId, 100000L, now, now)
-                val product = createProduct(productId, "노트북", 100000L, 5, ProductCategory.ELECTRONICS, 0, now, now) // 재고 5개만 있음
+                val user = createUser(balance = 100000L)
+                val product = createProduct(name = "노트북", price = 100000L, stock = 5, category = ProductCategory.ELECTRONICS) // 재고 5개만 있음
 
                 every { userService.getUser(userId) } returns user
                 every { productService.findProductById(productId) } returns product
@@ -251,13 +242,12 @@ class OrderServiceUnitTest : DescribeSpec({
         context("주문 생성 실패 - 쿠폰 오류") {
             it("존재하지 않는 쿠폰은 사용할 수 없다") {
                 // given
-                val userId = 100L
-                val productId = 1L
-                val couponId = 999L
-                val now = LocalDateTime.now().format(dateFormatter)
+                val userId = UUID.randomUUID()
+                val productId = UUID.randomUUID()
+                val couponId = UUID.randomUUID()
 
-                val user = createUser(userId, 100000L, now, now)
-                val product = createProduct(productId, "노트북", 100000L, 10, ProductCategory.ELECTRONICS, 0, now, now)
+                val user = createUser(balance = 100000L)
+                val product = createProduct(name = "노트북", price = 100000L, stock = 10, category = ProductCategory.ELECTRONICS)
 
                 val command = CreateOrderCommand(
                     userId = userId,
@@ -279,16 +269,17 @@ class OrderServiceUnitTest : DescribeSpec({
 
             it("이미 사용한 쿠폰은 재사용할 수 없다") {
                 // given
-                val userId = 100L
-                val productId = 1L
-                val couponId = 10L
-                val now = LocalDateTime.now().format(dateFormatter)
+                val userId = UUID.randomUUID()
+                val productId = UUID.randomUUID()
+                val couponId = UUID.randomUUID()
 
-                val user = createUser(userId, 100000L, now, now)
-                val product = createProduct(productId, "노트북", 100000L, 10, ProductCategory.ELECTRONICS, 0, now, now)
+                val user = createUser(balance = 100000L)
+                val product = createProduct(name = "노트북", price = 100000L, stock = 10, category = ProductCategory.ELECTRONICS)
                 val userCoupon = createUserCoupon(
-                    1L, userId, couponId, CouponStatus.USED,
-                    now, LocalDateTime.now().plusDays(30).format(dateFormatter), now
+                    userId = userId,
+                    couponId = couponId,
+                    status = CouponStatus.USED,
+                    usedAt = LocalDateTime.now()
                 )
 
                 val command = CreateOrderCommand(
@@ -309,18 +300,18 @@ class OrderServiceUnitTest : DescribeSpec({
 
             it("만료된 쿠폰은 사용할 수 없다") {
                 // given
-                val userId = 100L
-                val productId = 1L
-                val couponId = 10L
-                val now = LocalDateTime.now().format(dateFormatter)
+                val userId = UUID.randomUUID()
+                val productId = UUID.randomUUID()
+                val couponId = UUID.randomUUID()
 
-                val user = createUser(userId, 100000L, now, now)
-                val product = createProduct(productId, "노트북", 100000L, 10, ProductCategory.ELECTRONICS, 0, now, now)
+                val user = createUser(balance = 100000L)
+                val product = createProduct(name = "노트북", price = 100000L, stock = 10, category = ProductCategory.ELECTRONICS)
                 val userCoupon = createUserCoupon(
-                    1L, userId, couponId, CouponStatus.AVAILABLE,
-                    LocalDateTime.now().minusDays(60).format(dateFormatter),
-                    LocalDateTime.now().minusDays(1).format(dateFormatter), // 만료됨
-                    null
+                    userId = userId,
+                    couponId = couponId,
+                    status = CouponStatus.AVAILABLE,
+                    issuedAt = LocalDateTime.now().minusDays(60),
+                    expiresAt = LocalDateTime.now().minusDays(1) // 만료됨
                 )
 
                 val command = CreateOrderCommand(
@@ -345,18 +336,15 @@ class OrderServiceUnitTest : DescribeSpec({
         context("정상적인 취소") {
             it("PENDING 상태의 주문을 취소할 수 있다") {
                 // given
-                val orderId = 1001L
-                val userId = 100L
-                val productId = 1L
-                val now = LocalDateTime.now()
-                val nowStr = now.format(dateFormatter)
+                val orderId = UUID.randomUUID()
+                val userId = UUID.randomUUID()
+                val productId = UUID.randomUUID()
 
-                val product = createProduct(productId, "노트북", 100000L, 5, ProductCategory.ELECTRONICS, 0, nowStr, nowStr)
+                val product = createProduct(name = "노트북", price = 100000L, stock = 5, category = ProductCategory.ELECTRONICS)
                 val orderItems = listOf(
-                    OrderItem(1L, productId, orderId, "노트북", 2, 100000L, 200000L)
+                    OrderItem(productId = productId, orderId = orderId, productName = "노트북", quantity = 2, unitPrice = 100000L, subtotal = 200000L)
                 )
                 val order = Order(
-                    id = orderId,
                     userId = userId,
                     orderNumber = "ORD-20251103-001001",
                     items = orderItems,
@@ -364,14 +352,12 @@ class OrderServiceUnitTest : DescribeSpec({
                     discountAmount = 0L,
                     finalAmount = 200000L,
                     appliedCouponId = null,
-                    status = OrderStatus.PENDING,
-                    createdAt = now,
-                    updatedAt = now
+                    status = OrderStatus.PENDING
                 )
 
                 val command = CancelOrderCommand(userId)
 
-                every { orderRepository.findById(orderId) } returns order
+                every { orderRepository.findById(orderId) } returns Optional.of(order)
                 every { productService.findProductById(productId) } returns product
                 every { productService.updateProduct(any()) } returns product
 
@@ -394,10 +380,10 @@ class OrderServiceUnitTest : DescribeSpec({
         context("취소 실패") {
             it("존재하지 않는 주문은 취소할 수 없다") {
                 // given
-                val orderId = 999L
-                val command = CancelOrderCommand(100L)
+                val orderId = UUID.randomUUID()
+                val command = CancelOrderCommand(UUID.randomUUID())
 
-                every { orderRepository.findById(orderId) } returns null
+                every { orderRepository.findById(orderId) } returns Optional.empty()
 
                 // when & then
                 shouldThrow<OrderNotFoundException> {
@@ -407,16 +393,14 @@ class OrderServiceUnitTest : DescribeSpec({
 
             it("다른 사용자의 주문은 취소할 수 없다") {
                 // given
-                val orderId = 1001L
-                val ownerId = 100L
-                val otherUserId = 200L
-                val now = LocalDateTime.now()
+                val orderId = UUID.randomUUID()
+                val ownerId = UUID.randomUUID()
+                val otherUserId = UUID.randomUUID()
 
                 val orderItems = listOf(
-                    OrderItem(1L, 1L, orderId, "노트북", 1, 100000L, 100000L)
+                    OrderItem(productId = UUID.randomUUID(), orderId = orderId, productName = "노트북", quantity = 1, unitPrice = 100000L, subtotal = 100000L)
                 )
                 val order = Order(
-                    id = orderId,
                     userId = ownerId,
                     orderNumber = "ORD-20251103-001001",
                     items = orderItems,
@@ -424,14 +408,12 @@ class OrderServiceUnitTest : DescribeSpec({
                     discountAmount = 0L,
                     finalAmount = 100000L,
                     appliedCouponId = null,
-                    status = OrderStatus.PENDING,
-                    createdAt = now,
-                    updatedAt = now
+                    status = OrderStatus.PENDING
                 )
 
                 val command = CancelOrderCommand(otherUserId)
 
-                every { orderRepository.findById(orderId) } returns order
+                every { orderRepository.findById(orderId) } returns Optional.of(order)
 
                 // when & then
                 shouldThrow<ForbiddenException> {
@@ -442,80 +424,56 @@ class OrderServiceUnitTest : DescribeSpec({
     }
 }) {
     companion object {
-        fun createUser(
-            userId: Long,
-            balance: Long,
-            createdAt: String,
-            updatedAt: String
-        ): User {
-            return User(
-                id = userId,
-                balance = balance,
-                createdAt = createdAt,
-                updatedAt = updatedAt
-            )
+        fun createUser(balance: Long): User {
+            return User(balance = balance)
         }
 
         fun createProduct(
-            id: Long,
             name: String,
             price: Long,
             stock: Int,
             category: ProductCategory,
-            salesCount: Int,
-            createdAt: String,
-            updatedAt: String
+            salesCount: Int = 0
         ): Product {
             return Product(
-                id = id,
                 name = name,
                 description = "$name 상세 설명",
                 price = price,
                 stock = stock,
                 category = category,
                 specifications = emptyMap(),
-                salesCount = salesCount,
-                createdAt = createdAt,
-                updatedAt = updatedAt
+                salesCount = salesCount
             )
         }
 
         fun createCoupon(
-            id: Long,
             name: String,
             discountRate: Int,
             totalQuantity: Int,
             issuedQuantity: Int,
-            startDate: String,
-            endDate: String,
-            validityDays: Int,
-            createdAt: String
+            validityDays: Int = 30
         ): Coupon {
             return Coupon(
-                id = id,
                 name = name,
                 description = "$name 설명",
                 discountRate = discountRate,
                 totalQuantity = totalQuantity,
                 issuedQuantity = issuedQuantity,
-                startDate = startDate,
-                endDate = endDate,
-                validityDays = validityDays,
-                createdAt = createdAt
+                startDate = LocalDateTime.now(),
+                endDate = LocalDateTime.now().plusDays(365),
+                validityDays = validityDays
             )
         }
 
         fun createUserCoupon(
-            id: Long,
-            userId: Long,
-            couponId: Long,
+            userId: UUID,
+            couponId: UUID,
             status: CouponStatus,
-            issuedAt: String,
-            expiresAt: String,
-            usedAt: String?
+            issuedAt: LocalDateTime = LocalDateTime.now(),
+            expiresAt: LocalDateTime = LocalDateTime.now().plusDays(30),
+            usedAt: LocalDateTime? = null
         ): UserCoupon {
             return UserCoupon(
-                id = id,
                 userId = userId,
                 couponId = couponId,
                 status = status,

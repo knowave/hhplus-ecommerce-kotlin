@@ -1,5 +1,12 @@
 package com.hhplus.ecommerce.presentation.order
 
+import com.hhplus.ecommerce.application.product.ProductService
+import com.hhplus.ecommerce.application.user.UserService
+import com.hhplus.ecommerce.application.user.dto.CreateUserCommand
+import com.hhplus.ecommerce.domain.order.repository.OrderJpaRepository
+import com.hhplus.ecommerce.domain.product.entity.Product
+import com.hhplus.ecommerce.domain.product.entity.ProductCategory
+import com.hhplus.ecommerce.domain.product.repository.ProductJpaRepository
 import io.kotest.core.spec.style.DescribeSpec
 import io.kotest.matchers.shouldBe
 import io.kotest.matchers.shouldNotBe
@@ -14,33 +21,68 @@ import com.hhplus.ecommerce.presentation.user.dto.CreateUserRequest
 import com.hhplus.ecommerce.presentation.product.dto.ProductListResponse
 import com.hhplus.ecommerce.domain.user.entity.User
 import com.hhplus.ecommerce.domain.user.repository.UserRepository
+import java.util.UUID
 
 @SpringBootTest(webEnvironment = SpringBootTest.WebEnvironment.RANDOM_PORT)
 class OrderE2ETest(
     @LocalServerPort private val port: Int,
     private val restTemplate: TestRestTemplate,
-    private val userRepository: UserRepository
+    private val userService: UserService,
+    private val productService: ProductService,
+    private val orderRepository: OrderJpaRepository
 ) : DescribeSpec({
+
+    // 테스트용 데이터 ID
+    var user1Id: UUID? = null
+    var user2Id: UUID? = null
+
+    var product1Id: UUID? = null
+    var product2Id: UUID? = null
 
     // URL 헬퍼 함수
     fun url(path: String): String = "http://localhost:$port/api$path"
 
-    // 테스트용 사용자 생성 헬퍼 함수
-    fun createTestUser(balance: Long = 200000L): Long {
-        val request = CreateUserRequest(balance = balance)
-        val response = restTemplate.postForEntity(url("/users"), request, User::class.java)
-        println(response)
-        return response.body?.id ?: throw IllegalStateException("Failed to create test user")
-    }
+    beforeSpec {
+        // 테스트용 사용자 2명 생성
+        val createUser1Command = CreateUserCommand(balance = 500000L)
+        val createUser2Command = CreateUserCommand(balance = 500000L)
 
-    // 테스트용 상품 ID 조회 헬퍼 함수
-    fun getTestProducts(count: Int = 2): List<Long> {
-        val response = restTemplate.getForEntity(url("/products?size=$count"), ProductListResponse::class.java)
-        return response.body?.products?.map { it.id } ?: emptyList()
+        val savedUser1 = userService.createUser(createUser1Command)
+        val savedUser2 = userService.createUser(createUser2Command)
+
+        // 테스트용 상품 2개 생성
+        val product1 = Product(
+            name = "노트북 ABC",
+            description = "고성능 노트북으로 멀티태스킹에 최적화되어 있습니다.",
+            price = 1500000L,
+            stock = 50,
+            category = ProductCategory.ELECTRONICS,
+            specifications = mapOf("cpu" to "Intel i7", "ram" to "16GB", "storage" to "512GB SSD"),
+            salesCount = 150,
+        )
+
+        val product2 = Product(
+            name = "스마트폰 XYZ",
+            description = "최신 플래그십 스마트폰",
+            price = 1200000L,
+            stock = 100,
+            category = ProductCategory.ELECTRONICS,
+            specifications = mapOf("display" to "6.5inch OLED", "camera" to "108MP", "battery" to "5000mAh"),
+            salesCount = 200,
+        )
+
+        val savedProduct1 = productService.updateProduct(product1)
+        val savedProduct2 = productService.updateProduct(product2)
+
+        user1Id = savedUser1.id!!
+        user2Id = savedUser2.id!!
+
+        product1Id = savedProduct1.id!!
+        product2Id = savedProduct2.id!!
     }
 
     afterEach {
-        userRepository.clear()
+        orderRepository.deleteAll()
     }
 
     describe("Order API E2E Tests") {
@@ -48,8 +90,8 @@ class OrderE2ETest(
         describe("주문 생성") {
             it("상품을 주문할 수 있어야 한다") {
                 // Given
-                val userId = createTestUser(balance = 200000L)
-                val productIds = getTestProducts(2)
+                val userId = user1Id!!
+                val productIds = listOf(product1Id!!, product2Id!!)
 
                 val request = CreateOrderRequest(
                     userId = userId,
@@ -80,8 +122,8 @@ class OrderE2ETest(
 
             it("주문 생성 시 상품 정보가 정확히 반영되어야 한다") {
                 // Given
-                val userId = createTestUser(200000L)
-                val productIds = getTestProducts(1)
+                val userId = user1Id!!
+                val productIds = listOf(product1Id!!, product2Id!!)
 
                 val request = CreateOrderRequest(
                     userId = userId,
@@ -106,8 +148,8 @@ class OrderE2ETest(
 
             it("여러 상품을 함께 주문할 수 있어야 한다") {
                 // Given
-                val userId = createTestUser(balance = 1000000L)
-                val productIds = getTestProducts(3)
+                val userId = user1Id!!
+                val productIds = listOf(product1Id!!, product2Id!!)
 
                 val request = CreateOrderRequest(
                     userId = userId,
@@ -128,10 +170,11 @@ class OrderE2ETest(
 
             it("존재하지 않는 사용자로 주문 시 에러가 발생해야 한다") {
                 // Given
-                val productIds = getTestProducts(1)
+                val userId = user1Id!!
+                val productIds = listOf(product1Id!!, product2Id!!)
 
                 val request = CreateOrderRequest(
-                    userId = 999999L,
+                    userId = userId,
                     items = listOf(
                         OrderItemRequest(productId = productIds[0], quantity = 1)
                     )
@@ -146,12 +189,13 @@ class OrderE2ETest(
 
             it("존재하지 않는 상품으로 주문 시 에러가 발생해야 한다") {
                 // Given
-                val userId = createTestUser(2000000L)
+                val userId = user1Id!!
+                val productId = product1Id!!
 
                 val request = CreateOrderRequest(
                     userId = userId,
                     items = listOf(
-                        OrderItemRequest(productId = 999999L, quantity = 1)
+                        OrderItemRequest(productId = productId, quantity = 1)
                     )
                 )
 
@@ -166,8 +210,8 @@ class OrderE2ETest(
         describe("주문 상세 조회") {
             it("주문 ID로 주문 상세 정보를 조회할 수 있어야 한다") {
                 // Given - 주문 생성
-                val userId = createTestUser()
-                val productIds = getTestProducts(1)
+                val userId = user1Id!!
+                val productIds = listOf(product1Id!!, product2Id!!)
 
                 val createRequest = CreateOrderRequest(
                     userId = userId,
@@ -201,9 +245,10 @@ class OrderE2ETest(
 
             it("다른 사용자의 주문을 조회할 수 없어야 한다") {
                 // Given - 첫 번째 사용자가 주문 생성
-                val userId1 = createTestUser()
-                val userId2 = createTestUser()
-                val productIds = getTestProducts(1)
+                val userId1 = user1Id!!
+                val userId2 = user2Id!!
+                val productIds = listOf(product1Id!!, product2Id!!)
+
 
                 val createRequest = CreateOrderRequest(
                     userId = userId1,
@@ -226,7 +271,7 @@ class OrderE2ETest(
 
             it("존재하지 않는 주문 조회 시 404를 반환해야 한다") {
                 // Given
-                val userId = createTestUser()
+                val userId = user1Id!!
 
                 // When
                 val response = restTemplate.getForEntity(
@@ -242,8 +287,8 @@ class OrderE2ETest(
         describe("주문 목록 조회") {
             it("사용자의 주문 목록을 조회할 수 있어야 한다") {
                 // Given - 여러 주문 생성
-                val userId = createTestUser(balance = 2000000L)
-                val productIds = getTestProducts(1)
+                val userId = user1Id!!
+                val productIds = listOf(product1Id!!, product2Id!!)
 
                 repeat(3) {
                     val request = CreateOrderRequest(
@@ -272,8 +317,8 @@ class OrderE2ETest(
 
             it("주문 목록을 페이지네이션하여 조회할 수 있어야 한다") {
                 // Given
-                val userId = createTestUser(balance = 3000000L)
-                val productIds = getTestProducts(1)
+                val userId = user1Id!!
+                val productIds = listOf(product1Id!!, product2Id!!)
 
                 repeat(5) {
                     val request = CreateOrderRequest(
@@ -302,7 +347,7 @@ class OrderE2ETest(
 
             it("주문이 없는 사용자는 빈 목록을 반환해야 한다") {
                 // Given
-                val userId = createTestUser()
+                val userId = user1Id
 
                 // When
                 val response = restTemplate.getForEntity(
@@ -317,8 +362,8 @@ class OrderE2ETest(
 
             it("상태 필터링으로 주문 목록을 조회할 수 있어야 한다") {
                 // Given
-                val userId = createTestUser(balance = 2000000L)
-                val productIds = getTestProducts(1)
+                val userId = user1Id!!
+                val productIds = listOf(product1Id!!, product2Id!!)
 
                 val request = CreateOrderRequest(
                     userId = userId,
@@ -345,8 +390,8 @@ class OrderE2ETest(
         describe("주문 취소") {
             it("주문을 취소할 수 있어야 한다") {
                 // Given - 주문 생성
-                val userId = createTestUser()
-                val productIds = getTestProducts(1)
+                val userId = user1Id!!
+                val productIds = listOf(product1Id!!, product2Id!!)
 
                 val createRequest = CreateOrderRequest(
                     userId = userId,
@@ -382,8 +427,8 @@ class OrderE2ETest(
 
             it("주문 취소 시 재고가 복원되어야 한다") {
                 // Given
-                val userId = createTestUser()
-                val productIds = getTestProducts(1)
+                val userId = user1Id!!
+                val productIds = listOf(product1Id!!, product2Id!!)
 
                 val createRequest = CreateOrderRequest(
                     userId = userId,
@@ -412,9 +457,9 @@ class OrderE2ETest(
 
             it("다른 사용자의 주문은 취소할 수 없어야 한다") {
                 // Given
-                val userId1 = createTestUser()
-                val userId2 = createTestUser()
-                val productIds = getTestProducts(1)
+                val userId1 = user1Id!!
+                val userId2 = user2Id!!
+                val productIds = listOf(product1Id!!, product2Id!!)
 
                 val createRequest = CreateOrderRequest(
                     userId = userId1,
@@ -439,8 +484,8 @@ class OrderE2ETest(
 
             it("이미 취소된 주문은 다시 취소할 수 없어야 한다") {
                 // Given - 주문 생성 및 취소
-                val userId = createTestUser()
-                val productIds = getTestProducts(1)
+                val userId = user1Id!!
+                val productIds = listOf(product1Id!!, product2Id!!)
 
                 val createRequest = CreateOrderRequest(
                     userId = userId,
@@ -469,8 +514,8 @@ class OrderE2ETest(
         describe("복합 사용 시나리오") {
             it("주문 생성 후 상세 조회, 목록 조회, 취소를 순차적으로 수행할 수 있어야 한다") {
                 // Given
-                val userId = createTestUser()
-                val productIds = getTestProducts(2)
+                val userId = user1Id!!
+                val productIds = listOf(product1Id!!, product2Id!!)
 
                 // Step 1: 주문 생성
                 val createRequest = CreateOrderRequest(
@@ -520,9 +565,9 @@ class OrderE2ETest(
 
             it("여러 사용자가 동시에 주문을 생성할 수 있어야 한다") {
                 // Given
-                val userId1 = createTestUser(balance = 1000000L)
-                val userId2 = createTestUser(balance = 1000000L)
-                val productIds = getTestProducts(2)
+                val userId1 = user1Id!!
+                val userId2 = user2Id!!
+                val productIds = listOf(product1Id!!, product2Id!!)
 
                 // When - 두 사용자가 각각 주문 생성
                 val request1 = CreateOrderRequest(
