@@ -1,6 +1,5 @@
 package com.hhplus.ecommerce.application.order
 
-import com.hhplus.ecommerce.application.cart.CartService
 import com.hhplus.ecommerce.application.coupon.CouponService
 import com.hhplus.ecommerce.application.product.ProductService
 import com.hhplus.ecommerce.application.user.UserService
@@ -43,7 +42,6 @@ class OrderServiceIntegrationTest(
     private val couponService: CouponService,
     private val userService: UserService,
     private val orderService: OrderService,
-    private val cartService: CartService,
     private val couponRepository: CouponJpaRepository,
     private val userCouponRepository: UserCouponJpaRepository
 ) : DescribeSpec() {

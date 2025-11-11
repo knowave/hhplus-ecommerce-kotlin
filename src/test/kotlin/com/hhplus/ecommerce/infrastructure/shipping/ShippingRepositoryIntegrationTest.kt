@@ -6,6 +6,7 @@ import io.kotest.core.spec.style.DescribeSpec
 import io.kotest.matchers.shouldBe
 import io.kotest.matchers.shouldNotBe
 import java.time.LocalDateTime
+import java.util.UUID
 
 /**
  * ShippingRepository Integration Test
@@ -17,8 +18,7 @@ import java.time.LocalDateTime
  * 1. CRUD 작업 - findById, findByOrderId, save
  * 2. 사용자 기반 조회 - findByUserId (정렬 확인)
  * 3. 복합 필터링 - findByUserIdWithFilters (상태, 택배사, 날짜 범위)
- * 4. ID 생성 - generateId (증가 확인)
- * 5. 송장번호 생성 - generateTrackingNumber (중복 방지)
+ * 4. 송장번호 생성 - generateTrackingNumber (중복 방지)
  */
 class ShippingRepositoryIntegrationTest : DescribeSpec({
 
@@ -32,16 +32,17 @@ class ShippingRepositoryIntegrationTest : DescribeSpec({
         context("배송이 존재할 때") {
             it("배송 정보를 반환한다") {
                 // Given
-                val shipping = createShipping(1L, 100L, ShippingStatus.PENDING)
+                val orderId = UUID.randomUUID()
+                val shipping = createShipping(orderId, ShippingStatus.PENDING)
                 repository.save(shipping)
 
                 // When
-                val found = repository.findById(1L)
+                val found = repository.findById(shipping.id!!)
 
                 // Then
                 found shouldNotBe null
-                found!!.id shouldBe 1L
-                found.orderId shouldBe 100L
+                found!!.id shouldBe shipping.id
+                found.orderId shouldBe orderId
                 found.status shouldBe ShippingStatus.PENDING
             }
         }
@@ -49,7 +50,7 @@ class ShippingRepositoryIntegrationTest : DescribeSpec({
         context("배송이 존재하지 않을 때") {
             it("null을 반환한다") {
                 // When
-                val found = repository.findById(999L)
+                val found = repository.findById(UUID.randomUUID())
 
                 // Then
                 found shouldBe null
@@ -61,23 +62,24 @@ class ShippingRepositoryIntegrationTest : DescribeSpec({
         context("주문에 대한 배송이 존재할 때") {
             it("배송 정보를 반환한다") {
                 // Given
-                val shipping = createShipping(1L, 100L, ShippingStatus.PENDING)
+                val orderId = UUID.randomUUID()
+                val shipping = createShipping(orderId, ShippingStatus.PENDING)
                 repository.save(shipping)
 
                 // When
-                val found = repository.findByOrderId(100L)
+                val found = repository.findByOrderId(orderId)
 
                 // Then
                 found shouldNotBe null
-                found!!.id shouldBe 1L
-                found.orderId shouldBe 100L
+                found!!.id shouldBe shipping.id
+                found.orderId shouldBe orderId
             }
         }
 
         context("주문에 대한 배송이 존재하지 않을 때") {
             it("null을 반환한다") {
                 // When
-                val found = repository.findByOrderId(999L)
+                val found = repository.findByOrderId(UUID.randomUUID())
 
                 // Then
                 found shouldBe null
@@ -89,16 +91,24 @@ class ShippingRepositoryIntegrationTest : DescribeSpec({
         context("사용자의 배송 목록을 조회할 때") {
             it("userId와 연결된 모든 배송을 createdAt 내림차순으로 반환한다") {
                 // Given
-                val userId = 1L
+                val userId = UUID.randomUUID()
                 val now = LocalDateTime.now()
 
-                repository.associateOrderWithUser(100L, userId)
-                repository.associateOrderWithUser(101L, userId)
-                repository.associateOrderWithUser(102L, userId)
+                val orderId1 = UUID.randomUUID()
+                val orderId2 = UUID.randomUUID()
+                val orderId3 = UUID.randomUUID()
 
-                repository.save(createShipping(1L, 100L, ShippingStatus.PENDING, now.minusDays(2)))
-                repository.save(createShipping(2L, 101L, ShippingStatus.IN_TRANSIT, now.minusDays(1)))
-                repository.save(createShipping(3L, 102L, ShippingStatus.DELIVERED, now))
+                repository.associateOrderWithUser(orderId1, userId)
+                repository.associateOrderWithUser(orderId2, userId)
+                repository.associateOrderWithUser(orderId3, userId)
+
+                val shipping1 = createShipping(orderId1, ShippingStatus.PENDING, now.minusDays(2))
+                val shipping2 = createShipping(orderId2, ShippingStatus.IN_TRANSIT, now.minusDays(1))
+                val shipping3 = createShipping(orderId3, ShippingStatus.DELIVERED, now)
+
+                repository.save(shipping1)
+                repository.save(shipping2)
+                repository.save(shipping3)
 
                 // When
                 val result = repository.findByUserId(userId)
@@ -106,28 +116,31 @@ class ShippingRepositoryIntegrationTest : DescribeSpec({
                 // Then
                 result.size shouldBe 3
                 // createdAt 내림차순 확인 (최신 것이 먼저)
-                result[0].id shouldBe 3L
-                result[1].id shouldBe 2L
-                result[2].id shouldBe 1L
+                result[0].orderId shouldBe orderId3
+                result[1].orderId shouldBe orderId2
+                result[2].orderId shouldBe orderId1
             }
 
             it("다른 사용자의 배송은 제외한다") {
                 // Given
-                val userId1 = 1L
-                val userId2 = 2L
+                val userId1 = UUID.randomUUID()
+                val userId2 = UUID.randomUUID()
 
-                repository.associateOrderWithUser(100L, userId1)
-                repository.associateOrderWithUser(101L, userId2)
+                val orderId1 = UUID.randomUUID()
+                val orderId2 = UUID.randomUUID()
 
-                repository.save(createShipping(1L, 100L, ShippingStatus.PENDING))
-                repository.save(createShipping(2L, 101L, ShippingStatus.IN_TRANSIT))
+                repository.associateOrderWithUser(orderId1, userId1)
+                repository.associateOrderWithUser(orderId2, userId2)
+
+                repository.save(createShipping(orderId1, ShippingStatus.PENDING))
+                repository.save(createShipping(orderId2, ShippingStatus.IN_TRANSIT))
 
                 // When
                 val result = repository.findByUserId(userId1)
 
                 // Then
                 result.size shouldBe 1
-                result[0].orderId shouldBe 100L
+                result[0].orderId shouldBe orderId1
             }
         }
     }
@@ -136,14 +149,18 @@ class ShippingRepositoryIntegrationTest : DescribeSpec({
         context("상태 필터") {
             it("특정 상태의 배송만 반환한다") {
                 // Given
-                val userId = 1L
-                repository.associateOrderWithUser(100L, userId)
-                repository.associateOrderWithUser(101L, userId)
-                repository.associateOrderWithUser(102L, userId)
+                val userId = UUID.randomUUID()
+                val orderId1 = UUID.randomUUID()
+                val orderId2 = UUID.randomUUID()
+                val orderId3 = UUID.randomUUID()
 
-                repository.save(createShipping(1L, 100L, ShippingStatus.PENDING))
-                repository.save(createShipping(2L, 101L, ShippingStatus.IN_TRANSIT))
-                repository.save(createShipping(3L, 102L, ShippingStatus.DELIVERED))
+                repository.associateOrderWithUser(orderId1, userId)
+                repository.associateOrderWithUser(orderId2, userId)
+                repository.associateOrderWithUser(orderId3, userId)
+
+                repository.save(createShipping(orderId1, ShippingStatus.PENDING))
+                repository.save(createShipping(orderId2, ShippingStatus.IN_TRANSIT))
+                repository.save(createShipping(orderId3, ShippingStatus.DELIVERED))
 
                 // When
                 val result = repository.findByUserIdWithFilters(
@@ -163,12 +180,26 @@ class ShippingRepositoryIntegrationTest : DescribeSpec({
         context("택배사 필터") {
             it("특정 택배사의 배송만 반환한다") {
                 // Given
-                val userId = 1L
-                repository.associateOrderWithUser(100L, userId)
-                repository.associateOrderWithUser(101L, userId)
+                val userId = UUID.randomUUID()
+                val orderId1 = UUID.randomUUID()
+                val orderId2 = UUID.randomUUID()
 
-                repository.save(createShipping(1L, 100L, ShippingStatus.PENDING).copy(carrier = "CJ대한통운"))
-                repository.save(createShipping(2L, 101L, ShippingStatus.IN_TRANSIT).copy(carrier = "로젠택배"))
+                repository.associateOrderWithUser(orderId1, userId)
+                repository.associateOrderWithUser(orderId2, userId)
+
+                val shipping1 = createShipping(orderId1, ShippingStatus.PENDING)
+                shipping1::class.java.getDeclaredField("carrier").apply {
+                    isAccessible = true
+                    set(shipping1, "CJ대한통운")
+                }
+                repository.save(shipping1)
+
+                val shipping2 = createShipping(orderId2, ShippingStatus.IN_TRANSIT)
+                shipping2::class.java.getDeclaredField("carrier").apply {
+                    isAccessible = true
+                    set(shipping2, "로젠택배")
+                }
+                repository.save(shipping2)
 
                 // When
                 val result = repository.findByUserIdWithFilters(
@@ -188,16 +219,24 @@ class ShippingRepositoryIntegrationTest : DescribeSpec({
         context("날짜 범위 필터") {
             it("특정 기간의 배송만 반환한다") {
                 // Given
-                val userId = 1L
+                val userId = UUID.randomUUID()
                 val now = LocalDateTime.now()
 
-                repository.associateOrderWithUser(100L, userId)
-                repository.associateOrderWithUser(101L, userId)
-                repository.associateOrderWithUser(102L, userId)
+                val orderId1 = UUID.randomUUID()
+                val orderId2 = UUID.randomUUID()
+                val orderId3 = UUID.randomUUID()
 
-                repository.save(createShipping(1L, 100L, ShippingStatus.PENDING, now.minusDays(10)))
-                repository.save(createShipping(2L, 101L, ShippingStatus.IN_TRANSIT, now.minusDays(5)))
-                repository.save(createShipping(3L, 102L, ShippingStatus.DELIVERED, now))
+                repository.associateOrderWithUser(orderId1, userId)
+                repository.associateOrderWithUser(orderId2, userId)
+                repository.associateOrderWithUser(orderId3, userId)
+
+                val shipping1 = createShipping(orderId1, ShippingStatus.PENDING, now.minusDays(10))
+                val shipping2 = createShipping(orderId2, ShippingStatus.IN_TRANSIT, now.minusDays(5))
+                val shipping3 = createShipping(orderId3, ShippingStatus.DELIVERED, now)
+
+                repository.save(shipping1)
+                repository.save(shipping2)
+                repository.save(shipping3)
 
                 // When - 최근 7일 조회
                 val result = repository.findByUserIdWithFilters(
@@ -210,32 +249,44 @@ class ShippingRepositoryIntegrationTest : DescribeSpec({
 
                 // Then
                 result.size shouldBe 2
-                result.map { it.id }.toSet() shouldBe setOf(2L, 3L)
+                result.map { it.orderId }.toSet() shouldBe setOf(orderId2, orderId3)
             }
         }
 
         context("복합 필터") {
             it("여러 조건을 동시에 적용한다") {
                 // Given
-                val userId = 1L
+                val userId = UUID.randomUUID()
                 val now = LocalDateTime.now()
 
-                repository.associateOrderWithUser(100L, userId)
-                repository.associateOrderWithUser(101L, userId)
-                repository.associateOrderWithUser(102L, userId)
+                val orderId1 = UUID.randomUUID()
+                val orderId2 = UUID.randomUUID()
+                val orderId3 = UUID.randomUUID()
 
-                repository.save(
-                    createShipping(1L, 100L, ShippingStatus.DELIVERED, now.minusDays(5))
-                        .copy(carrier = "CJ대한통운")
-                )
-                repository.save(
-                    createShipping(2L, 101L, ShippingStatus.DELIVERED, now.minusDays(3))
-                        .copy(carrier = "로젠택배")
-                )
-                repository.save(
-                    createShipping(3L, 102L, ShippingStatus.IN_TRANSIT, now.minusDays(1))
-                        .copy(carrier = "CJ대한통운")
-                )
+                repository.associateOrderWithUser(orderId1, userId)
+                repository.associateOrderWithUser(orderId2, userId)
+                repository.associateOrderWithUser(orderId3, userId)
+
+                val shipping1 = createShipping(orderId1, ShippingStatus.DELIVERED, now.minusDays(5))
+                shipping1::class.java.getDeclaredField("carrier").apply {
+                    isAccessible = true
+                    set(shipping1, "CJ대한통운")
+                }
+                repository.save(shipping1)
+
+                val shipping2 = createShipping(orderId2, ShippingStatus.DELIVERED, now.minusDays(3))
+                shipping2::class.java.getDeclaredField("carrier").apply {
+                    isAccessible = true
+                    set(shipping2, "로젠택배")
+                }
+                repository.save(shipping2)
+
+                val shipping3 = createShipping(orderId3, ShippingStatus.IN_TRANSIT, now.minusDays(1))
+                shipping3::class.java.getDeclaredField("carrier").apply {
+                    isAccessible = true
+                    set(shipping3, "CJ대한통운")
+                }
+                repository.save(shipping3)
 
                 // When
                 val result = repository.findByUserIdWithFilters(
@@ -248,7 +299,7 @@ class ShippingRepositoryIntegrationTest : DescribeSpec({
 
                 // Then
                 result.size shouldBe 1
-                result[0].id shouldBe 1L
+                result[0].orderId shouldBe orderId1
                 result[0].status shouldBe ShippingStatus.DELIVERED
                 result[0].carrier shouldBe "CJ대한통운"
             }
@@ -259,46 +310,33 @@ class ShippingRepositoryIntegrationTest : DescribeSpec({
         context("새로운 배송을 저장할 때") {
             it("배송 정보를 저장하고 반환한다") {
                 // Given
-                val shipping = createShipping(1L, 100L, ShippingStatus.PENDING)
+                val orderId = UUID.randomUUID()
+                val shipping = createShipping(orderId, ShippingStatus.PENDING)
 
                 // When
                 val saved = repository.save(shipping)
 
                 // Then
-                saved shouldBe shipping
-                repository.findById(1L) shouldBe shipping
+                saved.id shouldNotBe null
+                repository.findById(saved.id!!) shouldNotBe null
             }
         }
 
         context("기존 배송을 수정할 때") {
             it("배송 정보를 업데이트한다") {
                 // Given
-                val shipping = createShipping(1L, 100L, ShippingStatus.PENDING)
+                val orderId = UUID.randomUUID()
+                val shipping = createShipping(orderId, ShippingStatus.PENDING)
                 repository.save(shipping)
 
-                val updated = shipping.copy(status = ShippingStatus.IN_TRANSIT)
+                shipping.status = ShippingStatus.IN_TRANSIT
 
                 // When
-                repository.save(updated)
+                repository.save(shipping)
 
                 // Then
-                val found = repository.findById(1L)
+                val found = repository.findById(shipping.id!!)
                 found!!.status shouldBe ShippingStatus.IN_TRANSIT
-            }
-        }
-    }
-
-    describe("generateId") {
-        context("ID를 생성할 때") {
-            it("순차적으로 증가하는 ID를 생성한다") {
-                // When
-                val id1 = repository.generateId()
-                val id2 = repository.generateId()
-                val id3 = repository.generateId()
-
-                // Then
-                id2 shouldBe id1 + 1
-                id3 shouldBe id2 + 1
             }
         }
     }
@@ -328,11 +366,11 @@ class ShippingRepositoryIntegrationTest : DescribeSpec({
         context("주문과 사용자를 연결할 때") {
             it("findByUserId 조회에 반영된다") {
                 // Given
-                val userId = 1L
-                val orderId = 100L
+                val userId = UUID.randomUUID()
+                val orderId = UUID.randomUUID()
 
                 repository.associateOrderWithUser(orderId, userId)
-                repository.save(createShipping(1L, orderId, ShippingStatus.PENDING))
+                repository.save(createShipping(orderId, ShippingStatus.PENDING))
 
                 // When
                 val result = repository.findByUserId(userId)
@@ -346,25 +384,31 @@ class ShippingRepositoryIntegrationTest : DescribeSpec({
 }) {
     companion object {
         private fun createShipping(
-            id: Long,
-            orderId: Long,
+            orderId: UUID,
             status: ShippingStatus,
             createdAt: LocalDateTime = LocalDateTime.now()
         ): Shipping {
-            return Shipping(
-                id = id,
+            val shipping = Shipping(
                 orderId = orderId,
                 carrier = "CJ대한통운",
-                trackingNumber = "TRACK${String.format("%03d", id)}",
+                trackingNumber = "TRACK${orderId.toString().take(8)}",
                 shippingStartAt = if (status != ShippingStatus.PENDING) createdAt else null,
                 estimatedArrivalAt = createdAt.plusDays(3),
                 deliveredAt = if (status == ShippingStatus.DELIVERED) createdAt.plusDays(3) else null,
                 status = status,
                 isDelayed = false,
-                isExpired = false,
-                createdAt = createdAt,
-                updatedAt = createdAt
+                isExpired = false
             )
+            // createdAt과 updatedAt 설정
+            shipping::class.java.superclass.getDeclaredField("createdAt").apply {
+                isAccessible = true
+                set(shipping, createdAt)
+            }
+            shipping::class.java.superclass.getDeclaredField("updatedAt").apply {
+                isAccessible = true
+                set(shipping, createdAt)
+            }
+            return shipping
         }
     }
 }
