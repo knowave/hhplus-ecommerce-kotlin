@@ -2,30 +2,84 @@ package com.hhplus.ecommerce.application.product
 
 import com.hhplus.ecommerce.common.exception.ProductNotFoundException
 import com.hhplus.ecommerce.domain.product.entity.ProductCategory
-import com.hhplus.ecommerce.domain.product.repository.ProductRepository
-import com.hhplus.ecommerce.infrastructure.product.ProductRepositoryImpl
+import com.hhplus.ecommerce.domain.product.repository.ProductJpaRepository
 import com.hhplus.ecommerce.domain.product.entity.Product
 import io.kotest.assertions.throwables.shouldThrow
+import io.kotest.core.extensions.Extension
 import io.kotest.core.spec.style.DescribeSpec
+import io.kotest.extensions.spring.SpringExtension
 import io.kotest.matchers.collections.shouldHaveSize
 import io.kotest.matchers.shouldBe
 import io.kotest.matchers.shouldNotBe
-import java.time.LocalDateTime
-import java.time.format.DateTimeFormatter
+import org.springframework.boot.test.autoconfigure.orm.jpa.DataJpaTest
+import org.springframework.context.annotation.ComponentScan
+import org.springframework.test.context.TestPropertySource
+import java.util.UUID
 
+@DataJpaTest
+@ComponentScan(basePackages = ["com.hhplus.ecommerce"])
+@TestPropertySource(
+    properties = [
+        "spring.jpa.hibernate.ddl-auto=create-drop",
+        "spring.datasource.url=jdbc:h2:mem:testdb",
+        "spring.datasource.driver-class-name=org.h2.Driver",
+        "spring.jpa.database-platform=org.hibernate.dialect.H2Dialect"
+    ]
+)
+class ProductServiceIntegrationTest(
+    private val productService: ProductService,
+    private val productJpaRepository: ProductJpaRepository
+) : DescribeSpec() {
+    override fun extensions(): List<Extension> = listOf(SpringExtension)
 
-class ProductServiceIntegrationTest : DescribeSpec({
+    private lateinit var product1Id: UUID
+    private lateinit var product2Id: UUID
+    private lateinit var product3Id: UUID
 
-    lateinit var productRepository: ProductRepository
-    lateinit var productService: ProductService
+    init {
+        beforeSpec {
+            // 테스트용 상품 생성
+            val product1 = Product(
+                name = "노트북 ABC",
+                description = "고성능 노트북",
+                price = 1500000L,
+                stock = 50,
+                category = ProductCategory.ELECTRONICS,
+                specifications = mapOf("cpu" to "Intel i7", "ram" to "16GB"),
+                salesCount = 150
+            )
+            val savedProduct1 = productJpaRepository.save(product1)
+            product1Id = savedProduct1.id!!
 
-    val dateFormatter = DateTimeFormatter.ISO_LOCAL_DATE_TIME
+            val product2 = Product(
+                name = "스마트폰 XYZ",
+                description = "최신 플래그십",
+                price = 1200000L,
+                stock = 100,
+                category = ProductCategory.ELECTRONICS,
+                specifications = mapOf("display" to "6.5inch"),
+                salesCount = 200
+            )
+            val savedProduct2 = productJpaRepository.save(product2)
+            product2Id = savedProduct2.id!!
 
-    beforeEach {
-        // 실제 구현체 사용
-        productRepository = ProductRepositoryImpl()
-        productService = ProductServiceImpl(productRepository)
-    }
+            val product3 = Product(
+                name = "운동화",
+                description = "편안한 운동화",
+                price = 150000L,
+                stock = 200,
+                category = ProductCategory.FASHION,
+                specifications = emptyMap(),
+                salesCount = 120
+            )
+            val savedProduct3 = productJpaRepository.save(product3)
+            product3Id = savedProduct3.id!!
+        }
+
+        afterSpec {
+            // 테스트 데이터 정리
+            productJpaRepository.deleteAll()
+        }
 
     describe("ProductService 통합 테스트 - 상품 조회") {
 
@@ -189,7 +243,7 @@ class ProductServiceIntegrationTest : DescribeSpec({
         context("상품 상세 조회") {
             it("상품 ID로 상세 정보를 조회할 수 있다") {
                 // given
-                val productId = 1L
+                val productId = product1Id
 
                 // when
                 val response = productService.findProductById(productId)
@@ -205,7 +259,7 @@ class ProductServiceIntegrationTest : DescribeSpec({
 
             it("상품의 모든 정보가 포함되어 있다") {
                 // given
-                val productId = 1L
+                val productId = product1Id
 
                 // when
                 val response = productService.findProductById(productId)
@@ -222,7 +276,7 @@ class ProductServiceIntegrationTest : DescribeSpec({
 
             it("존재하지 않는 상품 ID로 조회 시 예외가 발생한다") {
                 // given
-                val invalidProductId = 999L
+                val invalidProductId = UUID.randomUUID()
 
                 // when & then
                 shouldThrow<ProductNotFoundException> {
@@ -234,7 +288,7 @@ class ProductServiceIntegrationTest : DescribeSpec({
         context("상품 재고 조회") {
             it("상품 ID로 재고를 조회할 수 있다") {
                 // given
-                val productId = 1L
+                val productId = product1Id
 
                 // when
                 val response = productService.findProductById(productId)
@@ -248,23 +302,19 @@ class ProductServiceIntegrationTest : DescribeSpec({
 
             it("재고가 0인 상품도 조회할 수 있다") {
                 // given - 재고 0인 상품 생성
-                val now = LocalDateTime.now().format(dateFormatter)
                 val product = Product(
-                    id = 1000L,
                     name = "품절 상품",
                     description = "재고 없음",
                     price = 10000L,
                     stock = 0,
                     category = ProductCategory.ELECTRONICS,
                     specifications = emptyMap(),
-                    salesCount = 0,
-                    createdAt = now,
-                    updatedAt = now
+                    salesCount = 0
                 )
-                productRepository.save(product)
+                val savedProduct = productJpaRepository.save(product)
 
                 // when
-                val response = productService.findProductById(1000L)
+                val response = productService.findProductById(savedProduct.id!!)
 
                 // then
                 response.stock shouldBe 0
@@ -272,7 +322,7 @@ class ProductServiceIntegrationTest : DescribeSpec({
 
             it("존재하지 않는 상품 ID로 조회 시 예외가 발생한다") {
                 // given
-                val invalidProductId = 999L
+                val invalidProductId = UUID.randomUUID()
 
                 // when & then
                 shouldThrow<ProductNotFoundException> {
@@ -459,7 +509,7 @@ class ProductServiceIntegrationTest : DescribeSpec({
         context("상품 상세 페이지 시나리오") {
             it("상품 상세 정보를 조회한다") {
                 // given
-                val productId = 1L
+                val productId = product1Id
 
                 // when
                 val product = productService.findProductById(productId)
@@ -471,4 +521,5 @@ class ProductServiceIntegrationTest : DescribeSpec({
             }
         }
     }
-})
+    }
+}

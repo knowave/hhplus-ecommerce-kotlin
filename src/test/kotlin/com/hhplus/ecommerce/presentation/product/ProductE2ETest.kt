@@ -10,15 +10,22 @@ import org.springframework.boot.test.web.client.TestRestTemplate
 import org.springframework.boot.test.web.server.LocalServerPort
 import org.springframework.http.HttpStatus
 import com.hhplus.ecommerce.presentation.product.dto.*
+import java.util.UUID
 
 @SpringBootTest(webEnvironment = SpringBootTest.WebEnvironment.RANDOM_PORT)
 class ProductE2ETest(
     @LocalServerPort private val port: Int,
-    private val restTemplate: TestRestTemplate
+    private val restTemplate: TestRestTemplate,
+    private val productService: com.hhplus.ecommerce.application.product.ProductService
 ) : DescribeSpec({
 
     // URL 헬퍼 함수
     fun url(path: String): String = "http://localhost:$port/api$path"
+
+    beforeSpec {
+        // 테스트용 상품들은 DataInitializer에서 생성됨
+        // E2E 테스트는 전체 시스템 통합 테스트이므로 초기 데이터를 활용
+    }
 
     describe("Product API E2E Tests") {
 
