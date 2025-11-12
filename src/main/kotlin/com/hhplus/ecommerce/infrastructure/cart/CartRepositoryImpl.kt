@@ -58,7 +58,7 @@ class CartRepositoryImpl : CartRepository {
 
     override fun findByUserId(userId: UUID): List<CartItem> {
         return cartItems.values
-            .filter { it.userId === userId }
+            .filter { it.userId == userId }
             .sortedBy { it.createdAt }
     }
 }

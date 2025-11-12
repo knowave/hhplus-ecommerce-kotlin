@@ -2,14 +2,13 @@ package com.hhplus.ecommerce.application.coupon
 
 import com.hhplus.ecommerce.application.coupon.dto.*
 import com.hhplus.ecommerce.common.exception.*
-import com.hhplus.ecommerce.domain.coupon.*
 import com.hhplus.ecommerce.domain.coupon.entity.*
 import com.hhplus.ecommerce.domain.coupon.repository.CouponJpaRepository
 import com.hhplus.ecommerce.domain.coupon.repository.CouponStatus
 import com.hhplus.ecommerce.domain.coupon.repository.UserCouponJpaRepository
-import com.hhplus.ecommerce.presentation.coupon.dto.*
 import org.springframework.http.HttpStatus
 import org.springframework.stereotype.Service
+import org.springframework.transaction.annotation.Transactional
 import org.springframework.web.server.ResponseStatusException
 import java.time.LocalDate
 import java.time.LocalDateTime
@@ -28,7 +27,7 @@ class CouponServiceImpl(
     private val DATE_FORMATTER = DateTimeFormatter.ofPattern("yyyy-MM-dd")
     private val DATETIME_FORMATTER = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss")
 
-    @org.springframework.transaction.annotation.Transactional
+    @Transactional
     override fun issueCoupon(couponId: UUID, request: IssueCouponCommand): IssueCouponResult {
         // 비관적 락을 사용하여 쿠폰 조회 (동시 발급 제어)
         val coupon = couponRepository.findByIdWithLock(couponId)
@@ -43,8 +42,8 @@ class CouponServiceImpl(
 
         // 2) 발급 기간 검증
         val today = LocalDate.now()
-        val startDate = LocalDate.parse(coupon.startDate.toString(), DATE_FORMATTER)
-        val endDate = LocalDate.parse(coupon.endDate.toString(), DATE_FORMATTER)
+        val startDate = coupon.startDate.toLocalDate()
+        val endDate = coupon.endDate.toLocalDate()
 
         if (today.isBefore(startDate)) {
             throw InvalidCouponDateException("The coupon issuance period has not started.")
@@ -121,8 +120,8 @@ class CouponServiceImpl(
 
         // 발급 가능 여부 판단
         val today = LocalDate.now()
-        val startDate = LocalDate.parse(coupon.startDate.toString(), DATE_FORMATTER)
-        val endDate = LocalDate.parse(coupon.endDate.toString(), DATE_FORMATTER)
+        val startDate = coupon.startDate.toLocalDate()
+        val endDate = coupon.endDate.toLocalDate()
         val isInPeriod = !today.isBefore(startDate) && !today.isAfter(endDate)
         val hasStock = coupon.issuedQuantity < coupon.totalQuantity
         val isAvailable = isInPeriod && hasStock

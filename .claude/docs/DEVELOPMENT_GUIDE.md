@@ -26,3 +26,4 @@
 8. Repository는 `JpaRepository`를 사용할것.
 9. 각 도메인의 service/repository 통합테스트, E2E 테스트는 JPA InMemoryDB를 사용할 것.
 10. 각 도에인의 통합테스트와 E2E 테스트는 반드시 테스트용 데이터를 생성할 것.
+11. 테스트 커버리지가 70% 이상이지만 각 테스트 케이스는 절대로 실패해서는 안된다.
