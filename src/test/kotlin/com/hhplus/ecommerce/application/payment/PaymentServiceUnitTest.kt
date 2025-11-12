@@ -106,10 +106,6 @@ class PaymentServiceUnitTest : DescribeSpec({
                 // Mock 설정
                 every { orderService.getOrder(orderId) } returns order
                 every { paymentRepository.findByOrderId(orderId) } returns null
-                every { lockManager.executeWithUserLock(userId, any<() -> Pair<Long, Long>>()) } answers {
-                    val block = secondArg<() -> Pair<Long, Long>>()
-                    block()
-                }
                 every { userService.getUser(userId) } returns user
                 every { userService.updateUser(any()) } returns user
                 every { orderService.updateOrder(any()) } returns order
@@ -279,16 +275,8 @@ class PaymentServiceUnitTest : DescribeSpec({
 
                 every { orderService.getOrder(orderId) } returns order
                 every { paymentRepository.findByOrderId(orderId) } returns null
-                every { lockManager.executeWithUserLock(userId, any<() -> Pair<Long, Long>>()) } answers {
-                    val block = secondArg<() -> Pair<Long, Long>>()
-                    block()
-                }
                 every { userService.getUser(userId) } returns user
                 // handlePaymentFailure 호출을 위한 Mock 설정
-                every { lockManager.executeWithProductLocks(any(), any<() -> Unit>()) } answers {
-                    val block = secondArg<() -> Unit>()
-                    block()
-                }
                 every { productService.findProductById(any()) } returns mockk(relaxed = true)
                 every { productService.updateProduct(any()) } returns mockk(relaxed = true)
                 every { orderService.updateOrder(any()) } returns order
@@ -318,10 +306,6 @@ class PaymentServiceUnitTest : DescribeSpec({
 
                 every { orderService.getOrder(orderId) } returns order
                 every { paymentRepository.findByOrderId(orderId) } returns null
-                every { lockManager.executeWithUserLock(userId, any<() -> Pair<Long, Long>>()) } answers {
-                    val block = secondArg<() -> Pair<Long, Long>>()
-                    block()
-                }
                 every { userService.getUser(userId) } throws UserNotFoundException(userId)
 
                 // when & then
@@ -463,10 +447,6 @@ class PaymentServiceUnitTest : DescribeSpec({
                 // mock
                 every { paymentRepository.findById(paymentId) } returns Optional.of(payment)
                 every { orderService.getOrder(orderId) } returns order
-                every { lockManager.executeWithUserLock(userId, any<() -> Pair<Long, Long>>()) } answers {
-                    val block = secondArg<() -> Pair<Long, Long>>()
-                    block()
-                }
                 every { userService.getUser(userId) } returns user
                 every { userService.updateUser(any()) } returns user
                 every { paymentRepository.save(any()) } answers { firstArg() }
@@ -584,10 +564,6 @@ class PaymentServiceUnitTest : DescribeSpec({
                 // Mock 설정
                 every { paymentRepository.findById(paymentId) } returns Optional.of(payment)
                 every { orderService.getOrder(orderId) } returns order
-                every { lockManager.executeWithUserLock(userId, any<() -> Pair<Long, Long>>()) } answers {
-                    val block = secondArg<() -> Pair<Long, Long>>()
-                    block()
-                }
                 every { userService.getUser(userId) } returns user
                 every { userService.updateUser(any()) } returns user
                 every { paymentRepository.save(any()) } answers { firstArg() }
@@ -640,10 +616,6 @@ class PaymentServiceUnitTest : DescribeSpec({
                 // Mock 설정
                 every { paymentRepository.findById(paymentId) } returns Optional.of(payment)
                 every { orderService.getOrder(orderId) } returns order
-                every { lockManager.executeWithUserLock(userId, any<() -> Pair<Long, Long>>()) } answers {
-                    val block = secondArg<() -> Pair<Long, Long>>()
-                    block()
-                }
                 every { userService.getUser(userId) } returns user
                 every { userService.updateUser(any()) } returns user
 
