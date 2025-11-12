@@ -33,8 +33,8 @@ class ShippingServiceImpl(
     private val carriers = listOf("CJ대한통운", "한진택배", "롯데택배", "우체국택배")
 
     override fun getShipping(orderId: UUID): ShippingResult {
-        val shipping = shippingRepository.findById(orderId)
-            .orElseThrow { OrderNotFoundForShippingException(orderId) }
+        val shipping = shippingRepository.findByOrderId(orderId)
+            ?: throw OrderNotFoundForShippingException(orderId)
 
         return ShippingResult.from(shipping)
     }

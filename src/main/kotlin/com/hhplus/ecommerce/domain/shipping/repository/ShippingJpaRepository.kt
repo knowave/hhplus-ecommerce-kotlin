@@ -12,6 +12,9 @@ import java.util.UUID
 
 interface ShippingJpaRepository : JpaRepository<Shipping, UUID> {
     
+    @Query("SELECT s FROM Shipping s WHERE s.orderId = :orderId")
+    fun findByOrderId(@Param("orderId") orderId: UUID): Shipping?
+    
     @Query("""
         SELECT s FROM Shipping s
         JOIN Order o ON s.orderId = o.id

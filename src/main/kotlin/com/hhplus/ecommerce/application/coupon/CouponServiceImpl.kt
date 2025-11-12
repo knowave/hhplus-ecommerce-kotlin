@@ -34,7 +34,7 @@ class CouponServiceImpl(
             .orElseThrow{ CouponNotFoundException(couponId) }
 
         // 1) 중복 발급 검증 (1인 1매 제한)
-        val existingUserCoupon = userCouponRepository.findByIdAndUserId(request.userId, couponId)
+        val existingUserCoupon = userCouponRepository.findFirstByUserIdAndCouponId(request.userId, couponId)
 
         if (existingUserCoupon != null) {
             throw CouponAlreadyIssuedException(request.userId, couponId)
@@ -75,18 +75,18 @@ class CouponServiceImpl(
             usedAt = null
         )
 
-        userCouponRepository.save(userCoupon)
+        val savedUserCoupon = userCouponRepository.save(userCoupon)
 
         // 6) 응답 생성
         return IssueCouponResult(
-            userCouponId = userCoupon.id!!,
-            userId = userCoupon.userId,
+            userCouponId = savedUserCoupon.id!!,
+            userId = savedUserCoupon.userId,
             couponId = coupon.id!!,
             couponName = coupon.name,
             discountRate = coupon.discountRate,
-            status = userCoupon.status.name,
-            issuedAt = userCoupon.issuedAt.toString(),
-            expiresAt = userCoupon.expiresAt.toString(),
+            status = savedUserCoupon.status.name,
+            issuedAt = savedUserCoupon.issuedAt.toString(),
+            expiresAt = savedUserCoupon.expiresAt.toString(),
             remainingQuantity = coupon.totalQuantity - coupon.issuedQuantity,
             totalQuantity = coupon.totalQuantity
         )

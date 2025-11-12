@@ -23,8 +23,15 @@ import io.kotest.matchers.shouldNotBe
 import org.springframework.boot.test.autoconfigure.orm.jpa.DataJpaTest
 import org.springframework.context.annotation.ComponentScan
 import org.springframework.test.context.TestPropertySource
+import org.springframework.transaction.PlatformTransactionManager
+import org.springframework.transaction.TransactionDefinition
+import org.springframework.transaction.support.DefaultTransactionDefinition
+import jakarta.persistence.EntityManager
 import java.time.LocalDateTime
 import java.util.UUID
+import java.util.concurrent.CountDownLatch
+import java.util.concurrent.Executors
+import java.util.concurrent.atomic.AtomicInteger
 
 @DataJpaTest
 @ComponentScan(basePackages = ["com.hhplus.ecommerce"])
@@ -43,7 +50,9 @@ class OrderServiceIntegrationTest(
     private val userService: UserService,
     private val orderService: OrderService,
     private val couponRepository: CouponJpaRepository,
-    private val userCouponRepository: UserCouponJpaRepository
+    private val userCouponRepository: UserCouponJpaRepository,
+    private val entityManager: EntityManager,
+    private val transactionManager: PlatformTransactionManager
 ) : DescribeSpec() {
     override fun extensions(): List<Extension> = listOf(SpringExtension)
 
@@ -51,6 +60,23 @@ class OrderServiceIntegrationTest(
     private lateinit var product1Id: UUID
     private lateinit var product2Id: UUID
     private lateinit var couponId: UUID
+
+    // 새로운 트랜잭션에서 실행하고 커밋하는 헬퍼 메서드
+    private fun <T> executeInNewTransaction(action: () -> T): T {
+        val definition = DefaultTransactionDefinition().apply {
+            propagationBehavior = TransactionDefinition.PROPAGATION_REQUIRES_NEW
+        }
+        val status = transactionManager.getTransaction(definition)
+        return try {
+            val result = action()
+            entityManager.flush()
+            transactionManager.commit(status)
+            result
+        } catch (e: Exception) {
+            transactionManager.rollback(status)
+            throw e
+        }
+    }
 
     init {
         beforeEach {
@@ -275,6 +301,166 @@ class OrderServiceIntegrationTest(
                     // then - 재고가 차감되지 않았는지 확인
                     val product = productService.findProductById(product1Id)
                     product.stock shouldBe 10 // 변화 없음
+                }
+            }
+
+            context("동시성 테스트 - 주문 생성") {
+                it("10개 재고를 20명이 동시에 1개씩 주문하면 정확히 10명만 성공한다") {
+                    // given - 재고 10개인 상품 생성
+                    val productId = executeInNewTransaction {
+                        val product = Product(
+                            name = "동시성 테스트 상품",
+                            description = "재고 10개",
+                            price = 10000L,
+                            stock = 10,
+                            category = ProductCategory.ELECTRONICS,
+                            specifications = emptyMap(),
+                            salesCount = 0
+                        )
+                        val saved = productService.updateProduct(product)
+                        saved.id!!
+                    }
+
+                    // given - 20명의 사용자 생성
+                    val userCount = 20
+                    val userIds = mutableListOf<UUID>()
+
+                    repeat(userCount) {
+                        val userId = executeInNewTransaction {
+                            val user = userService.createUser(CreateUserCommand(balance = 100000L))
+                            user.id!!
+                        }
+                        userIds.add(userId)
+                    }
+
+                    // when - 20명이 동시에 1개씩 주문
+                    val threadCount = 20
+                    val executorService = Executors.newFixedThreadPool(threadCount)
+                    val latch = CountDownLatch(threadCount)
+
+                    val successCount = AtomicInteger(0)
+                    val failCount = AtomicInteger(0)
+
+                    for (i in 0 until threadCount) {
+                        val userId = userIds[i]
+                        executorService.submit {
+                            try {
+                                latch.countDown()
+                                latch.await() // 모든 스레드가 준비될 때까지 대기
+
+                                val command = CreateOrderCommand(
+                                    userId = userId,
+                                    items = listOf(OrderItemCommand(productId, 1)),
+                                    couponId = null
+                                )
+                                orderService.createOrder(command)
+
+                                successCount.incrementAndGet()
+                            } catch (e: InsufficientStockException) {
+                                // 재고 부족 예외는 정상 동작
+                                failCount.incrementAndGet()
+                            } catch (e: Exception) {
+                                // 그 외 예외는 실패로 처리
+                                println("Unexpected exception: ${e.message}")
+                                e.printStackTrace()
+                                failCount.incrementAndGet()
+                            }
+                        }
+                    }
+
+                    executorService.shutdown()
+                    while (!executorService.isTerminated) {
+                        Thread.sleep(100)
+                    }
+
+                    // then - 재고 검증 먼저 확인
+                    val updatedProduct = productService.findProductById(productId)
+                    println("=== 주문 동시성 테스트 결과 ===")
+                    println("성공: ${successCount.get()}, 실패: ${failCount.get()}")
+                    println("최종 재고: ${updatedProduct.stock}")
+
+                    // then - 성공/실패 개수 검증
+                    updatedProduct.stock shouldBe 0 // 10 - 10 = 0
+                    successCount.get() shouldBe 10
+                    failCount.get() shouldBe 10
+                }
+
+                it("5개 재고를 10명이 동시에 1개씩 주문하면 정확히 5명만 성공한다") {
+                    // given - 재고 5개인 상품 생성
+                    val productId = executeInNewTransaction {
+                        val product = Product(
+                            name = "동시성 테스트 상품2",
+                            description = "재고 5개",
+                            price = 20000L,
+                            stock = 5,
+                            category = ProductCategory.ELECTRONICS,
+                            specifications = emptyMap(),
+                            salesCount = 0
+                        )
+                        val saved = productService.updateProduct(product)
+                        saved.id!!
+                    }
+
+                    // given - 10명의 사용자 생성
+                    val userCount = 10
+                    val userIds = mutableListOf<UUID>()
+
+                    repeat(userCount) {
+                        val userId = executeInNewTransaction {
+                            val user = userService.createUser(CreateUserCommand(balance = 100000L))
+                            user.id!!
+                        }
+                        userIds.add(userId)
+                    }
+
+                    // when - 10명이 동시에 1개씩 주문
+                    val threadCount = 10
+                    val executorService = Executors.newFixedThreadPool(threadCount)
+                    val latch = CountDownLatch(threadCount)
+
+                    val successCount = AtomicInteger(0)
+                    val failCount = AtomicInteger(0)
+
+                    for (i in 0 until threadCount) {
+                        val userId = userIds[i]
+                        executorService.submit {
+                            try {
+                                latch.countDown()
+                                latch.await()
+
+                                val command = CreateOrderCommand(
+                                    userId = userId,
+                                    items = listOf(OrderItemCommand(productId, 1)),
+                                    couponId = null
+                                )
+                                orderService.createOrder(command)
+
+                                successCount.incrementAndGet()
+                            } catch (e: InsufficientStockException) {
+                                failCount.incrementAndGet()
+                            } catch (e: Exception) {
+                                println("Unexpected exception: ${e.message}")
+                                e.printStackTrace()
+                                failCount.incrementAndGet()
+                            }
+                        }
+                    }
+
+                    executorService.shutdown()
+                    while (!executorService.isTerminated) {
+                        Thread.sleep(100)
+                    }
+
+                    // then - 재고 검증 먼저 확인
+                    val updatedProduct = productService.findProductById(productId)
+                    println("=== 주문 동시성 테스트 결과 ===")
+                    println("성공: ${successCount.get()}, 실패: ${failCount.get()}")
+                    println("최종 재고: ${updatedProduct.stock}")
+
+                    // then - 성공/실패 개수 검증
+                    updatedProduct.stock shouldBe 0 // 5 - 5 = 0
+                    successCount.get() shouldBe 5
+                    failCount.get() shouldBe 5
                 }
             }
         }

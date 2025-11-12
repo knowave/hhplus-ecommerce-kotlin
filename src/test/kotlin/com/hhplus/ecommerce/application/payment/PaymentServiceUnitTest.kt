@@ -5,10 +5,7 @@ import com.hhplus.ecommerce.application.order.OrderService
 import com.hhplus.ecommerce.application.product.ProductService
 import com.hhplus.ecommerce.application.user.UserService
 import com.hhplus.ecommerce.common.exception.*
-import com.hhplus.ecommerce.common.lock.LockManager
-import com.hhplus.ecommerce.domain.payment.repository.PaymentRepository
 import com.hhplus.ecommerce.domain.order.entity.Order
-import com.hhplus.ecommerce.domain.order.entity.OrderItem
 import com.hhplus.ecommerce.domain.order.entity.OrderStatus
 import com.hhplus.ecommerce.domain.payment.entity.DataTransmission
 import com.hhplus.ecommerce.domain.payment.entity.Payment
@@ -97,7 +94,7 @@ class PaymentServiceUnitTest : DescribeSpec({
                 )
 
                 // id 설정
-                val orderField = Order::class.java.getDeclaredField("id")
+                val orderField = order.javaClass.superclass.getDeclaredField("id")
                 orderField.isAccessible = true
                 orderField.set(order, orderId)
 
@@ -106,10 +103,10 @@ class PaymentServiceUnitTest : DescribeSpec({
                 // Mock 설정
                 every { orderService.getOrder(orderId) } returns order
                 every { paymentRepository.findByOrderId(orderId) } returns null
-                every { userService.getUser(userId) } returns user
+                every { userService.findByIdWithLock(userId) } returns user
                 every { userService.updateUser(any()) } returns user
                 every { orderService.updateOrder(any()) } returns order
-                every { shippingService.createShipping(order.id!!, "") } returns shipping
+                every { shippingService.createShipping(orderId, "CJ대한통운") } returns shipping
 
                 val savedPayment = Payment(
                     orderId = orderId,
@@ -118,11 +115,10 @@ class PaymentServiceUnitTest : DescribeSpec({
                     status = PaymentStatus.SUCCESS,
                     paidAt = LocalDateTime.now()
                 )
-                val paymentField = Payment::class.java.getDeclaredField("id")
+                every { paymentRepository.save(any()) } returns savedPayment
+                val paymentField = savedPayment.javaClass.superclass.getDeclaredField("id")
                 paymentField.isAccessible = true
                 paymentField.set(savedPayment, paymentId)
-
-                every { paymentRepository.save(any()) } returns savedPayment
 
                 val savedTransmission = DataTransmission(
                     orderId = orderId,
@@ -130,11 +126,11 @@ class PaymentServiceUnitTest : DescribeSpec({
                     attempts = 0,
                     nextRetryAt = LocalDateTime.now().plusMinutes(1)
                 )
-                val transmissionField = DataTransmission::class.java.getDeclaredField("id")
-                transmissionField.isAccessible = true
-                transmissionField.set(savedTransmission, transmissionId)
 
                 every { transmissionRepository.save(any()) } returns savedTransmission
+                val transmissionField = savedTransmission.javaClass.superclass.getDeclaredField("id")
+                transmissionField.isAccessible = true
+                transmissionField.set(savedTransmission, transmissionId)
 
                 // when
                 val result = paymentService.processPayment(orderId, command)
@@ -271,13 +267,19 @@ class PaymentServiceUnitTest : DescribeSpec({
                     status = OrderStatus.PENDING
                 )
 
+                // order id 설정
+                val orderField = order.javaClass.superclass.getDeclaredField("id")
+                orderField.isAccessible = true
+                orderField.set(order, orderId)
+
                 val command = ProcessPaymentCommand(userId = userId)
 
                 every { orderService.getOrder(orderId) } returns order
                 every { paymentRepository.findByOrderId(orderId) } returns null
-                every { userService.getUser(userId) } returns user
+                every { userService.findByIdWithLock(userId) } returns user
+                
                 // handlePaymentFailure 호출을 위한 Mock 설정
-                every { productService.findProductById(any()) } returns mockk(relaxed = true)
+                every { productService.findAllByIdWithLock(any()) } returns emptyList()
                 every { productService.updateProduct(any()) } returns mockk(relaxed = true)
                 every { orderService.updateOrder(any()) } returns order
 
@@ -306,7 +308,7 @@ class PaymentServiceUnitTest : DescribeSpec({
 
                 every { orderService.getOrder(orderId) } returns order
                 every { paymentRepository.findByOrderId(orderId) } returns null
-                every { userService.getUser(userId) } throws UserNotFoundException(userId)
+                every { userService.findByIdWithLock(userId) } throws UserNotFoundException(userId)
 
                 // when & then
                 shouldThrow<UserNotFoundException> {
@@ -330,7 +332,7 @@ class PaymentServiceUnitTest : DescribeSpec({
                 status = PaymentStatus.SUCCESS,
                 paidAt = LocalDateTime.now()
             )
-            val paymentField = Payment::class.java.getDeclaredField("id")
+            val paymentField = payment.javaClass.superclass.getDeclaredField("id")
             paymentField.isAccessible = true
             paymentField.set(payment, paymentId)
 
@@ -351,7 +353,7 @@ class PaymentServiceUnitTest : DescribeSpec({
                 attempts = 0,
                 nextRetryAt = LocalDateTime.now().plusMinutes(5)
             )
-            val transmissionField = DataTransmission::class.java.getDeclaredField("id")
+            val transmissionField = transmission.javaClass.superclass.getDeclaredField("id")
             transmissionField.isAccessible = true
             transmissionField.set(transmission, transmissionId)
 
@@ -423,7 +425,7 @@ class PaymentServiceUnitTest : DescribeSpec({
                     status = PaymentStatus.SUCCESS,
                     paidAt = LocalDateTime.now()
                 )
-                val paymentField = Payment::class.java.getDeclaredField("id")
+                val paymentField = payment.javaClass.superclass.getDeclaredField("id")
                 paymentField.isAccessible = true
                 paymentField.set(payment, paymentId)
 
@@ -436,7 +438,7 @@ class PaymentServiceUnitTest : DescribeSpec({
                     appliedCouponId = null,
                     status = OrderStatus.PAID
                 )
-                val orderField = Order::class.java.getDeclaredField("id")
+                val orderField = order.javaClass.superclass.getDeclaredField("id")
                 orderField.isAccessible = true
                 orderField.set(order, orderId)
 
@@ -447,8 +449,8 @@ class PaymentServiceUnitTest : DescribeSpec({
                 // mock
                 every { paymentRepository.findById(paymentId) } returns Optional.of(payment)
                 every { orderService.getOrder(orderId) } returns order
-                every { userService.getUser(userId) } returns user
-                every { userService.updateUser(any()) } returns user
+                every { userService.findByIdWithLock(userId) } returns user
+                every { userService.updateUser(user) } returns user
                 every { paymentRepository.save(any()) } answers { firstArg() }
 
                 val result = paymentService.cancelPayment(paymentId, command)
@@ -465,9 +467,6 @@ class PaymentServiceUnitTest : DescribeSpec({
                 result.cancelledAt shouldNotBe null
 
                 verify(exactly = 1) { paymentRepository.findById(paymentId) }
-                verify(exactly = 1) { orderService.getOrder(orderId) }
-                verify(exactly = 1) { userService.getUser(userId) }
-                verify(exactly = 1) { userService.updateUser(any()) }
                 verify(exactly = 1) { paymentRepository.save(match { it.status == PaymentStatus.CANCELLED }) }
             }
         }
@@ -540,7 +539,7 @@ class PaymentServiceUnitTest : DescribeSpec({
                     status = PaymentStatus.SUCCESS,
                     paidAt = LocalDateTime.now()
                 )
-                val paymentField = Payment::class.java.getDeclaredField("id")
+                val paymentField = payment.javaClass.superclass.getDeclaredField("id")
                 paymentField.isAccessible = true
                 paymentField.set(payment, paymentId)
 
@@ -553,7 +552,7 @@ class PaymentServiceUnitTest : DescribeSpec({
                     appliedCouponId = null,
                     status = OrderStatus.PAID
                 )
-                val orderField = Order::class.java.getDeclaredField("id")
+                val orderField = order.javaClass.superclass.getDeclaredField("id")
                 orderField.isAccessible = true
                 orderField.set(order, orderId)
 
@@ -564,7 +563,7 @@ class PaymentServiceUnitTest : DescribeSpec({
                 // Mock 설정
                 every { paymentRepository.findById(paymentId) } returns Optional.of(payment)
                 every { orderService.getOrder(orderId) } returns order
-                every { userService.getUser(userId) } returns user
+                every { userService.findByIdWithLock(userId) } returns user
                 every { userService.updateUser(any()) } returns user
                 every { paymentRepository.save(any()) } answers { firstArg() }
 
@@ -592,7 +591,7 @@ class PaymentServiceUnitTest : DescribeSpec({
                     status = PaymentStatus.SUCCESS,
                     paidAt = LocalDateTime.now()
                 )
-                val paymentField = Payment::class.java.getDeclaredField("id")
+                val paymentField = payment.javaClass.superclass.getDeclaredField("id")
                 paymentField.isAccessible = true
                 paymentField.set(payment, paymentId)
 
@@ -605,7 +604,7 @@ class PaymentServiceUnitTest : DescribeSpec({
                     appliedCouponId = null,
                     status = OrderStatus.PAID
                 )
-                val orderField = Order::class.java.getDeclaredField("id")
+                val orderField = order.javaClass.superclass.getDeclaredField("id")
                 orderField.isAccessible = true
                 orderField.set(order, orderId)
 

@@ -19,6 +19,29 @@ class ProductServiceUnitTest : DescribeSpec({
     lateinit var productRepository: ProductJpaRepository
     lateinit var productService: ProductServiceImpl
 
+    fun createProduct(
+        name: String,
+        price: Long,
+        stock: Int,
+        category: ProductCategory,
+        salesCount: Int = 0
+    ): Product {
+        val product = Product(
+            name = name,
+            description = "$name 상세 설명",
+            price = price,
+            stock = stock,
+            category = category,
+            specifications = emptyMap(),
+            salesCount = salesCount
+        )
+        // Reflection을 사용하여 id 설정
+        val idField = product.javaClass.superclass.getDeclaredField("id")
+        idField.isAccessible = true
+        idField.set(product, java.util.UUID.randomUUID())
+        return product
+    }
+
     beforeEach {
         productRepository = mockk(relaxed = true)
         productService = ProductServiceImpl(productRepository)
@@ -442,24 +465,4 @@ class ProductServiceUnitTest : DescribeSpec({
             }
         }
     }
-}) {
-    companion object {
-        fun createProduct(
-            name: String,
-            price: Long,
-            stock: Int,
-            category: ProductCategory,
-            salesCount: Int = 0
-        ): Product {
-            return Product(
-                name = name,
-                description = "$name 상세 설명",
-                price = price,
-                stock = stock,
-                category = category,
-                specifications = emptyMap(),
-                salesCount = salesCount
-            )
-        }
-    }
-}
+})

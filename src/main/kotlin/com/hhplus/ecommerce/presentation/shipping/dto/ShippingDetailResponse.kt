@@ -1,25 +1,28 @@
 package com.hhplus.ecommerce.presentation.shipping.dto
 
 import com.hhplus.ecommerce.application.shipping.dto.ShippingResult
+import com.fasterxml.jackson.annotation.JsonIgnoreProperties
+import com.fasterxml.jackson.annotation.JsonProperty
 import java.time.LocalDateTime
 import java.util.UUID
 
 /**
  * 배송 조회 응답
  */
+@JsonIgnoreProperties(ignoreUnknown = true)
 data class ShippingDetailResponse(
-    val shippingId: UUID,
-    val orderId: UUID,
-    val carrier: String,
-    val trackingNumber: String,
-    val shippingStartAt: LocalDateTime?,
-    val estimatedArrivalAt: LocalDateTime,
-    val deliveredAt: LocalDateTime?,
-    val status: String,
-    val isDelayed: Boolean,
-    val isExpired: Boolean,
-    val createdAt: LocalDateTime,
-    val updatedAt: LocalDateTime
+    val shippingId: UUID = UUID.randomUUID(),
+    val orderId: UUID = UUID.randomUUID(),
+    val carrier: String = "",
+    val trackingNumber: String = "",
+    val shippingStartAt: LocalDateTime? = null,
+    val estimatedArrivalAt: LocalDateTime = LocalDateTime.now(),
+    val deliveredAt: LocalDateTime? = null,
+    val status: String = "",
+    val isDelayed: Boolean = false,
+    val isExpired: Boolean = false,
+    val createdAt: LocalDateTime = LocalDateTime.now(),
+    val updatedAt: LocalDateTime = LocalDateTime.now()
 ) {
     companion object {
         fun from(result: ShippingResult): ShippingDetailResponse {
