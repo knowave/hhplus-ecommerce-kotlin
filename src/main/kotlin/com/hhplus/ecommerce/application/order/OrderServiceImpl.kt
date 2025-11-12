@@ -37,11 +37,9 @@ class OrderServiceImpl(
         validateOrderRequest(request)
         val user = userService.getUser(request.userId)
 
-        // 3. 상품 검증 및 재고 확인
-        val products = validateAndGetProducts(request.items)
-
-        // 4. 재고 차감 (비즈니스 정책: 주문 생성 시점에 즉시 차감)
-        deductStock(request.items)
+        // 3. 재고 차감 (비즈니스 정책: 주문 생성 시점에 즉시 차감)
+        // 비관적 락으로 상품 조회 및 재고 차감 (검증 포함)
+        val products = deductStock(request.items)
 
         // 5. 쿠폰 검증 및 사용 처리
         val userCoupon = if (request.couponId != null) {
@@ -64,7 +62,7 @@ class OrderServiceImpl(
 
         // 7. 주문 생성
         val orderNumber = generateOrderNumber()
-        val order = orderRepository.save(Order(
+        val order = Order(
             userId = request.userId,
             orderNumber = orderNumber,
             totalAmount = totalAmount,
@@ -72,7 +70,7 @@ class OrderServiceImpl(
             finalAmount = finalAmount,
             appliedCouponId = request.couponId,
             status = OrderStatus.PENDING
-        ))
+        )
 
         val orderItems = request.items.map { item ->
             val product = products[item.productId]!!
@@ -87,14 +85,18 @@ class OrderServiceImpl(
             )
         }
 
+        // OrderItem을 Order의 items에 추가하고 저장 (Cascade로 OrderItem도 함께 저장됨)
+        order.items.addAll(orderItems)
+        val savedOrder = orderRepository.save(order)
+
         val productIds = products.values.map { it.id!! }
         cartService.deleteCarts(request.userId, productIds)
 
         // 8. 응답 생성
         return CreateOrderResult(
-            orderId = order.id!!,
-            userId = order.userId,
-            orderNumber = order.orderNumber,
+            orderId = savedOrder.id!!,
+            userId = savedOrder.userId,
+            orderNumber = savedOrder.orderNumber,
             items = orderItems.map { item ->
                 OrderItemResult(
                     orderItemId = item.id!!,
@@ -118,7 +120,7 @@ class OrderServiceImpl(
                 }
             ),
             status = order.status.name,
-            createdAt = order.createdAt!!.format(DATE_FORMATTER)
+            createdAt = order.createdAt!!.toString()
         )
     }
 
@@ -260,7 +262,7 @@ class OrderServiceImpl(
         return CancelOrderResult(
             orderId = order.id!!,
             status = order.status.name,
-            cancelledAt = order.updatedAt!!.format(DATE_FORMATTER),
+            cancelledAt = order.updatedAt!!.toString(),
             refund = RefundInfoDto(
                 restoredStock = restoredStock,
                 restoredCoupon = restoredCoupon
@@ -324,20 +326,30 @@ class OrderServiceImpl(
      * 비관적 락을 사용하여 동시성을 제어합니다.
      * 데드락 방지를 위해 productId를 정렬하여 조회합니다. (findAllByIdWithLock에서 ORDER BY)
      * Product 도메인 엔티티의 deductStock() 메서드를 사용하여 재고를 차감합니다.
+     *
+     * 주의: 비관적 락으로 조회한 엔티티는 명시적으로 save()를 호출하지 않고
+     * JPA의 더티 체킹(Dirty Checking)으로 자동 저장되도록 합니다.
+     *
+     * @return 조회된 상품 Map (productId -> Product)
      */
-    private fun deductStock(items: List<OrderItemCommand>) {
+    private fun deductStock(items: List<OrderItemCommand>): Map<UUID, Product> {
         // 비관적 락으로 상품 조회 (데드락 방지를 위해 ID 정렬됨)
         val productIds = items.map { it.productId }.distinct().sorted()
         val lockedProducts = productService.findAllByIdWithLock(productIds)
 
-        // 재고 차감
+        val products = mutableMapOf<UUID, Product>()
+
+        // 재고 차감 (더티 체킹으로 자동 저장됨)
         items.forEach { item ->
             val product = lockedProducts.find { it.id == item.productId }
                 ?: throw ProductNotFoundException(item.productId)
 
+            // deductStock()에서 재고 검증 및 차감
             product.deductStock(item.quantity)
-            productService.updateProduct(product)
+            products[product.id!!] = product
         }
+
+        return products.toMap()
     }
 
     /**
@@ -378,19 +390,22 @@ class OrderServiceImpl(
      *
      * 비관적 락을 사용하여 동시성을 제어합니다.
      * Product 도메인 엔티티의 restoreStock() 메서드를 사용하여 재고를 복원합니다.
+     *
+     * 주의: 비관적 락으로 조회한 엔티티는 명시적으로 save()를 호출하지 않고
+     * JPA의 더티 체킹(Dirty Checking)으로 자동 저장되도록 합니다.
      */
     private fun restoreStock(items: List<OrderItem>): List<RestoredStockItemDto> {
         // 비관적 락으로 상품 조회 (데드락 방지를 위해 ID 정렬됨)
         val productIds = items.map { it.productId }.distinct().sorted()
         val lockedProducts = productService.findAllByIdWithLock(productIds)
 
-        // 재고 복원
+        // 재고 복원 (더티 체킹으로 자동 저장됨)
         return items.map { item ->
             val product = lockedProducts.find { it.id == item.productId }
                 ?: throw ProductNotFoundException(item.productId)
 
             product.restoreStock(item.quantity)  // 도메인 메서드 사용
-            productService.updateProduct(product)
+            // save()를 호출하지 않음 - 트랜잭션 종료 시 더티 체킹으로 자동 저장
 
             RestoredStockItemDto(
                 productId = item.productId,
@@ -422,6 +437,7 @@ class OrderServiceImpl(
 
     private fun generateOrderNumber(): String {
         val dateStr = LocalDate.now().format(DateTimeFormatter.ofPattern("yyyyMMdd"))
-        return "ORD-$dateStr"
+        val uuid = UUID.randomUUID().toString().substring(0, 8).uppercase()
+        return "ORD-$dateStr-$uuid"
     }
 }

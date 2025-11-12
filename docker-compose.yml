@@ -1,21 +1,52 @@
-services:
-  app:
-    build: .
-    ports:
-      - "8080:8080"
-    environment:
-      SPRING_PROFILES_ACTIVE: prod
-      SPRING_DATASOURCE_URL: jdbc:mysql://db:3306/hhplus
-      SPRING_DATASOURCE_USERNAME: root
-      SPRING_DATASOURCE_PASSWORD: root
-      JAVA_OPTS: "-Xms512m -Xmx1024m"
-    depends_on:
-      - db
+version: '3.8'
 
+services:
   db:
     image: mysql:8.0
+    container_name: hhplus-mysql
     environment:
       MYSQL_ROOT_PASSWORD: root
       MYSQL_DATABASE: hhplus
+      MYSQL_USER: hhplus
+      MYSQL_PASSWORD: hhplus
     ports:
-      - "3307:3306"
+      - "${MYSQL_PORT:-3307}:3307"
+    volumes:
+      - mysql-data:/var/lib/mysql
+      - ./init.sql:/docker-entrypoint-initdb.d/init.sql:ro
+    command: --character-set-server=utf8mb4 --collation-server=utf8mb4_unicode_ci
+    networks:
+      - hhplus-network
+
+  app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: hhplus-app
+    ports:
+      - "${APP_PORT:-8080}:8080"
+    environment:
+      SPRING_PROFILES_ACTIVE: prod
+      SPRING_DATASOURCE_URL: jdbc:mysql://db:3306/hhplus?useSSL=false&serverTimezone=Asia/Seoul&characterEncoding=UTF-8
+      SPRING_DATASOURCE_USERNAME: hhplus
+      SPRING_DATASOURCE_PASSWORD: root
+      JAVA_OPTS: "-Xms512m -Xmx1024m -XX:+UseG1GC"
+    depends_on:
+      db:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8080/api/health"]
+      timeout: 10s
+      retries: 3
+      interval: 10s
+    networks:
+      - hhplus-network
+    restart: unless-stopped
+
+volumes:
+  mysql-data:
+    driver: local
+
+networks:
+  hhplus-network:
+    driver: bridge

@@ -39,7 +39,7 @@ class ShippingServiceUnitTest : DescribeSpec({
                 val orderId = UUID.randomUUID()
                 val shipping = createShipping(shippingId, orderId, ShippingStatus.PENDING, now)
 
-                every { shippingRepository.findById(orderId) } returns Optional.of(shipping)
+                every { shippingRepository.findByOrderId(orderId) } returns shipping
 
                 // When
                 val result = shippingService.getShipping(orderId)
@@ -49,19 +49,19 @@ class ShippingServiceUnitTest : DescribeSpec({
                 result.orderId shouldBe orderId
                 result.status shouldBe ShippingStatus.PENDING
                 result.carrier shouldBe "CJ대한통운"
-                verify(exactly = 1) { shippingRepository.findById(orderId) }
+                verify(exactly = 1) { shippingRepository.findByOrderId(orderId) }
             }
 
             it("배송 정보가 없으면 OrderNotFoundForShippingException을 발생시킨다") {
                 // Given
                 val orderId = UUID.randomUUID()
-                every { shippingRepository.findById(orderId) } returns Optional.empty()
+                every { shippingRepository.findByOrderId(orderId) } returns null
 
                 // When & Then
                 shouldThrow<OrderNotFoundForShippingException> {
                     shippingService.getShipping(orderId)
                 }
-                verify(exactly = 1) { shippingRepository.findById(orderId) }
+                verify(exactly = 1) { shippingRepository.findByOrderId(orderId) }
             }
         }
     }

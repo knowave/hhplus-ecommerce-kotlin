@@ -119,22 +119,22 @@ class UserServiceIntegrationTest(
                 }
             }
 
-            context("기존 사용자 데이터 조회 및 충전") {
-                it("초기 데이터로 저장된 사용자의 잔액을 조회할 수 있다") {
-                    // given - UserRepositoryImpl에 초기 데이터로 id=1 사용자가 있음
-                    val request = CreateUserCommand(balance = 10000L)
+            context("충전 후 생성된 사용자 재확인") {
+                it("사용자 생성 후 조회한 잔액이 일치한다") {
+                    // given - 사용자 생성
+                    val request = CreateUserCommand(balance = 50000L)
                     val user = userService.createUser(request)
 
                     // when
                     val userBalance = userService.getUser(user.id!!)
 
                     // then
-                    userBalance.id shouldBe 1L
+                    userBalance.id shouldBe user.id
                     userBalance.balance shouldBe 50000L
                 }
 
-                it("초기 데이터 사용자의 잔액을 충전할 수 있다") {
-                    // given - UserRepositoryImpl에 초기 데이터로 id=1 사용자가 있음
+                it("사용자 충전 후 재조회할 수 있다") {
+                    // given - 사용자 생성
                     val request = CreateUserCommand(balance = 10000L)
                     val user = userService.createUser(request)
                     val initialBalance = userService.getUser(user.id!!).balance

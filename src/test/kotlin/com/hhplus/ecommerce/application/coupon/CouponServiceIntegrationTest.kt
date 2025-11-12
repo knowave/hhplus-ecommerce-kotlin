@@ -8,6 +8,8 @@ import com.hhplus.ecommerce.common.exception.CouponNotFoundException
 import com.hhplus.ecommerce.domain.coupon.repository.CouponJpaRepository
 import com.hhplus.ecommerce.domain.coupon.repository.UserCouponJpaRepository
 import com.hhplus.ecommerce.domain.coupon.repository.CouponStatus
+import com.hhplus.ecommerce.common.exception.CouponSoldOutException
+import com.hhplus.ecommerce.domain.coupon.entity.Coupon
 import io.kotest.assertions.throwables.shouldThrow
 import io.kotest.core.extensions.Extension
 import io.kotest.core.spec.style.DescribeSpec
@@ -17,7 +19,15 @@ import io.kotest.matchers.shouldNotBe
 import org.springframework.boot.test.autoconfigure.orm.jpa.DataJpaTest
 import org.springframework.context.annotation.ComponentScan
 import org.springframework.test.context.TestPropertySource
+import org.springframework.transaction.PlatformTransactionManager
+import org.springframework.transaction.TransactionDefinition
+import org.springframework.transaction.support.DefaultTransactionDefinition
+import jakarta.persistence.EntityManager
+import java.time.LocalDateTime
 import java.util.UUID
+import java.util.concurrent.CountDownLatch
+import java.util.concurrent.Executors
+import java.util.concurrent.atomic.AtomicInteger
 
 @DataJpaTest
 @ComponentScan(basePackages = ["com.hhplus.ecommerce"])
@@ -33,7 +43,9 @@ class CouponServiceIntegrationTest(
     private val couponService: CouponService,
     private val userService: UserService,
     private val couponRepository: CouponJpaRepository,
-    private val userCouponRepository: UserCouponJpaRepository
+    private val userCouponRepository: UserCouponJpaRepository,
+    private val entityManager: EntityManager,
+    private val transactionManager: PlatformTransactionManager
 ) : DescribeSpec() {
     override fun extensions(): List<Extension> = listOf(SpringExtension)
 
@@ -41,23 +53,52 @@ class CouponServiceIntegrationTest(
     private lateinit var testUserId: UUID
     private lateinit var testUser2Id: UUID
 
+    // 새로운 트랜잭션에서 실행하고 커밋하는 헬퍼 메서드
+    private fun <T> executeInNewTransaction(action: () -> T): T {
+        val definition = DefaultTransactionDefinition().apply {
+            propagationBehavior = TransactionDefinition.PROPAGATION_REQUIRES_NEW
+        }
+        val status = transactionManager.getTransaction(definition)
+        return try {
+            val result = action()
+            entityManager.flush()
+            transactionManager.commit(status)
+            result
+        } catch (e: Exception) {
+            transactionManager.rollback(status)
+            throw e
+        }
+    }
+
     init {
         beforeEach {
-            // 사용자 쿠폰 데이터 클리어
+            // 사용자 생성
             val testUser = userService.createUser(CreateUserCommand(balance = 100000L))
             testUserId = testUser.id!!
 
             val testUser2 = userService.createUser(CreateUserCommand(balance = 100000L))
             testUser2Id = testUser2.id!!
 
-            // 테스트용 쿠폰 ID 가져오기 (사용 가능한 쿠폰 중 첫 번째)
-            val availableCoupons = couponService.getAvailableCoupons()
-            testCouponId = availableCoupons.coupons.first().id
+            // 테스트용 쿠폰 생성
+            val testCoupon = Coupon(
+                name = "테스트 쿠폰",
+                description = "통합 테스트용 쿠폰",
+                discountRate = 15,
+                totalQuantity = 1000,
+                issuedQuantity = 0,
+                startDate = LocalDateTime.now(),
+                endDate = LocalDateTime.now().plusDays(30),
+                validityDays = 30
+            )
+            val savedCoupon = couponRepository.save(testCoupon)
+            testCouponId = savedCoupon.id!!
         }
 
         afterEach {
-            userCouponRepository.deleteAll()
-            couponRepository.deleteAll()
+            executeInNewTransaction {
+                userCouponRepository.deleteAll()
+                couponRepository.deleteAll()
+            }
         }
 
         describe("CouponService 통합 테스트 - Service와 Repository 통합") {
@@ -179,6 +220,175 @@ class CouponServiceIntegrationTest(
                     list1.coupons.size shouldBe 1
                     list2.coupons.size shouldBe 1
                     list1.coupons.first().userCouponId shouldNotBe list2.coupons.first().userCouponId
+                }
+            }
+
+            context("동시성 테스트 - 쿠폰 발급") {
+                it("100개의 쿠폰을 200명이 동시에 발급받을 때 정확히 100명만 성공한다") {
+                    // given - 쿠폰과 사용자를 별도 트랜잭션에서 생성하고 커밋
+                    val couponId = executeInNewTransaction {
+                        val coupon = Coupon(
+                            name = "선착순 100명 쿠폰",
+                            description = "동시성 테스트용 쿠폰",
+                            discountRate = 10,
+                            totalQuantity = 100,
+                            issuedQuantity = 0,
+                            startDate = LocalDateTime.now(),
+                            endDate = LocalDateTime.now().plusDays(30),
+                            validityDays = 30
+                        )
+                        val savedCoupon = couponRepository.save(coupon)
+                        savedCoupon.id!!
+                    }
+
+                    // given - 200명의 사용자 생성
+                    val userCount = 200
+                    val userIds = mutableListOf<UUID>()
+
+                    repeat(userCount) {
+                        val userId = executeInNewTransaction {
+                            val user = userService.createUser(CreateUserCommand(balance = 100000L))
+                            user.id!!
+                        }
+                        userIds.add(userId)
+                    }
+
+                    // when - 200명이 동시에 쿠폰 발급 시도
+                    val threadCount = 200
+                    val executorService = Executors.newFixedThreadPool(threadCount)
+                    val latch = CountDownLatch(threadCount)
+
+                    val successCount = AtomicInteger(0)
+                    val failCount = AtomicInteger(0)
+
+                    for (i in 0 until threadCount) {
+                        val userId = userIds[i]
+                        executorService.submit {
+                            try {
+                                latch.countDown()
+                                latch.await() // 모든 스레드가 준비될 때까지 대기
+
+                                val command = IssueCouponCommand(userId = userId)
+                                couponService.issueCoupon(couponId, command)
+
+                                successCount.incrementAndGet()
+                            } catch (e: CouponSoldOutException) {
+                                // 쿠폰 품절 예외는 정상 동작
+                                failCount.incrementAndGet()
+                            } catch (e: CouponAlreadyIssuedException) {
+                                // 중복 발급 예외도 정상 동작
+                                failCount.incrementAndGet()
+                            } catch (e: Exception) {
+                                // 그 외 예외는 실패로 처리
+                                println("Unexpected exception: ${e.message}")
+                                e.printStackTrace()
+                                failCount.incrementAndGet()
+                            }
+                        }
+                    }
+
+                    executorService.shutdown()
+                    while (!executorService.isTerminated) {
+                        Thread.sleep(100)
+                    }
+
+                    // then - 성공/실패 개수 검증
+                    println("=== 쿠폰 발급 결과 ===")
+                    println("성공: ${successCount.get()}, 실패: ${failCount.get()}")
+                    successCount.get() shouldBe 100
+                    failCount.get() shouldBe 100
+
+                    // then - 쿠폰의 발급 수량 검증
+                    val updatedCoupon = couponRepository.findById(couponId).get()
+                    println("최종 발급 수량: ${updatedCoupon.issuedQuantity}")
+                    updatedCoupon.issuedQuantity shouldBe 100
+
+                    // then - 실제 발급된 UserCoupon 개수 검증
+                    val issuedUserCoupons = userCouponRepository.findAll()
+                    println("실제 UserCoupon 개수: ${issuedUserCoupons.size}")
+                    issuedUserCoupons.filter { it.couponId == couponId }.size shouldBe 100
+                }
+
+                it("10개의 쿠폰을 50명이 동시에 발급받을 때 정확히 10명만 성공한다") {
+                    // given - 쿠폰과 사용자를 별도 트랜잭션에서 생성하고 커밋
+                    val couponId = executeInNewTransaction {
+                        val coupon = Coupon(
+                            name = "선착순 10명 쿠폰",
+                            description = "동시성 테스트용 쿠폰 (소량)",
+                            discountRate = 20,
+                            totalQuantity = 10,
+                            issuedQuantity = 0,
+                            startDate = LocalDateTime.now(),
+                            endDate = LocalDateTime.now().plusDays(30),
+                            validityDays = 30
+                        )
+                        val savedCoupon = couponRepository.save(coupon)
+                        savedCoupon.id!!
+                    }
+
+                    // given - 50명의 사용자 생성
+                    val userCount = 50
+                    val userIds = mutableListOf<UUID>()
+
+                    repeat(userCount) {
+                        val userId = executeInNewTransaction {
+                            val user = userService.createUser(CreateUserCommand(balance = 100000L))
+                            user.id!!
+                        }
+                        userIds.add(userId)
+                    }
+
+                    // when - 50명이 동시에 쿠폰 발급 시도
+                    val threadCount = 50
+                    val executorService = Executors.newFixedThreadPool(threadCount)
+                    val latch = CountDownLatch(threadCount)
+
+                    val successCount = AtomicInteger(0)
+                    val failCount = AtomicInteger(0)
+
+                    for (i in 0 until threadCount) {
+                        val userId = userIds[i]
+                        executorService.submit {
+                            try {
+                                latch.countDown()
+                                latch.await() // 모든 스레드가 준비될 때까지 대기
+
+                                val command = IssueCouponCommand(userId = userId)
+                                couponService.issueCoupon(couponId, command)
+
+                                successCount.incrementAndGet()
+                            } catch (e: CouponSoldOutException) {
+                                failCount.incrementAndGet()
+                            } catch (e: CouponAlreadyIssuedException) {
+                                failCount.incrementAndGet()
+                            } catch (e: Exception) {
+                                println("Unexpected exception: ${e.message}")
+                                e.printStackTrace()
+                                failCount.incrementAndGet()
+                            }
+                        }
+                    }
+
+                    executorService.shutdown()
+                    while (!executorService.isTerminated) {
+                        Thread.sleep(100)
+                    }
+
+                    // then - 성공/실패 개수 검증
+                    println("=== 쿠폰 발급 결과 ===")
+                    println("성공: ${successCount.get()}, 실패: ${failCount.get()}")
+                    successCount.get() shouldBe 10
+                    failCount.get() shouldBe 40
+
+                    // then - 쿠폰의 발급 수량 검증
+                    val updatedCoupon = couponRepository.findById(couponId).get()
+                    println("최종 발급 수량: ${updatedCoupon.issuedQuantity}")
+                    updatedCoupon.issuedQuantity shouldBe 10
+
+                    // then - 실제 발급된 UserCoupon 개수 검증
+                    val issuedUserCoupons = userCouponRepository.findAll()
+                    println("실제 UserCoupon 개수: ${issuedUserCoupons.size}")
+                    issuedUserCoupons.filter { it.couponId == couponId }.size shouldBe 10
                 }
             }
         }

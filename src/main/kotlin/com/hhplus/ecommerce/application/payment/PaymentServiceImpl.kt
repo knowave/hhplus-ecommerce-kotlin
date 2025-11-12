@@ -93,7 +93,7 @@ class PaymentServiceImpl(
             status = PaymentStatus.SUCCESS,
             paidAt = now
         )
-        paymentRepository.save(payment)
+        val savedPayment = paymentRepository.save(payment)
 
         // 7. 데이터 전송 레코드 생성 (Outbox Pattern)
         val transmission = DataTransmission(
@@ -103,18 +103,18 @@ class PaymentServiceImpl(
             nextRetryAt = now.plusMinutes(1) // 1분 후 첫 전송 시도
         )
 
-        transmissionRepository.save(transmission)
+        val savedTransmission = transmissionRepository.save(transmission)
 
         shippingService.createShipping(orderId, "CJ대한통운")
 
         // 8. 응답 생성
         return ProcessPaymentResult(
-            paymentId = payment.id!!,
+            paymentId = savedPayment.id!!,
             orderId = order.id!!,
             orderNumber = order.orderNumber,
             userId = order.userId,
             amount = paymentAmount,
-            paymentStatus = payment.status.name,
+            paymentStatus = savedPayment.status.name,
             orderStatus = order.status.name,
             balance = BalanceInfoResult(
                 previousBalance = previousBalance,
@@ -122,11 +122,11 @@ class PaymentServiceImpl(
                 remainingBalance = currentBalance
             ),
             dataTransmission = DataTransmissionInfoResult(
-                transmissionId = transmission.id!!,
-                status = transmission.status.name,
-                scheduledAt = transmission.nextRetryAt!!.format(DATE_FORMATTER)
+                transmissionId = savedTransmission.id!!,
+                status = savedTransmission.status.name,
+                scheduledAt = savedTransmission.nextRetryAt!!.format(DATE_FORMATTER)
             ),
-            paidAt = payment.paidAt.format(DATE_FORMATTER)
+            paidAt = savedPayment.paidAt.format(DATE_FORMATTER)
         )
     }
 
@@ -240,7 +240,7 @@ class PaymentServiceImpl(
      *
      * 주문 상태 변경, 재고 복구, 쿠폰 복구는 OrderService의 책임입니다.
      */
-    @org.springframework.transaction.annotation.Transactional
+    @Transactional
     override fun cancelPayment(paymentId: UUID, request: CancelPaymentCommand): CancelPaymentResult {
         // 1. 결제 조회 및 검증
         val payment = paymentRepository.findById(paymentId)
@@ -264,7 +264,7 @@ class PaymentServiceImpl(
         // 2. 주문 조회 (응답에만 사용)
         val order = orderService.getOrder(payment.orderId)
 
-        // 3. 잔액 환불 (비관적 락 사용)
+        // 3. 잔액 환불 (비관적 락 사용)cancelPayment
         val refundAmount = payment.amount
 
         // 비관적 락으로 사용자 조회
