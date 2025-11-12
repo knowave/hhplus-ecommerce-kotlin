@@ -18,6 +18,7 @@ import org.springframework.web.bind.annotation.PostMapping
 import org.springframework.web.bind.annotation.RequestBody
 import org.springframework.web.bind.annotation.RequestMapping
 import org.springframework.web.bind.annotation.RestController
+import java.util.UUID
 
 @RestController
 @RequestMapping("carts")
@@ -27,7 +28,7 @@ class CartController(
 
     @Operation(summary = "장바구니 조회", description = "사용자 ID로 장바구니 정보를 조회합니다")
     @GetMapping("/{userId}")
-    fun getCart(@PathVariable userId: Long): ResponseEntity<CartResponse> {
+    fun getCart(@PathVariable userId: UUID): ResponseEntity<CartResponse> {
         val result = cartService.getCart(userId)
         return ResponseEntity.ok(CartResponse.from(result))
     }
@@ -35,7 +36,7 @@ class CartController(
     @Operation(summary = "장바구니 상품 추가", description = "사용자의 장바구니에 상품을 추가합니다")
     @PostMapping("/{userId}/items")
     fun addCartItem(
-        @PathVariable userId: Long,
+        @PathVariable userId: UUID,
         @RequestBody request: AddCartItemRequest
     ): ResponseEntity<AddCartItemResponse> {
         val command = AddCartItemCommand.command(request)
@@ -47,8 +48,8 @@ class CartController(
     @Operation(summary = "장바구니 상품 수정", description = "장바구니에 담긴 상품의 수량을 수정합니다")
     @PatchMapping("/{userId}/items/{cartItemId}")
     fun updateCartItem(
-        @PathVariable userId: Long,
-        @PathVariable cartItemId: Long,
+        @PathVariable userId: UUID,
+        @PathVariable cartItemId: UUID,
         @RequestBody request: UpdateCartItemRequest
     ): ResponseEntity<UpdateCartItemResponse> {
         val command = UpdateCartItemCommand.command(request)
@@ -60,8 +61,8 @@ class CartController(
     @Operation(summary = "장바구니 상품 삭제", description = "장바구니에서 특정 상품을 삭제합니다")
     @DeleteMapping("/{userId}/items/{cartItemId}")
     fun deleteCartItem(
-        @PathVariable userId: Long,
-        @PathVariable cartItemId: Long
+        @PathVariable userId: UUID,
+        @PathVariable cartItemId: UUID
     ): ResponseEntity<Void> {
         cartService.deleteCartItem(userId, cartItemId)
         return ResponseEntity.noContent().build()
@@ -69,7 +70,7 @@ class CartController(
 
     @Operation(summary = "장바구니 전체 비우기", description = "사용자의 장바구니를 전체 비웁니다")
     @DeleteMapping("/{userId}")
-    fun clearCart(@PathVariable userId: Long): ResponseEntity<Void> {
+    fun clearCart(@PathVariable userId: UUID): ResponseEntity<Void> {
         cartService.clearCart(userId)
         return ResponseEntity.noContent().build()
     }

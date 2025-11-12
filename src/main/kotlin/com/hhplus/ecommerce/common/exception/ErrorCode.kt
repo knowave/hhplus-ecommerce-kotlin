@@ -14,6 +14,7 @@ enum class ErrorCode(
     // Cart related
     CART_ITEM_NOT_FOUND("CART001", "Cart item not found", HttpStatus.NOT_FOUND),
     EXCEED_MAX_QUANTITY("CART002", "Exceed max quantity", HttpStatus.BAD_REQUEST),
+    INVALID_CART("CART003", "Invalid cart item", HttpStatus.BAD_REQUEST),
 
     // Order related
     INVALID_QUANTITY("O001", "Invalid quantity", HttpStatus.BAD_REQUEST),

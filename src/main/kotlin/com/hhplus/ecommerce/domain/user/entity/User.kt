@@ -1,14 +1,18 @@
 package com.hhplus.ecommerce.domain.user.entity
 
+import com.hhplus.ecommerce.common.entity.BaseEntity
 import com.hhplus.ecommerce.common.exception.InsufficientBalanceException
 import com.hhplus.ecommerce.common.exception.InvalidAmountException
+import jakarta.persistence.Column
+import jakarta.persistence.Entity
+import jakarta.persistence.Table
 
-data class User(
-    val id: Long,
-    var balance: Long,
-    val createdAt: String,
-    var updatedAt: String
-) {
+@Entity
+@Table(name = "users")
+class User(
+    @Column(nullable = false)
+    var balance: Long = 0
+) : BaseEntity() {
     /**
      * 잔액 충전
      * @param amount 충전할 금액

@@ -3,6 +3,7 @@ package com.hhplus.ecommerce.presentation.order.dto
 import com.hhplus.ecommerce.application.order.dto.OrderListResult
 import com.hhplus.ecommerce.application.order.dto.OrderSummaryDto
 import com.hhplus.ecommerce.application.order.dto.PaginationInfoDto
+import java.util.UUID
 
 /**
  * 주문 목록 조회 응답 DTO
@@ -22,7 +23,7 @@ data class OrderListResponse(
 }
 
 data class OrderSummary(
-    val orderId: Long,
+    val orderId: UUID,
     val orderNumber: String,
     val totalAmount: Long,
     val discountAmount: Long,

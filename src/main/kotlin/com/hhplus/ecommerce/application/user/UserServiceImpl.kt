@@ -2,15 +2,16 @@ package com.hhplus.ecommerce.application.user
 
 import com.hhplus.ecommerce.application.user.dto.*
 import com.hhplus.ecommerce.common.exception.*
-import com.hhplus.ecommerce.domain.user.UserRepository
+import com.hhplus.ecommerce.domain.user.repository.UserRepository
 import com.hhplus.ecommerce.domain.user.entity.User
+import com.hhplus.ecommerce.domain.user.repository.UserJpaRepository
 import org.springframework.stereotype.Service
-import java.time.LocalDateTime
 import java.time.format.DateTimeFormatter
+import java.util.UUID
 
 @Service
 class UserServiceImpl(
-    private val userRepository: UserRepository
+    private val userRepository: UserJpaRepository
 ) : UserService {
 
     companion object {
@@ -20,8 +21,8 @@ class UserServiceImpl(
         private val DATE_FORMATTER: DateTimeFormatter = DateTimeFormatter.ISO_LOCAL_DATE_TIME
     }
 
-    override fun chargeBalance(userId: Long, amount: Long): ChargeBalanceResult {
-        val user = findUserById(userId)
+    override fun chargeBalance(userId: UUID, amount: Long): ChargeBalanceResult {
+        val user = getUser(userId)
 
         // 충전 금액 유효성 검증
         validateChargeAmount(amount)
@@ -31,13 +32,11 @@ class UserServiceImpl(
         val newBalance = previousBalance + amount
         validateBalanceLimit(newBalance)
 
-        // 잔액 업데이트
-        val chargedAt = LocalDateTime.now().format(DATE_FORMATTER)
+        // 잔액 업데이트 (updatedAt은 JPA Auditing이 자동으로 설정)
         user.balance = newBalance
-        user.updatedAt = chargedAt
 
         // Repository에 저장
-        userRepository.save(user)
+        val savedUser = userRepository.save(user)
 
         // 응답 생성
         return ChargeBalanceResult(
@@ -45,27 +44,22 @@ class UserServiceImpl(
             previousBalance = previousBalance,
             chargedAmount = amount,
             currentBalance = newBalance,
-            chargedAt = chargedAt
+            chargedAt = savedUser.updatedAt!!.format(DATE_FORMATTER)
         )
     }
 
-    override fun getUser(id: Long): User {
-        return findUserById(id)
+    override fun getUser(id: UUID): User {
+        return userRepository.findById(id)
+            .orElseThrow { UserNotFoundException(id) }
     }
 
     override fun createUser(dto: CreateUserCommand): User {
         // 초기 잔액 유효성 검증
         validateChargeAmount(dto.balance)
 
-        // 현재 시간
-        val now = LocalDateTime.now().format(DATE_FORMATTER)
-
-        // 새 사용자 생성
+        // 새 사용자 생성 (id, createdAt, updatedAt은 JPA가 자동으로 설정)
         val newUser = User(
-            id = userRepository.generateId(),
-            balance = dto.balance,
-            createdAt = now,
-            updatedAt = now
+            balance = dto.balance
         )
 
         // Repository에 저장
@@ -76,9 +70,9 @@ class UserServiceImpl(
         return userRepository.save(user)
     }
 
-    private fun findUserById(userId: Long): User {
-        return userRepository.findById(userId)
-            ?: throw UserNotFoundException(userId)
+    override fun findByIdWithLock(id: UUID): User {
+        return userRepository.findByIdWithLock(id)
+            .orElseThrow { UserNotFoundException(id) }
     }
 
     // 충전 금액의 유효성을 검증

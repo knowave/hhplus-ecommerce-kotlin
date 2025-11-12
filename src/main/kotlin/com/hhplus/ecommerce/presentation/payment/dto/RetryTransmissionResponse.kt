@@ -1,13 +1,14 @@
 package com.hhplus.ecommerce.presentation.payment.dto
 
 import com.hhplus.ecommerce.application.payment.dto.RetryTransmissionResult
+import java.util.UUID
 
 /**
  * 데이터 전송 재시도 응답 DTO
  * POST /api/data-transmissions/{transmissionId}/retry
  */
 data class RetryTransmissionResponse(
-    val transmissionId: Long,
+    val transmissionId: UUID,
     val status: String,
     val retriedAt: String,
     val attempts: Int

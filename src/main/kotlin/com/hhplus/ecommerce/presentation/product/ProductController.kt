@@ -1,10 +1,12 @@
 package com.hhplus.ecommerce.presentation.product
 
 import com.hhplus.ecommerce.application.product.ProductService
+import com.hhplus.ecommerce.application.product.dto.GetProductsCommand
 import com.hhplus.ecommerce.presentation.product.dto.*
 import io.swagger.v3.oas.annotations.Operation
 import org.springframework.http.ResponseEntity
 import org.springframework.web.bind.annotation.*
+import java.util.UUID
 
 @RestController
 @RequestMapping("/products")
@@ -16,11 +18,19 @@ class ProductController(
     @GetMapping
     fun getProducts(
         @RequestParam(required = false) category: String?,
-        @RequestParam(required = false, defaultValue = "newest") sort: String?,
+        @RequestParam(required = false, defaultValue = "newest") sortBy: String?,
+        @RequestParam(required = false, defaultValue = "desc") orderBy: String?,
         @RequestParam(defaultValue = "0") page: Int,
         @RequestParam(defaultValue = "20") size: Int
     ): ResponseEntity<ProductListResponse> {
-        val result = productService.getProducts(category, sort, page, size)
+        val request = GetProductsCommand(
+            category = category,
+            sortBy = GetProductsCommand.SortBy.fromString(sortBy),
+            orderBy = GetProductsCommand.OrderBy.fromString(orderBy),
+            page = page,
+            size = size
+        )
+        val result = productService.getProducts(request)
         return ResponseEntity.ok(ProductListResponse.from(result))
     }
 
@@ -36,14 +46,14 @@ class ProductController(
 
     @Operation(summary = "상품 상세 조회", description = "상품 ID로 상품의 상세 정보를 조회합니다")
     @GetMapping("/{productId}")
-    fun getProductDetail(@PathVariable productId: Long): ResponseEntity<ProductDetailResponse> {
+    fun getProductDetail(@PathVariable productId: UUID): ResponseEntity<ProductDetailResponse> {
         val product = productService.findProductById(productId)
         return ResponseEntity.ok(ProductDetailResponse.from(product))
     }
 
     @Operation(summary = "상품 재고 조회", description = "상품 ID로 현재 재고 정보를 조회합니다")
     @GetMapping("/{productId}/stock")
-    fun getProductStock(@PathVariable productId: Long): ResponseEntity<ProductStockResponse> {
+    fun getProductStock(@PathVariable productId: UUID): ResponseEntity<ProductStockResponse> {
         val product = productService.findProductById(productId)
         return ResponseEntity.ok(ProductStockResponse.from(product))
     }

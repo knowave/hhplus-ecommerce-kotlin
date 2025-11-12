@@ -1,12 +1,14 @@
 package com.hhplus.ecommerce.application.order.dto
 
+import java.util.UUID
+
 data class OrderListResult(
     val orders: List<OrderSummaryDto>,
     val pagination: PaginationInfoDto
 )
 
 data class OrderSummaryDto(
-    val orderId: Long,
+    val orderId: UUID,
     val orderNumber: String,
     val totalAmount: Long,
     val discountAmount: Long,

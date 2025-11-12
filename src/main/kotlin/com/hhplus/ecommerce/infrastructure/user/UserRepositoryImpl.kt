@@ -1,8 +1,9 @@
 package com.hhplus.ecommerce.infrastructure.user
 
 import com.hhplus.ecommerce.domain.user.entity.User
-import com.hhplus.ecommerce.domain.user.UserRepository
+import com.hhplus.ecommerce.domain.user.repository.UserRepository
 import org.springframework.stereotype.Repository
+import java.util.UUID
 
 
 @Repository
@@ -12,42 +13,42 @@ class UserRepositoryImpl : UserRepository {
     private var nextId: Long = 4L
 
     // Mock 데이터 저장소 (추후 JPA로 대체)
-    private val users: MutableMap<Long, User> = mutableMapOf(
-        1L to User(
-            id = 1L,
-            balance = 50000L,
-            createdAt = "2025-01-01T00:00:00",
-            updatedAt = "2025-10-29T10:30:00"
-        ),
-        2L to User(
-            id = 2L,
-            balance = 100000L,
-            createdAt = "2025-01-15T00:00:00",
-            updatedAt = "2025-10-29T09:00:00"
-        ),
-        3L to User(
-            id = 3L,
-            balance = 25000L,
-            createdAt = "2025-02-01T00:00:00",
-            updatedAt = "2025-10-28T15:20:00"
-        )
-    )
+    private val users: MutableMap<UUID, User> = mutableMapOf()
 
-    override fun findById(userId: Long): User? {
+    init {
+        listOf<User>(
+            User(
+                balance = 50000L,
+            ),
+            User(
+                balance = 100000L,
+            ),
+            User(
+                balance = 25000L,
+            )
+        )
+    }
+
+    private fun assignId(user: User) {
+        if (user.id == null) {
+            val idField = user.javaClass.superclass.getDeclaredField("id")
+            idField.isAccessible = true
+            idField.set(user, UUID.randomUUID())
+        }
+    }
+
+    override fun findById(userId: UUID): User? {
         return users[userId]
     }
 
     override fun save(user: User): User {
-        users[user.id] = user
+        assignId(user)
+        users[user.id!!] = user
         return user
     }
 
     override fun findAll(): List<User> {
         return users.values.toList()
-    }
-
-    override fun generateId(): Long {
-        return nextId++
     }
 
     override fun clear() {

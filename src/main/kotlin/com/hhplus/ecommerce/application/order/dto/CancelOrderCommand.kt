@@ -1,9 +1,10 @@
 package com.hhplus.ecommerce.application.order.dto
 
 import com.hhplus.ecommerce.presentation.order.dto.CancelOrderRequest
+import java.util.UUID
 
 data class CancelOrderCommand(
-    val userId: Long,
+    val userId: UUID,
     val reason: String? = null
 ) {
     companion object {

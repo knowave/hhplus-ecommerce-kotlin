@@ -5,23 +5,22 @@ import com.hhplus.ecommerce.application.cart.dto.UpdateCartItemCommand
 import com.hhplus.ecommerce.application.product.ProductService
 import com.hhplus.ecommerce.application.user.UserService
 import com.hhplus.ecommerce.common.exception.*
-import com.hhplus.ecommerce.domain.cart.CartRepository
-import com.hhplus.ecommerce.domain.product.entity.ProductCategory
 import com.hhplus.ecommerce.domain.cart.entity.CartItem
+import com.hhplus.ecommerce.domain.cart.repository.CartJpaRepository
 import com.hhplus.ecommerce.domain.product.entity.Product
+import com.hhplus.ecommerce.domain.product.entity.ProductCategory
 import com.hhplus.ecommerce.domain.user.entity.User
 import io.kotest.assertions.throwables.shouldThrow
 import io.kotest.core.spec.style.DescribeSpec
-import io.kotest.matchers.collections.shouldBeEmpty
-import io.kotest.matchers.collections.shouldHaveSize
 import io.kotest.matchers.shouldBe
 import io.kotest.matchers.string.shouldContain
 import io.mockk.*
 import java.time.LocalDateTime
-import java.time.format.DateTimeFormatter
+import java.util.Optional
+import java.util.UUID
 
 class CartServiceUnitTest : DescribeSpec({
-    lateinit var cartRepository: CartRepository
+    lateinit var cartRepository: CartJpaRepository
     lateinit var productService: ProductService
     lateinit var userService: UserService
     lateinit var cartService: CartServiceImpl
@@ -37,27 +36,25 @@ class CartServiceUnitTest : DescribeSpec({
         context("정상 케이스 - 새로운 상품 추가") {
             it("장바구니에 새 상품을 추가한다") {
                 // given
-                val userId = 1L
-                val productId = 15L
+                val userId = UUID.randomUUID()
+                val productId = UUID.randomUUID()
                 val quantity = 2
-                val user = createUser(userId, "테스트 사용자", "test@example.com", 100000L)
+                val user = createUser(100000L)
                 val product = createProduct(productId, "노트북", 1500000L, 50, ProductCategory.ELECTRONICS, 0)
                 val command = AddCartItemCommand(productId = productId, quantity = quantity)
 
-                val now = LocalDateTime.now()
-                val savedCartItem = CartItem(1L, userId, productId, quantity, now)
+                val savedCartItem = createCartItem(userId, productId, quantity)
 
                 every { userService.getUser(userId) } returns user
                 every { productService.findProductById(productId) } returns product
                 every { cartRepository.findByUserIdAndProductId(userId, productId) } returns null
-                every { cartRepository.generateId() } returns 1L
                 every { cartRepository.save(any()) } returns savedCartItem
 
                 // when
                 val result = cartService.addCartItem(userId, command)
 
                 // then
-                result.cartItemId shouldBe 1L
+                result.cartItemId shouldBe savedCartItem.id
                 result.productId shouldBe productId
                 result.productName shouldBe "노트북"
                 result.price shouldBe 1500000L
@@ -67,7 +64,6 @@ class CartServiceUnitTest : DescribeSpec({
                 verify(exactly = 1) { userService.getUser(userId) }
                 verify(exactly = 1) { productService.findProductById(productId) }
                 verify(exactly = 1) { cartRepository.findByUserIdAndProductId(userId, productId) }
-                verify(exactly = 1) { cartRepository.generateId() }
                 verify(exactly = 1) { cartRepository.save(any()) }
             }
         }
@@ -75,21 +71,24 @@ class CartServiceUnitTest : DescribeSpec({
         context("정상 케이스 - 기존 상품 수량 증가") {
             it("이미 장바구니에 있는 상품의 수량을 증가시킨다") {
                 // given
-                val userId = 1L
-                val productId = 15L
+                val userId = UUID.randomUUID()
+                val productId = UUID.randomUUID()
                 val existingQuantity = 2
                 val additionalQuantity = 3
                 val user = createUser(userId, "테스트 사용자", "test@example.com", 100000L)
                 val product = createProduct(productId, "노트북", 1500000L, 50, ProductCategory.ELECTRONICS, 0)
                 val command = AddCartItemCommand(productId = productId, quantity = additionalQuantity)
 
-                val now = LocalDateTime.now()
-                val existingCartItem = CartItem(1L, userId, productId, existingQuantity, now)
+                val existingCartItem = createCartItem(userId, productId, existingQuantity)
+                val calculateQuantity = existingQuantity + additionalQuantity
 
                 every { userService.getUser(userId) } returns user
                 every { productService.findProductById(productId) } returns product
                 every { cartRepository.findByUserIdAndProductId(userId, productId) } returns existingCartItem
-                every { cartRepository.save(any()) } returns existingCartItem.copy(quantity = existingQuantity + additionalQuantity)
+                every { cartRepository.save(any()) } answers {
+                    existingCartItem.quantity = calculateQuantity
+                    existingCartItem
+                }
 
                 // when
                 val result = cartService.addCartItem(userId, command)
@@ -102,26 +101,27 @@ class CartServiceUnitTest : DescribeSpec({
                 verify(exactly = 1) { productService.findProductById(productId) }
                 verify(exactly = 1) { cartRepository.findByUserIdAndProductId(userId, productId) }
                 verify(exactly = 1) { cartRepository.save(any()) }
-                verify(exactly = 0) { cartRepository.generateId() }
             }
 
             it("수량 합산 후에도 최대 수량(100) 이하면 성공한다") {
                 // given
-                val userId = 1L
-                val productId = 15L
+                val userId = UUID.randomUUID()
+                val productId = UUID.randomUUID()
                 val existingQuantity = 50
                 val additionalQuantity = 49
                 val user = createUser(userId, "테스트 사용자", "test@example.com", 100000L)
                 val product = createProduct(productId, "노트북", 1500000L, 200, ProductCategory.ELECTRONICS, 0)
                 val command = AddCartItemCommand(productId = productId, quantity = additionalQuantity)
 
-                val now = LocalDateTime.now()
-                val existingCartItem = CartItem(1L, userId, productId, existingQuantity, now)
+                val existingCartItem = createCartItem(userId, productId, existingQuantity)
 
                 every { userService.getUser(userId) } returns user
                 every { productService.findProductById(productId) } returns product
                 every { cartRepository.findByUserIdAndProductId(userId, productId) } returns existingCartItem
-                every { cartRepository.save(any()) } returns existingCartItem.copy(quantity = 99)
+                every { cartRepository.save(any()) } answers {
+                    existingCartItem.quantity = 99
+                    existingCartItem
+                }
 
                 // when
                 val result = cartService.addCartItem(userId, command)
@@ -136,8 +136,9 @@ class CartServiceUnitTest : DescribeSpec({
         context("예외 케이스") {
             it("존재하지 않는 사용자로 상품 추가 시 UserNotFoundException을 발생시킨다") {
                 // given
-                val invalidUserId = 999L
-                val command = AddCartItemCommand(productId = 1L, quantity = 1)
+                val invalidUserId = UUID.randomUUID()
+                val productId = UUID.randomUUID()
+                val command = AddCartItemCommand(productId, 1)
                 every { userService.getUser(invalidUserId) } throws UserNotFoundException(invalidUserId)
 
                 // when & then
@@ -151,9 +152,10 @@ class CartServiceUnitTest : DescribeSpec({
 
             it("수량이 0 이하면 InvalidQuantityException을 발생시킨다") {
                 // given
-                val userId = 1L
+                val userId = UUID.randomUUID()
+                val productId = UUID.randomUUID()
                 val user = createUser(userId, "테스트 사용자", "test@example.com", 100000L)
-                val command = AddCartItemCommand(productId = 1L, quantity = 0)
+                val command = AddCartItemCommand(productId, 0)
 
                 every { userService.getUser(userId) } returns user
 
@@ -168,8 +170,8 @@ class CartServiceUnitTest : DescribeSpec({
 
             it("존재하지 않는 상품을 추가하면 ProductNotFoundException을 발생시킨다") {
                 // given
-                val userId = 1L
-                val invalidProductId = 999L
+                val userId = UUID.randomUUID()
+                val invalidProductId = UUID.randomUUID()
                 val user = createUser(userId, "테스트 사용자", "test@example.com", 100000L)
                 val command = AddCartItemCommand(productId = invalidProductId, quantity = 1)
 
@@ -187,8 +189,8 @@ class CartServiceUnitTest : DescribeSpec({
 
             it("품절된 상품을 추가하면 InsufficientStockException을 발생시킨다") {
                 // given
-                val userId = 1L
-                val productId = 15L
+                val userId = UUID.randomUUID()
+                val productId = UUID.randomUUID()
                 val user = createUser(userId, "테스트 사용자", "test@example.com", 100000L)
                 val outOfStockProduct = createProduct(productId, "품절 상품", 50000L, 0, ProductCategory.ELECTRONICS, 0)
                 val command = AddCartItemCommand(productId = productId, quantity = 1)
@@ -208,8 +210,8 @@ class CartServiceUnitTest : DescribeSpec({
 
             it("최대 수량(100)을 초과하면 ExceedMaxQuantityException을 발생시킨다") {
                 // given
-                val userId = 1L
-                val productId = 15L
+                val userId = UUID.randomUUID()
+                val productId = UUID.randomUUID()
                 val user = createUser(userId, "테스트 사용자", "test@example.com", 100000L)
                 val product = createProduct(productId, "노트북", 1500000L, 200, ProductCategory.ELECTRONICS, 0)
                 val command = AddCartItemCommand(productId = productId, quantity = 101)
@@ -230,16 +232,15 @@ class CartServiceUnitTest : DescribeSpec({
 
             it("기존 수량과 합산하여 최대 수량(100)을 초과하면 ExceedMaxQuantityException을 발생시킨다") {
                 // given
-                val userId = 1L
-                val productId = 15L
+                val userId = UUID.randomUUID()
+                val productId = UUID.randomUUID()
                 val existingQuantity = 80
                 val additionalQuantity = 25
                 val user = createUser(userId, "테스트 사용자", "test@example.com", 100000L)
                 val product = createProduct(productId, "노트북", 1500000L, 200, ProductCategory.ELECTRONICS, 0)
                 val command = AddCartItemCommand(productId = productId, quantity = additionalQuantity)
 
-                val now = LocalDateTime.now()
-                val existingCartItem = CartItem(1L, userId, productId, existingQuantity, now)
+                val existingCartItem = CartItem(userId, productId, existingQuantity)
 
                 every { userService.getUser(userId) } returns user
                 every { productService.findProductById(productId) } returns product
@@ -257,11 +258,11 @@ class CartServiceUnitTest : DescribeSpec({
 
             it("재고보다 많은 수량을 추가하면 InsufficientStockException을 발생시킨다") {
                 // given
-                val userId = 1L
-                val productId = 7L // 운동화 ABC, 재고 45개
+                val userId = UUID.randomUUID()
+                val productId = UUID.randomUUID()
                 val user = createUser(userId, "테스트 사용자", "test@example.com", 100000L)
                 val product = createProduct(productId, "운동화", 89000L, 45, ProductCategory.FASHION, 0)
-                val command = AddCartItemCommand(productId = productId, quantity = 100) // 100 > 45
+                val command = AddCartItemCommand(productId, 100) // 100 > 45
 
                 every { userService.getUser(userId) } returns user
                 every { productService.findProductById(productId) } returns product
@@ -278,16 +279,15 @@ class CartServiceUnitTest : DescribeSpec({
 
             it("기존 수량과 합산하여 재고를 초과하면 InsufficientStockException을 발생시킨다") {
                 // given
-                val userId = 1L
-                val productId = 15L
+                val userId = UUID.randomUUID()
+                val productId = UUID.randomUUID()
                 val existingQuantity = 5
                 val additionalQuantity = 8
                 val user = createUser(userId, "테스트 사용자", "test@example.com", 100000L)
                 val product = createProduct(productId, "노트북", 1500000L, 10, ProductCategory.ELECTRONICS, 0)
-                val command = AddCartItemCommand(productId = productId, quantity = additionalQuantity)
+                val command = AddCartItemCommand(productId, additionalQuantity)
 
-                val now = LocalDateTime.now()
-                val existingCartItem = CartItem(1L, userId, productId, existingQuantity, now)
+                val existingCartItem = CartItem(userId, productId, existingQuantity)
 
                 every { userService.getUser(userId) } returns user
                 every { productService.findProductById(productId) } returns product
@@ -308,19 +308,21 @@ class CartServiceUnitTest : DescribeSpec({
         context("정상 케이스") {
             it("장바구니 아이템의 수량을 변경한다") {
                 // given
-                val userId = 1L
-                val cartItemId = 1L
-                val productId = 15L
+                val userId = UUID.randomUUID()
+                val productId = UUID.randomUUID()
                 val newQuantity = 5
-                val now = LocalDateTime.now()
 
-                val cartItem = CartItem(cartItemId, userId, productId, 2, now)
+                val cartItem = createCartItem(userId, productId, 2)
+                val cartItemId = cartItem.id!!
                 val product = createProduct(productId, "노트북", 1500000L, 50, ProductCategory.ELECTRONICS, 0)
                 val command = UpdateCartItemCommand(quantity = newQuantity)
 
-                every { cartRepository.findById(cartItemId) } returns cartItem
+                every { cartRepository.findById(cartItemId) } returns Optional.of(cartItem)
                 every { productService.findProductById(productId) } returns product
-                every { cartRepository.save(any()) } returns cartItem.copy(quantity = newQuantity)
+                every { cartRepository.save(any()) } answers {
+                    cartItem.quantity = newQuantity
+                    cartItem
+                }
 
                 // when
                 val result = cartService.updateCartItem(userId, cartItemId, command)
@@ -337,18 +339,20 @@ class CartServiceUnitTest : DescribeSpec({
 
             it("수량을 1로 변경할 수 있다") {
                 // given
-                val userId = 1L
-                val cartItemId = 1L
-                val productId = 15L
-                val now = LocalDateTime.now()
+                val userId = UUID.randomUUID()
+                val cartItemId = UUID.randomUUID()
+                val productId = UUID.randomUUID()
 
-                val cartItem = CartItem(cartItemId, userId, productId, 10, now)
+                val cartItem = createCartItem(userId, productId, 10)
                 val product = createProduct(productId, "노트북", 1500000L, 50, ProductCategory.ELECTRONICS, 0)
                 val command = UpdateCartItemCommand(quantity = 1)
 
-                every { cartRepository.findById(cartItemId) } returns cartItem
+                every { cartRepository.findById(cartItemId) } returns Optional.of(cartItem)
                 every { productService.findProductById(productId) } returns product
-                every { cartRepository.save(any()) } returns cartItem.copy(quantity = 1)
+                every { cartRepository.save(any()) } answers {
+                    cartItem.quantity = 1
+                    cartItem
+                }
 
                 // when
                 val result = cartService.updateCartItem(userId, cartItemId, command)
@@ -361,18 +365,20 @@ class CartServiceUnitTest : DescribeSpec({
 
             it("수량을 최대값(100)으로 변경할 수 있다") {
                 // given
-                val userId = 1L
-                val cartItemId = 1L
-                val productId = 15L
-                val now = LocalDateTime.now()
+                val userId = UUID.randomUUID()
+                val cartItemId = UUID.randomUUID()
+                val productId = UUID.randomUUID()
 
-                val cartItem = CartItem(cartItemId, userId, productId, 10, now)
+                val cartItem = createCartItem(userId, productId, 10)
                 val product = createProduct(productId, "노트북", 1500000L, 150, ProductCategory.ELECTRONICS, 0)
                 val command = UpdateCartItemCommand(quantity = 100)
 
-                every { cartRepository.findById(cartItemId) } returns cartItem
+                every { cartRepository.findById(cartItemId) } returns Optional.of(cartItem)
                 every { productService.findProductById(productId) } returns product
-                every { cartRepository.save(any()) } returns cartItem.copy(quantity = 100)
+                every { cartRepository.save(any()) } answers {
+                    cartItem.quantity = 100
+                    cartItem
+                }
 
                 // when
                 val result = cartService.updateCartItem(userId, cartItemId, command)
@@ -387,11 +393,11 @@ class CartServiceUnitTest : DescribeSpec({
         context("예외 케이스") {
             it("존재하지 않는 장바구니 아이템을 수정하면 CartItemNotFoundException을 발생시킨다") {
                 // given
-                val userId = 1L
-                val invalidCartItemId = 999L
+                val userId = UUID.randomUUID()
+                val invalidCartItemId = UUID.randomUUID()
                 val command = UpdateCartItemCommand(quantity = 5)
 
-                every { cartRepository.findById(invalidCartItemId) } returns null
+                every { cartRepository.findById(invalidCartItemId) } returns Optional.empty()
 
                 // when & then
                 shouldThrow<CartItemNotFoundException> {
@@ -404,15 +410,15 @@ class CartServiceUnitTest : DescribeSpec({
 
             it("다른 사용자의 장바구니 아이템을 수정하면 ForbiddenException을 발생시킨다") {
                 // given
-                val userId = 1L
-                val otherUserId = 2L
-                val cartItemId = 1L
-                val now = LocalDateTime.now()
+                val userId = UUID.randomUUID()
+                val productId = UUID.randomUUID()
+                val otherUserId = UUID.randomUUID()
+                val cartItemId = UUID.randomUUID()
 
-                val otherUserCartItem = CartItem(cartItemId, otherUserId, 15L, 2, now)
+                val otherUserCartItem = CartItem(otherUserId, productId, 2)
                 val command = UpdateCartItemCommand(quantity = 5)
 
-                every { cartRepository.findById(cartItemId) } returns otherUserCartItem
+                every { cartRepository.findById(cartItemId) } returns Optional.of(otherUserCartItem)
 
                 // when & then
                 val exception = shouldThrow<ForbiddenException> {
@@ -426,16 +432,15 @@ class CartServiceUnitTest : DescribeSpec({
 
             it("수량을 0으로 변경하면 아이템을 삭제하고 CartItemNotFoundException을 발생시킨다") {
                 // given
-                val userId = 1L
-                val cartItemId = 1L
-                val productId = 15L
-                val now = LocalDateTime.now()
+                val userId = UUID.randomUUID()
+                val cartItemId = UUID.randomUUID()
+                val productId = UUID.randomUUID()
 
-                val cartItem = CartItem(cartItemId, userId, productId, 2, now)
+                val cartItem = CartItem(userId, productId, 2)
                 val command = UpdateCartItemCommand(quantity = 0)
 
-                every { cartRepository.findById(cartItemId) } returns cartItem
-                every { cartRepository.delete(cartItemId) } just Runs
+                every { cartRepository.findById(cartItemId) } returns Optional.of(cartItem)
+                every { cartRepository.delete(cartItem) } just Runs
 
                 // when & then
                 shouldThrow<CartItemNotFoundException> {
@@ -443,21 +448,20 @@ class CartServiceUnitTest : DescribeSpec({
                 }
 
                 verify(exactly = 1) { cartRepository.findById(cartItemId) }
-                verify(exactly = 1) { cartRepository.delete(cartItemId) }
+                verify(exactly = 1) { cartRepository.delete(cartItem) }
                 verify(exactly = 0) { productService.findProductById(any()) }
             }
 
             it("수량을 음수로 변경하면 InvalidQuantityException을 발생시킨다") {
                 // given
-                val userId = 1L
-                val cartItemId = 1L
-                val productId = 15L
-                val now = LocalDateTime.now()
+                val userId = UUID.randomUUID()
+                val cartItemId = UUID.randomUUID()
+                val productId = UUID.randomUUID()
 
-                val cartItem = CartItem(cartItemId, userId, productId, 2, now)
+                val cartItem = CartItem(userId, productId, 2)
                 val command = UpdateCartItemCommand(quantity = -1)
 
-                every { cartRepository.findById(cartItemId) } returns cartItem
+                every { cartRepository.findById(cartItemId) } returns Optional.of(cartItem)
 
                 // when & then
                 shouldThrow<InvalidQuantityException> {
@@ -470,15 +474,14 @@ class CartServiceUnitTest : DescribeSpec({
 
             it("수량을 최대값(100)을 초과하여 변경하면 ExceedMaxQuantityException을 발생시킨다") {
                 // given
-                val userId = 1L
-                val cartItemId = 1L
-                val productId = 15L
-                val now = LocalDateTime.now()
+                val userId = UUID.randomUUID()
+                val cartItemId = UUID.randomUUID()
+                val productId = UUID.randomUUID()
 
-                val cartItem = CartItem(cartItemId, userId, productId, 2, now)
+                val cartItem = CartItem(userId, productId, 2)
                 val command = UpdateCartItemCommand(quantity = 101)
 
-                every { cartRepository.findById(cartItemId) } returns cartItem
+                every { cartRepository.findById(cartItemId) } returns Optional.of(cartItem)
 
                 // when & then
                 shouldThrow<ExceedMaxQuantityException> {
@@ -491,16 +494,15 @@ class CartServiceUnitTest : DescribeSpec({
 
             it("재고보다 많은 수량으로 변경하면 InsufficientStockException을 발생시킨다") {
                 // given
-                val userId = 1L
-                val cartItemId = 1L
-                val productId = 15L
-                val now = LocalDateTime.now()
+                val userId = UUID.randomUUID()
+                val cartItemId = UUID.randomUUID()
+                val productId = UUID.randomUUID()
 
-                val cartItem = CartItem(cartItemId, userId, productId, 2, now)
+                val cartItem = CartItem(userId, productId, 2)
                 val product = createProduct(productId, "노트북", 1500000L, 5, ProductCategory.ELECTRONICS, 0)
                 val command = UpdateCartItemCommand(quantity = 10)
 
-                every { cartRepository.findById(cartItemId) } returns cartItem
+                every { cartRepository.findById(cartItemId) } returns Optional.of(cartItem)
                 every { productService.findProductById(productId) } returns product
 
                 // when & then
@@ -514,15 +516,14 @@ class CartServiceUnitTest : DescribeSpec({
 
             it("상품이 삭제되었으면 ProductNotFoundException을 발생시킨다") {
                 // given
-                val userId = 1L
-                val cartItemId = 1L
-                val productId = 15L
-                val now = LocalDateTime.now()
+                val userId = UUID.randomUUID()
+                val cartItemId = UUID.randomUUID()
+                val productId = UUID.randomUUID()
 
-                val cartItem = CartItem(cartItemId, userId, productId, 2, now)
+                val cartItem = CartItem(userId, productId, 2)
                 val command = UpdateCartItemCommand(quantity = 5)
 
-                every { cartRepository.findById(cartItemId) } returns cartItem
+                every { cartRepository.findById(cartItemId) } returns Optional.of(cartItem)
                 every { productService.findProductById(productId) } throws ProductNotFoundException(productId)
 
                 // when & then
@@ -540,32 +541,31 @@ class CartServiceUnitTest : DescribeSpec({
         context("정상 케이스") {
             it("장바구니 아이템을 삭제한다") {
                 // given
-                val userId = 1L
-                val cartItemId = 1L
-                val productId = 15L
-                val now = LocalDateTime.now()
+                val userId = UUID.randomUUID()
+                val cartItemId = UUID.randomUUID()
+                val productId = UUID.randomUUID()
 
-                val cartItem = CartItem(cartItemId, userId, productId, 2, now)
+                val cartItem = CartItem(userId, productId, 2)
 
-                every { cartRepository.findById(cartItemId) } returns cartItem
-                every { cartRepository.delete(cartItemId) } just Runs
+                every { cartRepository.findById(cartItemId) } returns Optional.of(cartItem)
+                every { cartRepository.delete(cartItem) } just Runs
 
                 // when
                 cartService.deleteCartItem(userId, cartItemId)
 
                 // then
                 verify(exactly = 1) { cartRepository.findById(cartItemId) }
-                verify(exactly = 1) { cartRepository.delete(cartItemId) }
+                verify(exactly = 1) { cartRepository.delete(cartItem) }
             }
         }
 
         context("예외 케이스") {
             it("존재하지 않는 장바구니 아이템을 삭제하면 CartItemNotFoundException을 발생시킨다") {
                 // given
-                val userId = 1L
-                val invalidCartItemId = 999L
+                val userId = UUID.randomUUID()
+                val invalidCartItemId = UUID.randomUUID()
 
-                every { cartRepository.findById(invalidCartItemId) } returns null
+                every { cartRepository.findById(invalidCartItemId) } returns Optional.empty()
 
                 // when & then
                 shouldThrow<CartItemNotFoundException> {
@@ -578,20 +578,20 @@ class CartServiceUnitTest : DescribeSpec({
 
             it("다른 사용자의 장바구니 아이템을 삭제하면 ForbiddenException을 발생시킨다") {
                 // given
-                val userId = 1L
-                val otherUserId = 2L
-                val cartItemId = 1L
-                val now = LocalDateTime.now()
+                val userId = UUID.randomUUID()
+                val productId = UUID.randomUUID()
+                val otherUserId = UUID.randomUUID()
+                val cartItemId = UUID.randomUUID()
 
-                val otherUserCartItem = CartItem(cartItemId, otherUserId, 15L, 2, now)
+                val otherUserCartItem = CartItem(otherUserId, productId, 2)
 
-                every { cartRepository.findById(cartItemId) } returns otherUserCartItem
+                every { cartRepository.findById(cartItemId) } returns Optional.of(otherUserCartItem)
 
                 // when & then
                 val exception = shouldThrow<ForbiddenException> {
                     cartService.deleteCartItem(userId, cartItemId)
                 }
-                exception.message shouldContain "다른 사용자의 장바구니 아이템입니다"
+                exception.message shouldContain "access denied cart item"
 
                 verify(exactly = 1) { cartRepository.findById(cartItemId) }
                 verify(exactly = 0) { cartRepository.delete(any()) }
@@ -603,7 +603,7 @@ class CartServiceUnitTest : DescribeSpec({
         context("정상 케이스") {
             it("장바구니를 전체 비운다") {
                 // given
-                val userId = 1L
+                val userId = UUID.randomUUID()
                 val user = createUser(userId, "테스트 사용자", "test@example.com", 100000L)
 
                 every { userService.getUser(userId) } returns user
@@ -619,7 +619,7 @@ class CartServiceUnitTest : DescribeSpec({
 
             it("빈 장바구니를 비워도 정상 처리된다") {
                 // given
-                val userId = 1L
+                val userId = UUID.randomUUID()
                 val user = createUser(userId, "테스트 사용자", "test@example.com", 100000L)
 
                 every { userService.getUser(userId) } returns user
@@ -635,7 +635,7 @@ class CartServiceUnitTest : DescribeSpec({
 
             it("여러 아이템이 담긴 장바구니를 한 번에 비운다") {
                 // given
-                val userId = 1L
+                val userId = UUID.randomUUID()
                 val user = createUser(userId, "테스트 사용자", "test@example.com", 100000L)
 
                 every { userService.getUser(userId) } returns user
@@ -653,8 +653,7 @@ class CartServiceUnitTest : DescribeSpec({
         context("예외 케이스") {
             it("존재하지 않는 사용자의 장바구니를 비우면 UserNotFoundException을 발생시킨다") {
                 // given
-                val invalidUserId = 999L
-
+                val invalidUserId = UUID.randomUUID()
                 every { userService.getUser(invalidUserId) } throws UserNotFoundException(invalidUserId)
 
                 // when & then
@@ -672,134 +671,177 @@ class CartServiceUnitTest : DescribeSpec({
         context("정상 케이스") {
             it("여러 상품을 한 번에 삭제한다") {
                 // given
-                val userId = 1L
-                val productIds = listOf(15L, 7L, 10L)
-                val now = LocalDateTime.now()
+                val userId = UUID.randomUUID()
+                val productIds = listOf(UUID.randomUUID(), UUID.randomUUID(), UUID.randomUUID())
 
-                val cartItems = listOf(
-                    CartItem(1L, userId, 15L, 2, now),
-                    CartItem(2L, userId, 7L, 1, now),
-                    CartItem(3L, userId, 10L, 3, now)
-                )
+                val cartItem1 = createCartItem(userId, productIds[0], 2)
+                val cartItem2 = createCartItem(userId, productIds[1], 1)
+                val cartItem3 = createCartItem(userId, productIds[2], 3)
+                val cartItems = listOf(cartItem1, cartItem2, cartItem3)
+                val cartItemIds = listOf(cartItem1.id!!, cartItem2.id!!, cartItem3.id!!)
 
-                every { cartRepository.findByUserIdAndProductIds(userId, productIds) } returns cartItems
-                every { cartRepository.deleteManyByIds(listOf(1L, 2L, 3L)) } just Runs
+                every { cartRepository.findByUserIdAndProductIdIn(userId, productIds) } returns cartItems
+                every { cartRepository.deleteAllById(cartItemIds) } just Runs
 
                 // when
                 cartService.deleteCarts(userId, productIds)
 
                 // then
-                verify(exactly = 1) { cartRepository.findByUserIdAndProductIds(userId, productIds) }
-                verify(exactly = 1) { cartRepository.deleteManyByIds(listOf(1L, 2L, 3L)) }
+                verify(exactly = 1) { cartRepository.findByUserIdAndProductIdIn(userId, productIds) }
+                verify(exactly = 1) { cartRepository.deleteAllById(cartItemIds) }
             }
 
             it("빈 productIds 리스트로 호출하면 아무것도 삭제하지 않는다") {
                 // given
-                val userId = 1L
-                val emptyProductIds = emptyList<Long>()
+                val userId = UUID.randomUUID()
+                val emptyProductIds = emptyList<UUID>()
 
-                every { cartRepository.findByUserIdAndProductIds(userId, emptyProductIds) } returns emptyList()
+                every { cartRepository.findByUserIdAndProductIdIn(userId, emptyProductIds) } returns emptyList()
 
                 // when
                 cartService.deleteCarts(userId, emptyProductIds)
 
                 // then
-                verify(exactly = 1) { cartRepository.findByUserIdAndProductIds(userId, emptyProductIds) }
-                verify(exactly = 0) { cartRepository.deleteManyByIds(any()) }
+                verify(exactly = 1) { cartRepository.findByUserIdAndProductIdIn(userId, emptyProductIds) }
+                verify(exactly = 0) { cartRepository.deleteAll(any()) }
             }
 
             it("일부 상품만 장바구니에 있어도 정상 처리된다") {
                 // given
-                val userId = 1L
-                val productIds = listOf(15L, 7L, 999L) // 999L은 장바구니에 없음
-                val now = LocalDateTime.now()
+                val userId = UUID.randomUUID()
+                val productIds = listOf(UUID.randomUUID(), UUID.randomUUID(), UUID.randomUUID()) // 999L은 장바구니에 없음
 
-                val cartItems = listOf(
-                    CartItem(1L, userId, 15L, 2, now),
-                    CartItem(2L, userId, 7L, 1, now)
-                    // 999L에 해당하는 아이템은 없음
-                )
+                val cartItem1 = createCartItem(userId, productIds[0], 2)
+                val cartItem2 = createCartItem(userId, productIds[1], 1)
+                val cartItems = listOf(cartItem1, cartItem2)
+                val cartItemIds = listOf(cartItem1.id!!, cartItem2.id!!)
 
-                every { cartRepository.findByUserIdAndProductIds(userId, productIds) } returns cartItems
-                every { cartRepository.deleteManyByIds(listOf(1L, 2L)) } just Runs
+                every { cartRepository.findByUserIdAndProductIdIn(userId, productIds) } returns cartItems
+                every { cartRepository.deleteAllById(cartItemIds) } just Runs
 
                 // when
                 cartService.deleteCarts(userId, productIds)
 
                 // then - 존재하는 아이템만 삭제
-                verify(exactly = 1) { cartRepository.findByUserIdAndProductIds(userId, productIds) }
-                verify(exactly = 1) { cartRepository.deleteManyByIds(listOf(1L, 2L)) }
+                verify(exactly = 1) { cartRepository.findByUserIdAndProductIdIn(userId, productIds) }
+                verify(exactly = 1) { cartRepository.deleteAllById(cartItemIds) }
             }
 
             it("장바구니에 없는 상품들만 삭제 시도하면 아무것도 삭제되지 않는다") {
                 // given
-                val userId = 1L
-                val productIds = listOf(999L, 998L)
+                val userId = UUID.randomUUID()
+                val productIds = listOf(UUID.randomUUID(), UUID.randomUUID())
 
-                every { cartRepository.findByUserIdAndProductIds(userId, productIds) } returns emptyList()
+                every { cartRepository.findByUserIdAndProductIdIn(userId, productIds) } returns emptyList()
 
                 // when
                 cartService.deleteCarts(userId, productIds)
 
                 // then
-                verify(exactly = 1) { cartRepository.findByUserIdAndProductIds(userId, productIds) }
-                verify(exactly = 0) { cartRepository.deleteManyByIds(any()) }
+                verify(exactly = 1) { cartRepository.findByUserIdAndProductIdIn(userId, productIds) }
+                verify(exactly = 0) { cartRepository.deleteAll(any()) }
             }
 
             it("null을 반환하는 경우에도 정상 처리된다") {
                 // given
-                val userId = 1L
-                val productIds = listOf(15L, 7L)
+                val userId = UUID.randomUUID()
+                val productIds = listOf(UUID.randomUUID(), UUID.randomUUID())
 
-                every { cartRepository.findByUserIdAndProductIds(userId, productIds) } returns null
+                every { cartRepository.findByUserIdAndProductIdIn(userId, productIds) } returns emptyList()
 
                 // when
                 cartService.deleteCarts(userId, productIds)
 
                 // then - null인 경우 빈 리스트로 처리되어 deleteManyByIds 호출 안 됨
-                verify(exactly = 1) { cartRepository.findByUserIdAndProductIds(userId, productIds) }
-                verify(exactly = 0) { cartRepository.deleteManyByIds(any()) }
+                verify(exactly = 1) { cartRepository.findByUserIdAndProductIdIn(userId, productIds) }
+                verify(exactly = 0) { cartRepository.deleteAll(any()) }
             }
         }
     }
 }) {
     companion object {
-        fun createUser(
-            id: Long,
-            @Suppress("UNUSED_PARAMETER") name: String,
-            @Suppress("UNUSED_PARAMETER") email: String,
-            balance: Long
-        ): User {
-            val now = LocalDateTime.now().format(DateTimeFormatter.ISO_LOCAL_DATE_TIME)
-            return User(
-                id = id,
-                balance = balance,
-                createdAt = now,
-                updatedAt = now
-            )
+        // UUID 기반 - 새로운 헬퍼 함수
+        fun createUser(balance: Long = 0): User {
+            return User(balance = balance)
         }
 
         fun createProduct(
-            id: Long,
             name: String,
             price: Long,
             stock: Int,
             category: ProductCategory,
-            salesCount: Int
+            salesCount: Int = 0
         ): Product {
-            val now = LocalDateTime.now().format(DateTimeFormatter.ISO_LOCAL_DATE_TIME)
-            return Product(
-                id = id,
+            val product = Product(
                 name = name,
                 description = "$name 상세 설명",
                 price = price,
                 stock = stock,
                 category = category,
                 specifications = emptyMap(),
-                salesCount = salesCount,
-                createdAt = now,
-                updatedAt = now
+                salesCount = salesCount
             )
+            // 리플렉션으로 id 설정
+            val idField = product.javaClass.superclass.getDeclaredField("id")
+            idField.isAccessible = true
+            idField.set(product, UUID.randomUUID())
+            return product
+        }
+
+        fun createCartItem(userId: UUID, productId: UUID, quantity: Int): CartItem {
+            val cartItem = CartItem(userId, productId, quantity)
+            val now = LocalDateTime.now()
+
+            // 리플렉션으로 id 설정
+            val idField = cartItem.javaClass.superclass.getDeclaredField("id")
+            idField.isAccessible = true
+            idField.set(cartItem, UUID.randomUUID())
+
+            // 리플렉션으로 createdAt 설정
+            val createdAtField = cartItem.javaClass.superclass.getDeclaredField("createdAt")
+            createdAtField.isAccessible = true
+            createdAtField.set(cartItem, now)
+
+            // 리플렉션으로 updatedAt 설정
+            val updatedAtField = cartItem.javaClass.superclass.getDeclaredField("updatedAt")
+            updatedAtField.isAccessible = true
+            updatedAtField.set(cartItem, now)
+
+            return cartItem
+        }
+
+        // Long 기반 - 기존 테스트 호환용 (deprecated)
+        fun createUser(
+            @Suppress("UNUSED_PARAMETER") id: UUID,
+            @Suppress("UNUSED_PARAMETER") name: String,
+            @Suppress("UNUSED_PARAMETER") email: String,
+            balance: Long
+        ): User {
+            return User(balance = balance)
+        }
+
+        fun createProduct(
+            id: UUID,
+            name: String,
+            price: Long,
+            stock: Int,
+            category: ProductCategory,
+            salesCount: Int
+        ): Product {
+            val product = Product(
+                name = name,
+                description = "$name 상세 설명",
+                price = price,
+                stock = stock,
+                category = category,
+                specifications = emptyMap(),
+                salesCount = salesCount
+            )
+            // 리플렉션으로 특정 id 설정
+            val idField = product.javaClass.superclass.getDeclaredField("id")
+            idField.isAccessible = true
+            idField.set(product, id)
+            return product
         }
     }
 }

@@ -1,10 +1,10 @@
 package com.hhplus.ecommerce.application.shipping.dto
 
-import com.hhplus.ecommerce.domain.shipping.entity.Shipping
+import java.util.UUID
 
 data class UserShippingListResult(
-    val userId: Long,
-    val items: List<Shipping>,
+    val userId: UUID,
+    val items: List<ShippingResult>,
     val page: UserShippingPageInfoDto,
     val summary: ShippingSummaryDto
 )

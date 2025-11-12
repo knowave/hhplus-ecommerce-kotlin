@@ -1,21 +1,35 @@
 package com.hhplus.ecommerce.domain.payment.entity
 
+import com.hhplus.ecommerce.common.entity.BaseEntity
+import jakarta.persistence.*
 import java.time.LocalDateTime
+import java.util.*
 
-/**
- * 데이터 전송 도메인 모델 (Outbox Pattern)
- */
-data class DataTransmission(
-    val transmissionId: Long,
-    val orderId: Long,
+@Entity
+@Table(name = "data_transmission")
+class DataTransmission(
+    @Column(nullable = false, columnDefinition = "BINARY(16)")
+    val orderId: UUID,
+
+    @Enumerated(EnumType.STRING)
+    @Column(nullable = false, length = 20)
     var status: TransmissionStatus,
+
+    @Column(nullable = false)
     var attempts: Int = 0,
+
+    @Column(nullable = false)
     val maxAttempts: Int = 3,
-    val createdAt: LocalDateTime,
+
+    @Column
     var sentAt: LocalDateTime? = null,
+
+    @Column
     var nextRetryAt: LocalDateTime? = null,
+
+    @Column(columnDefinition = "TEXT")
     var errorMessage: String? = null
-)
+) : BaseEntity()
 
 /**
  * 전송 상태

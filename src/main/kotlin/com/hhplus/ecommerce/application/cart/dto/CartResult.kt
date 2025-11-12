@@ -2,6 +2,7 @@ package com.hhplus.ecommerce.application.cart.dto
 
 import com.hhplus.ecommerce.presentation.cart.dto.CartItemResponse
 import com.hhplus.ecommerce.presentation.cart.dto.CartSummary
+import java.util.UUID
 
 data class CartSummaryResult(
     val totalItems: Int,         // 총 아이템 종류 수
@@ -12,8 +13,8 @@ data class CartSummaryResult(
 )
 
 data class CartItemResult(
-    val cartItemId: Long,
-    val productId: Long,
+    val cartItemId: UUID,
+    val productId: UUID,
     val productName: String,
     val price: Long,
     val quantity: Int,
@@ -24,7 +25,7 @@ data class CartItemResult(
 )
 
 data class CartResult(
-    val userId: Long,
+    val userId: UUID,
     val items: List<CartItemResult>,
     val summary: CartSummaryResult
 )

@@ -1,9 +1,10 @@
 package com.hhplus.ecommerce.presentation.user.dto
 
 import com.hhplus.ecommerce.application.user.dto.ChargeBalanceResult
+import java.util.UUID
 
 data class ChargeBalanceResponse(
-    val userId: Long,
+    val userId: UUID,
     val previousBalance: Long,
     val chargedAmount: Long,
     val currentBalance: Long,

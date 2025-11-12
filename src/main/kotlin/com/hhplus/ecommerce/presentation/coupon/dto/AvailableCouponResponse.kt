@@ -2,6 +2,7 @@ package com.hhplus.ecommerce.presentation.coupon.dto
 
 import com.hhplus.ecommerce.application.coupon.dto.AvailableCouponItemDto
 import com.hhplus.ecommerce.application.coupon.dto.AvailableCouponItemResult
+import java.util.UUID
 
 data class AvailableCouponResponse(
     val coupons: List<AvailableCouponItem>
@@ -16,7 +17,7 @@ data class AvailableCouponResponse(
 }
 
 data class AvailableCouponItem(
-    val id: Long,
+    val id: UUID,
     val couponName: String,
     val description: String,
     val discountRate: Int,
