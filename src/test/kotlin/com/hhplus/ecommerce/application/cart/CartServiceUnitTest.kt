@@ -40,10 +40,10 @@ class CartServiceUnitTest : DescribeSpec({
                 val productId = UUID.randomUUID()
                 val quantity = 2
                 val user = createUser(100000L)
-                val product = createProduct("노트북", 1500000L, 50, ProductCategory.ELECTRONICS, 0)
+                val product = createProduct(productId, "노트북", 1500000L, 50, ProductCategory.ELECTRONICS, 0)
                 val command = AddCartItemCommand(productId = productId, quantity = quantity)
 
-                val savedCartItem = CartItem(userId, productId, quantity)
+                val savedCartItem = createCartItem(userId, productId, quantity)
 
                 every { userService.getUser(userId) } returns user
                 every { productService.findProductById(productId) } returns product
@@ -79,7 +79,7 @@ class CartServiceUnitTest : DescribeSpec({
                 val product = createProduct(productId, "노트북", 1500000L, 50, ProductCategory.ELECTRONICS, 0)
                 val command = AddCartItemCommand(productId = productId, quantity = additionalQuantity)
 
-                val existingCartItem = CartItem(userId, productId, existingQuantity)
+                val existingCartItem = createCartItem(userId, productId, existingQuantity)
                 val calculateQuantity = existingQuantity + additionalQuantity
 
                 every { userService.getUser(userId) } returns user
@@ -113,7 +113,7 @@ class CartServiceUnitTest : DescribeSpec({
                 val product = createProduct(productId, "노트북", 1500000L, 200, ProductCategory.ELECTRONICS, 0)
                 val command = AddCartItemCommand(productId = productId, quantity = additionalQuantity)
 
-                val existingCartItem = CartItem(userId, productId, existingQuantity)
+                val existingCartItem = createCartItem(userId, productId, existingQuantity)
 
                 every { userService.getUser(userId) } returns user
                 every { productService.findProductById(productId) } returns product
@@ -309,12 +309,11 @@ class CartServiceUnitTest : DescribeSpec({
             it("장바구니 아이템의 수량을 변경한다") {
                 // given
                 val userId = UUID.randomUUID()
-                val cartItemId = UUID.randomUUID()
                 val productId = UUID.randomUUID()
                 val newQuantity = 5
-                val now = LocalDateTime.now()
 
-                val cartItem = CartItem(cartItemId, userId, 2)
+                val cartItem = createCartItem(userId, productId, 2)
+                val cartItemId = cartItem.id!!
                 val product = createProduct(productId, "노트북", 1500000L, 50, ProductCategory.ELECTRONICS, 0)
                 val command = UpdateCartItemCommand(quantity = newQuantity)
 
@@ -344,7 +343,7 @@ class CartServiceUnitTest : DescribeSpec({
                 val cartItemId = UUID.randomUUID()
                 val productId = UUID.randomUUID()
 
-                val cartItem = CartItem(userId, productId, 10)
+                val cartItem = createCartItem(userId, productId, 10)
                 val product = createProduct(productId, "노트북", 1500000L, 50, ProductCategory.ELECTRONICS, 0)
                 val command = UpdateCartItemCommand(quantity = 1)
 
@@ -370,7 +369,7 @@ class CartServiceUnitTest : DescribeSpec({
                 val cartItemId = UUID.randomUUID()
                 val productId = UUID.randomUUID()
 
-                val cartItem = CartItem(userId, productId, 10)
+                val cartItem = createCartItem(userId, productId, 10)
                 val product = createProduct(productId, "노트북", 1500000L, 150, ProductCategory.ELECTRONICS, 0)
                 val command = UpdateCartItemCommand(quantity = 100)
 
@@ -592,7 +591,7 @@ class CartServiceUnitTest : DescribeSpec({
                 val exception = shouldThrow<ForbiddenException> {
                     cartService.deleteCartItem(userId, cartItemId)
                 }
-                exception.message shouldContain "다른 사용자의 장바구니 아이템입니다"
+                exception.message shouldContain "access denied cart item"
 
                 verify(exactly = 1) { cartRepository.findById(cartItemId) }
                 verify(exactly = 0) { cartRepository.delete(any()) }
@@ -608,7 +607,7 @@ class CartServiceUnitTest : DescribeSpec({
                 val user = createUser(userId, "테스트 사용자", "test@example.com", 100000L)
 
                 every { userService.getUser(userId) } returns user
-                every { cartRepository.deleteByUserId(userId) } returns 1L
+                every { cartRepository.deleteByUserId(userId) } just Runs
 
                 // when
                 cartService.clearCart(userId)
@@ -624,7 +623,7 @@ class CartServiceUnitTest : DescribeSpec({
                 val user = createUser(userId, "테스트 사용자", "test@example.com", 100000L)
 
                 every { userService.getUser(userId) } returns user
-                every { cartRepository.deleteByUserId(userId) } returns 1L
+                every { cartRepository.deleteByUserId(userId) } just Runs
 
                 // when
                 cartService.clearCart(userId)
@@ -640,7 +639,7 @@ class CartServiceUnitTest : DescribeSpec({
                 val user = createUser(userId, "테스트 사용자", "test@example.com", 100000L)
 
                 every { userService.getUser(userId) } returns user
-                every { cartRepository.deleteByUserId(userId) } returns 1L
+                every { cartRepository.deleteByUserId(userId) } just Runs
 
                 // when
                 cartService.clearCart(userId)
@@ -675,21 +674,21 @@ class CartServiceUnitTest : DescribeSpec({
                 val userId = UUID.randomUUID()
                 val productIds = listOf(UUID.randomUUID(), UUID.randomUUID(), UUID.randomUUID())
 
-                val cartItems = listOf(
-                    CartItem(userId, productIds[0], 2),
-                    CartItem(userId, productIds[1], 1),
-                    CartItem(userId, productIds[2], 3)
-                )
+                val cartItem1 = createCartItem(userId, productIds[0], 2)
+                val cartItem2 = createCartItem(userId, productIds[1], 1)
+                val cartItem3 = createCartItem(userId, productIds[2], 3)
+                val cartItems = listOf(cartItem1, cartItem2, cartItem3)
+                val cartItemIds = listOf(cartItem1.id!!, cartItem2.id!!, cartItem3.id!!)
 
                 every { cartRepository.findByUserIdAndProductIdIn(userId, productIds) } returns cartItems
-                every { cartRepository.deleteAll(cartItems) } just Runs
+                every { cartRepository.deleteAllById(cartItemIds) } just Runs
 
                 // when
                 cartService.deleteCarts(userId, productIds)
 
                 // then
                 verify(exactly = 1) { cartRepository.findByUserIdAndProductIdIn(userId, productIds) }
-                verify(exactly = 1) { cartRepository.deleteAll(cartItems) }
+                verify(exactly = 1) { cartRepository.deleteAllById(cartItemIds) }
             }
 
             it("빈 productIds 리스트로 호출하면 아무것도 삭제하지 않는다") {
@@ -712,21 +711,20 @@ class CartServiceUnitTest : DescribeSpec({
                 val userId = UUID.randomUUID()
                 val productIds = listOf(UUID.randomUUID(), UUID.randomUUID(), UUID.randomUUID()) // 999L은 장바구니에 없음
 
-                val cartItems = listOf(
-                    CartItem(userId, productIds[0], 2),
-                    CartItem(userId, productIds[1], 1)
-                    // 999L에 해당하는 아이템은 없음
-                )
+                val cartItem1 = createCartItem(userId, productIds[0], 2)
+                val cartItem2 = createCartItem(userId, productIds[1], 1)
+                val cartItems = listOf(cartItem1, cartItem2)
+                val cartItemIds = listOf(cartItem1.id!!, cartItem2.id!!)
 
                 every { cartRepository.findByUserIdAndProductIdIn(userId, productIds) } returns cartItems
-                every { cartRepository.deleteAll(cartItems) } just Runs
+                every { cartRepository.deleteAllById(cartItemIds) } just Runs
 
                 // when
                 cartService.deleteCarts(userId, productIds)
 
                 // then - 존재하는 아이템만 삭제
                 verify(exactly = 1) { cartRepository.findByUserIdAndProductIdIn(userId, productIds) }
-                verify(exactly = 1) { cartRepository.deleteAll(cartItems) }
+                verify(exactly = 1) { cartRepository.deleteAllById(cartItemIds) }
             }
 
             it("장바구니에 없는 상품들만 삭제 시도하면 아무것도 삭제되지 않는다") {
@@ -774,7 +772,7 @@ class CartServiceUnitTest : DescribeSpec({
             category: ProductCategory,
             salesCount: Int = 0
         ): Product {
-            return Product(
+            val product = Product(
                 name = name,
                 description = "$name 상세 설명",
                 price = price,
@@ -783,6 +781,33 @@ class CartServiceUnitTest : DescribeSpec({
                 specifications = emptyMap(),
                 salesCount = salesCount
             )
+            // 리플렉션으로 id 설정
+            val idField = product.javaClass.superclass.getDeclaredField("id")
+            idField.isAccessible = true
+            idField.set(product, UUID.randomUUID())
+            return product
+        }
+
+        fun createCartItem(userId: UUID, productId: UUID, quantity: Int): CartItem {
+            val cartItem = CartItem(userId, productId, quantity)
+            val now = LocalDateTime.now()
+
+            // 리플렉션으로 id 설정
+            val idField = cartItem.javaClass.superclass.getDeclaredField("id")
+            idField.isAccessible = true
+            idField.set(cartItem, UUID.randomUUID())
+
+            // 리플렉션으로 createdAt 설정
+            val createdAtField = cartItem.javaClass.superclass.getDeclaredField("createdAt")
+            createdAtField.isAccessible = true
+            createdAtField.set(cartItem, now)
+
+            // 리플렉션으로 updatedAt 설정
+            val updatedAtField = cartItem.javaClass.superclass.getDeclaredField("updatedAt")
+            updatedAtField.isAccessible = true
+            updatedAtField.set(cartItem, now)
+
+            return cartItem
         }
 
         // Long 기반 - 기존 테스트 호환용 (deprecated)
@@ -796,14 +821,14 @@ class CartServiceUnitTest : DescribeSpec({
         }
 
         fun createProduct(
-            @Suppress("UNUSED_PARAMETER") id: UUID,
+            id: UUID,
             name: String,
             price: Long,
             stock: Int,
             category: ProductCategory,
             salesCount: Int
         ): Product {
-            return Product(
+            val product = Product(
                 name = name,
                 description = "$name 상세 설명",
                 price = price,
@@ -812,6 +837,11 @@ class CartServiceUnitTest : DescribeSpec({
                 specifications = emptyMap(),
                 salesCount = salesCount
             )
+            // 리플렉션으로 특정 id 설정
+            val idField = product.javaClass.superclass.getDeclaredField("id")
+            idField.isAccessible = true
+            idField.set(product, id)
+            return product
         }
     }
 }

@@ -123,14 +123,17 @@ class CartServiceImpl(
 
         val subtotal = product.price * cartItem.quantity
 
+        val targetCartItem = cartItem ?: existingItem
+        ?: throw InvalidCartItemException("cartItem and existing cart item is null")
+
         return AddCartItemResult(
-            cartItemId = cartItem.id!!,
+            cartItemId = targetCartItem.id!!,
             productId = product.id!!,
             productName = product.name,
             price = product.price,
-            quantity = cartItem.quantity,
+            quantity = targetCartItem.quantity,
             subtotal = subtotal,
-            addedAt = cartItem.createdAt!!.format(DATE_FORMATTER)
+            addedAt = targetCartItem.createdAt!!.format(DATE_FORMATTER)
         )
     }
 

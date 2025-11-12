@@ -48,6 +48,11 @@ class ExceedMaxQuantityException(
     )
 )
 
+class InvalidCartItemException(message: String) : BaseException(
+    errorCode = ErrorCode.INVALID_CART,
+    message = message
+)
+
 class ForbiddenException(message: String) : BaseException(
     errorCode = ErrorCode.FORBIDDEN,
     message = message

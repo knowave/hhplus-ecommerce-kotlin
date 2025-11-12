@@ -1,6 +1,8 @@
 package com.hhplus.ecommerce.application.coupon
 
 import com.hhplus.ecommerce.application.coupon.dto.*
+import com.hhplus.ecommerce.application.user.UserService
+import com.hhplus.ecommerce.application.user.dto.CreateUserCommand
 import com.hhplus.ecommerce.common.exception.CouponAlreadyIssuedException
 import com.hhplus.ecommerce.common.exception.CouponNotFoundException
 import com.hhplus.ecommerce.domain.coupon.repository.CouponJpaRepository
@@ -29,28 +31,40 @@ import java.util.UUID
 )
 class CouponServiceIntegrationTest(
     private val couponService: CouponService,
+    private val userService: UserService,
     private val couponRepository: CouponJpaRepository,
     private val userCouponRepository: UserCouponJpaRepository
 ) : DescribeSpec() {
     override fun extensions(): List<Extension> = listOf(SpringExtension)
 
     private lateinit var testCouponId: UUID
+    private lateinit var testUserId: UUID
+    private lateinit var testUser2Id: UUID
 
     init {
         beforeEach {
             // 사용자 쿠폰 데이터 클리어
-            userCouponRepository.deleteAll()
+            val testUser = userService.createUser(CreateUserCommand(balance = 100000L))
+            testUserId = testUser.id!!
+
+            val testUser2 = userService.createUser(CreateUserCommand(balance = 100000L))
+            testUser2Id = testUser2.id!!
 
             // 테스트용 쿠폰 ID 가져오기 (사용 가능한 쿠폰 중 첫 번째)
             val availableCoupons = couponService.getAvailableCoupons()
             testCouponId = availableCoupons.coupons.first().id
         }
 
+        afterEach {
+            userCouponRepository.deleteAll()
+            couponRepository.deleteAll()
+        }
+
         describe("CouponService 통합 테스트 - Service와 Repository 통합") {
             context("쿠폰 발급") {
                 it("사용자에게 쿠폰을 발급할 수 있다") {
                     // given
-                    val userId = UUID.randomUUID()
+                    val userId = testUserId
                     val couponId = testCouponId
                     val command = IssueCouponCommand(userId = userId)
 
@@ -70,7 +84,7 @@ class CouponServiceIntegrationTest(
 
                 it("쿠폰 발급 후 잔여 수량이 감소한다") {
                     // given
-                    val userId = UUID.randomUUID()
+                    val userId = testUserId
                     val couponId = testCouponId
 
                     // 발급 전 잔여 수량 확인
@@ -92,7 +106,7 @@ class CouponServiceIntegrationTest(
 
                 it("같은 사용자에게 같은 쿠폰을 중복 발급할 수 없다") {
                     // given
-                    val userId = UUID.randomUUID()
+                    val userId = testUserId
                     val couponId = testCouponId
                     val command = IssueCouponCommand(userId = userId)
 
@@ -107,7 +121,7 @@ class CouponServiceIntegrationTest(
 
                 it("존재하지 않는 쿠폰 발급 시 예외가 발생한다") {
                     // given
-                    val userId = UUID.randomUUID()
+                    val userId = testUserId
                     val invalidCouponId = UUID.randomUUID()
                     val command = IssueCouponCommand(userId = userId)
 
@@ -121,7 +135,7 @@ class CouponServiceIntegrationTest(
             context("복합 시나리오 - 쿠폰 발급 및 조회 통합") {
                 it("쿠폰 발급 후 목록 조회, 상세 조회를 연속으로 수행할 수 있다") {
                     // given
-                    val userId = UUID.randomUUID()
+                    val userId = testUserId
                     val couponId = testCouponId
 
                     // Step 1: 쿠폰 발급
@@ -142,8 +156,8 @@ class CouponServiceIntegrationTest(
 
                 it("여러 사용자가 동일한 쿠폰을 발급받을 수 있고, 각자 독립적으로 관리된다") {
                     // given
-                    val userId1 = UUID.randomUUID()
-                    val userId2 = UUID.randomUUID()
+                    val userId1 = testUserId
+                    val userId2 = testUser2Id
                     val couponId = testCouponId
 
                     // when - 첫 번째 사용자 발급

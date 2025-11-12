@@ -8,7 +8,7 @@ import jakarta.persistence.Entity
 import jakarta.persistence.Table
 
 @Entity
-@Table(name = "user")
+@Table(name = "users")
 class User(
     @Column(nullable = false)
     var balance: Long = 0
