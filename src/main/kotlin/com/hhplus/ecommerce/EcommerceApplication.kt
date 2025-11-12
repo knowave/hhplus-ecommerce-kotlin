@@ -10,10 +10,14 @@ import io.github.cdimascio.dotenv.dotenv
 class EcommerceApplication
 
 fun main(args: Array<String>) {
-    val dotenv = dotenv()
+    val env = System.getProperty("spring.profiles.active") ?: System.getenv("SPRING_PROFILES_ACTIVE") ?: "default"
 
-    dotenv.entries().forEach { entry ->
-        System.setProperty(entry.key, entry.value)
+    if (env != "prod") {
+        val dotenv = dotenv()
+
+        dotenv.entries().forEach { entry ->
+            System.setProperty(entry.key, entry.value)
+        }
     }
 
 	runApplication<EcommerceApplication>(*args)
