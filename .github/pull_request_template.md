@@ -1,4 +1,3 @@
-2
 ## :pushpin: PR 제목 규칙
 [STEP07 또는 STEP08] 이름
 
