@@ -9,7 +9,9 @@ import com.hhplus.ecommerce.common.exception.*
 import com.hhplus.ecommerce.domain.product.entity.Product
 import com.hhplus.ecommerce.domain.coupon.entity.*
 import com.hhplus.ecommerce.domain.order.entity.*
+import com.hhplus.ecommerce.domain.order.event.OrderCreatedEvent
 import com.hhplus.ecommerce.domain.order.repository.OrderJpaRepository
+import org.springframework.context.ApplicationEventPublisher
 import org.springframework.data.domain.PageRequest
 import org.springframework.stereotype.Service
 import org.springframework.transaction.annotation.Transactional
@@ -23,43 +25,73 @@ class OrderServiceImpl(
     private val productService: ProductService,
     private val couponService: CouponService,
     private val userService: UserService,
-    private val cartService: CartService
+    private val cartService: CartService,
+    private val applicationEventPublisher: ApplicationEventPublisher
 ) : OrderService {
 
     companion object {
         private val DATE_FORMATTER: DateTimeFormatter = DateTimeFormatter.ISO_LOCAL_DATE_TIME
     }
 
-    @Transactional
+    /**
+     * 주문 생성 (트랜잭션 범위 최적화)
+     *
+     * 트랜잭션 밖에서:
+     * - 요청 검증
+     * - 사용자 조회
+     * - 이벤트 발행
+     * - 응답 생성
+     *
+     * 트랜잭션 내에서:
+     * - 재고 차감
+     * - 쿠폰 사용
+     * - 주문 저장
+     */
     override fun createOrder(request: CreateOrderCommand): CreateOrderResult {
-        // 1. 요청 검증
         validateOrderRequest(request)
         val user = userService.getUser(request.userId)
 
-        // 3. 재고 차감 (비즈니스 정책: 주문 생성 시점에 즉시 차감)
-        // 비관적 락으로 상품 조회 및 재고 차감 (검증 포함)
+        val orderData = createOrderTransaction(request, user.id!!)
+
+        applicationEventPublisher.publishEvent(
+            OrderCreatedEvent(
+                orderId = orderData.orderId,
+                userId = request.userId,
+                productIds = orderData.productIds
+            )
+        )
+
+        return CreateOrderResult(
+            orderId = orderData.orderId,
+            userId = orderData.userId,
+            orderNumber = orderData.orderNumber,
+            items = orderData.items,
+            pricing = orderData.pricing,
+            status = orderData.status,
+            createdAt = orderData.createdAt
+        )
+    }
+
+    /**
+     * 주문 생성 트랜잭션
+     * 트랜잭션 범위를 최소화하여 락 보유 시간 단축
+     */
+    @Transactional
+    private fun createOrderTransaction(request: CreateOrderCommand, userId: UUID): OrderCreationData {
         val products = deductStock(request.items)
 
-        // 5. 쿠폰 검증 및 사용 처리
         val userCoupon = if (request.couponId != null) {
-            val validatedCoupon = validateAndUseCoupon(request.couponId, request.userId)
-            validatedCoupon
-        } else {
-            null
-        }
+            validateAndUseCoupon(request.couponId, request.userId)
+        } else null
 
         val coupon = if (userCoupon != null) {
             couponService.findCouponById(userCoupon.couponId)
-        } else {
-            null
-        }
+        } else null
 
-        // 6. 금액 계산
         val totalAmount = calculateTotalAmount(request.items, products)
         val discountAmount = calculateDiscountAmount(totalAmount, coupon)
         val finalAmount = totalAmount - discountAmount
 
-        // 7. 주문 생성
         val orderNumber = generateOrderNumber()
         val order = Order(
             userId = request.userId,
@@ -75,7 +107,7 @@ class OrderServiceImpl(
             val product = products[item.productId]!!
             OrderItem(
                 productId = product.id!!,
-                userId = user.id!!,
+                userId = userId,
                 order = order,
                 productName = product.name,
                 quantity = item.quantity,
@@ -84,15 +116,10 @@ class OrderServiceImpl(
             )
         }
 
-        // OrderItem을 Order의 items에 추가하고 저장 (Cascade로 OrderItem도 함께 저장됨)
         order.items.addAll(orderItems)
         val savedOrder = orderRepository.save(order)
 
-        val productIds = products.values.map { it.id!! }
-        cartService.deleteCarts(request.userId, productIds)
-
-        // 8. 응답 생성
-        return CreateOrderResult(
+        return OrderCreationData(
             orderId = savedOrder.id!!,
             userId = savedOrder.userId,
             orderNumber = savedOrder.orderNumber,
@@ -119,12 +146,15 @@ class OrderServiceImpl(
                 }
             ),
             status = order.status.name,
-            createdAt = order.createdAt!!.toString()
+            createdAt = order.createdAt!!.toString(),
+            productIds = products.values.map { it.id!! }
         )
     }
 
+    @Transactional(readOnly = true)
     override fun getOrderDetail(orderId: UUID, userId: UUID): OrderDetailResult {
-        val order = orderRepository.findById(orderId)
+        // ✅ Fetch Join 사용하여 N+1 쿼리 방지
+        val order = orderRepository.findByIdWithItems(orderId)
             .orElseThrow{ throw OrderNotFoundException(orderId) }
 
         // 권한 확인
@@ -178,6 +208,7 @@ class OrderServiceImpl(
         )
     }
 
+    @Transactional(readOnly = true)
     override fun getOrders(userId: UUID, status: String?, page: Int, size: Int): OrderListResult {
         // 사용자 존재 확인
         userService.getUser(userId)
