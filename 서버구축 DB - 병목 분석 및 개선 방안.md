@@ -1043,9 +1043,11 @@ After:
 → 97.5% 개선
 ```
 
-#### 2.4 인덱스 추가
+#### 2.4 인덱스 설계 및 성능 분석
 
-현재 Product 테이블에는 이미 인덱스가 잘 설계되어 있습니다:
+##### A. 현재 인덱스 현황
+
+**1) Product 테이블 (✅ 잘 설계됨)**
 
 ```kotlin
 @Table(
@@ -1059,28 +1061,385 @@ After:
 )
 ```
 
-**추가 권장 인덱스:**
+| 인덱스 이름 | 컬럼 | 대상 쿼리 | 사용 빈도 |
+|------------|------|----------|----------|
+| `idx_product_category` | category | 카테고리별 상품 조회 | ⭐⭐⭐ 높음 |
+| `idx_product_category_sales` | category, sales_count DESC | 카테고리별 인기 상품 조회 | ⭐⭐⭐⭐ 매우 높음 |
+| `idx_product_category_price` | category, price | 카테고리별 가격 범위 검색 | ⭐⭐ 보통 |
+| `idx_product_stock` | stock | 재고 있는 상품 필터링 | ⭐⭐ 보통 |
+
+**2) Order 테이블 (✅ 잘 설계됨)**
 
 ```kotlin
-// Order 테이블
 @Table(
     name = "orders",
     indexes = [
-        Index(name = "idx_order_user_created", columnList = "user_id, created_at DESC"),  // ✅ 추가
-        Index(name = "idx_order_user_status", columnList = "user_id, status")  // ✅ 추가
-    ]
-)
-
-// UserCoupon 테이블
-@Table(
-    name = "user_coupons",
-    indexes = [
-        Index(name = "idx_user_coupon_user_id", columnList = "user_id"),
-        Index(name = "idx_user_coupon_coupon_id", columnList = "coupon_id"),
-        Index(name = "idx_user_coupon_user_coupon", columnList = "user_id, coupon_id")  // ✅ 복합 인덱스
+        Index(name = "idx_order_user_id", columnList = "user_id"),
+        Index(name = "idx_order_user_created", columnList = "user_id, created_at DESC"),
+        Index(name = "idx_order_number", columnList = "order_number", unique = true),
+        Index(name = "idx_order_status", columnList = "status"),
+        Index(name = "idx_order_user_status", columnList = "user_id, status"),
+        Index(name = "idx_order_coupon", columnList = "applied_coupon_id")
     ]
 )
 ```
+
+| 인덱스 이름 | 컬럼 | 대상 쿼리 | 사용 빈도 |
+|------------|------|----------|----------|
+| `idx_order_user_id` | user_id | 사용자별 주문 목록 조회 | ⭐⭐⭐⭐⭐ 매우 높음 |
+| `idx_order_user_created` | user_id, created_at DESC | 사용자별 최신 주문 순 조회 | ⭐⭐⭐⭐⭐ 매우 높음 |
+| `idx_order_number` | order_number (unique) | 주문 번호로 주문 조회 | ⭐⭐⭐⭐ 높음 |
+| `idx_order_status` | status | 주문 상태별 필터링 (관리자) | ⭐⭐ 보통 |
+| `idx_order_user_status` | user_id, status | 사용자별 상태 필터링 | ⭐⭐⭐⭐ 높음 |
+| `idx_order_coupon` | applied_coupon_id | 쿠폰 사용 내역 조회 | ⭐⭐ 보통 |
+
+**3) UserCoupon 테이블 (⚠️ 개선 필요 → ✅ 개선 완료)**
+
+**개선 전:**
+```kotlin
+@Table(name = "user_coupon")  // ❌ 인덱스 없음!
+```
+
+**개선 후:**
+```kotlin
+@Table(
+    name = "user_coupon",
+    indexes = [
+        Index(name = "idx_user_coupon_user_id", columnList = "user_id"),
+        Index(name = "idx_user_coupon_coupon_id", columnList = "coupon_id"),
+        Index(name = "idx_user_coupon_user_coupon", columnList = "user_id, coupon_id"),
+        Index(name = "idx_user_coupon_user_status", columnList = "user_id, status"),
+        Index(name = "idx_user_coupon_expires_at", columnList = "expires_at")
+    ]
+)
+```
+
+| 인덱스 이름 | 컬럼 | 대상 쿼리 | 사용 빈도 |
+|------------|------|----------|----------|
+| `idx_user_coupon_user_id` | user_id | 사용자 쿠폰 목록 조회 | ⭐⭐⭐⭐⭐ 매우 높음 |
+| `idx_user_coupon_coupon_id` | coupon_id | 쿠폰별 발급 내역 조회 | ⭐⭐ 보통 |
+| `idx_user_coupon_user_coupon` | user_id, coupon_id | 중복 발급 체크 | ⭐⭐⭐⭐⭐ 매우 높음 |
+| `idx_user_coupon_user_status` | user_id, status | 사용자별 특정 상태 쿠폰 조회 | ⭐⭐⭐ 높음 |
+| `idx_user_coupon_expires_at` | expires_at | 만료 예정 쿠폰 조회 (배치) | ⭐ 낮음 |
+
+##### B. 주요 쿼리별 인덱스 적용 효과
+
+**쿼리 1: 주문 목록 조회 (페이징)**
+
+```sql
+-- 개선된 쿼리 (OrderJpaRepository.findByUserIdWithPaging)
+SELECT o.*
+FROM orders o
+WHERE o.user_id = ?
+AND (:status IS NULL OR o.status = :status)
+ORDER BY o.created_at DESC
+LIMIT 10 OFFSET 0
+```
+
+**인덱스 활용:**
+- `idx_order_user_created` (user_id, created_at DESC)
+- 복합 인덱스로 WHERE 절과 ORDER BY를 모두 커버
+
+**EXPLAIN 분석 (예상):**
+
+*인덱스 없을 때:*
+```
+type: ALL (Full Table Scan)
+rows: 100,000 (전체 주문 스캔)
+Extra: Using where; Using filesort
+```
+
+*인덱스 적용 후:*
+```
+type: ref
+key: idx_order_user_created
+rows: 100 (해당 사용자 주문만)
+Extra: Using where; Using index
+```
+
+**예상 성능 개선:**
+```
+데이터: 사용자 100명, 주문 100,000개 (사용자당 평균 1,000개)
+
+인덱스 없음:
+- Full Table Scan: 100,000 rows
+- Filesort: O(n log n) = 약 1.7백만 비교
+- 응답 시간: 500-800ms
+
+인덱스 적용:
+- Index Range Scan: 1,000 rows (특정 사용자)
+- Index를 사용한 정렬 (정렬 작업 생략)
+- 응답 시간: 10-20ms
+
+→ 96-98% 개선
+```
+
+---
+
+**쿼리 2: 사용자 쿠폰 목록 조회**
+
+```sql
+-- CouponServiceImpl - 사용자 쿠폰 조회
+SELECT uc.*
+FROM user_coupon uc
+WHERE uc.user_id = ?
+AND uc.status = 'AVAILABLE'
+```
+
+**인덱스 활용:**
+- `idx_user_coupon_user_status` (user_id, status)
+- 복합 인덱스로 WHERE 절 완전 커버
+
+**EXPLAIN 분석 (예상):**
+
+*인덱스 없을 때:*
+```
+type: ALL (Full Table Scan)
+rows: 50,000 (전체 사용자 쿠폰 스캔)
+Extra: Using where
+```
+
+*인덱스 적용 후:*
+```
+type: ref
+key: idx_user_coupon_user_status
+rows: 5 (해당 사용자의 AVAILABLE 쿠폰만)
+Extra: Using index
+```
+
+**예상 성능 개선:**
+```
+데이터: 사용자 10,000명, 쿠폰 50,000개 (사용자당 평균 5개)
+
+인덱스 없음:
+- Full Table Scan: 50,000 rows
+- 응답 시간: 200-300ms
+
+인덱스 적용:
+- Index Range Scan: 5 rows
+- 응답 시간: 2-5ms
+
+→ 98-99% 개선
+```
+
+---
+
+**쿼리 3: 중복 쿠폰 발급 체크**
+
+```sql
+-- CouponServiceImpl - 중복 발급 검증
+SELECT uc.*
+FROM user_coupon uc
+WHERE uc.user_id = ?
+AND uc.coupon_id = ?
+LIMIT 1
+```
+
+**인덱스 활용:**
+- `idx_user_coupon_user_coupon` (user_id, coupon_id)
+- 복합 인덱스로 WHERE 절 완전 커버
+
+**EXPLAIN 분석 (예상):**
+
+*인덱스 없을 때:*
+```
+type: ALL (Full Table Scan)
+rows: 50,000
+Extra: Using where
+```
+
+*인덱스 적용 후:*
+```
+type: ref
+key: idx_user_coupon_user_coupon
+rows: 1 (유니크 조합)
+Extra: Using index
+```
+
+**예상 성능 개선:**
+```
+인덱스 없음:
+- Full Table Scan: 50,000 rows
+- 응답 시간: 150-250ms
+
+인덱스 적용:
+- Index Lookup: 1 row (O(log n) 검색)
+- 응답 시간: 1-2ms
+
+→ 99% 개선
+```
+
+---
+
+**쿼리 4: 인기 상품 조회**
+
+```sql
+-- ProductServiceImpl - Top 5 인기 상품
+SELECT p.*
+FROM product p
+WHERE p.sales_count > 0
+ORDER BY p.sales_count DESC, (p.price * p.sales_count) DESC, p.id ASC
+LIMIT 5
+```
+
+**인덱스 활용:**
+- `idx_product_category_sales` (category, sales_count DESC)
+- **주의**: category 조건이 없으면 인덱스의 첫 번째 컬럼을 활용할 수 없음
+- **개선 필요**: sales_count 단독 인덱스 추가 권장
+
+**EXPLAIN 분석 (예상):**
+
+*현재 (카테고리 조건 없음):*
+```
+type: ALL (Full Table Scan)
+rows: 10,000
+Extra: Using where; Using filesort
+```
+
+*개선 후 (sales_count 인덱스 추가):*
+```
+type: range
+key: idx_product_sales_count
+rows: 1,000 (sales_count > 0인 상품)
+Extra: Using where; Using index
+```
+
+**개선 방안:**
+```kotlin
+// Product 엔티티에 인덱스 추가
+Index(name = "idx_product_sales_count", columnList = "sales_count DESC")
+```
+
+**예상 성능 개선:**
+```
+인덱스 없음:
+- Full Table Scan: 10,000 rows
+- Filesort: O(n log n)
+- 응답 시간: 100-200ms
+
+인덱스 적용:
+- Index Range Scan + 정렬 (인덱스 순서 활용)
+- 응답 시간: 5-10ms
+
+→ 95% 개선
+```
+
+##### C. 인덱스 추가 권장 사항
+
+**우선순위 1 (즉시 적용):**
+```kotlin
+// Product 테이블
+Index(name = "idx_product_sales_count", columnList = "sales_count DESC")
+```
+
+**이유**: 인기 상품 조회는 카테고리 필터 없이 전체 상품 대상으로 수행되며, 현재는 Full Table Scan 발생.
+
+**우선순위 2 (선택적 적용):**
+```kotlin
+// Order 테이블 - 날짜 범위 검색용
+Index(name = "idx_order_created_at", columnList = "created_at DESC")
+
+// Coupon 테이블 - 발급 기간 조회용
+Index(name = "idx_coupon_issue_period", columnList = "issue_start_at, issue_end_at")
+```
+
+##### D. 인덱스 성능 테스트 가이드
+
+**1단계: 테스트 데이터 준비**
+
+```sql
+-- 대량 데이터 생성 (최소 10,000건 이상 권장)
+-- 사용자: 1,000명
+-- 주문: 100,000건
+-- 쿠폰 발급: 50,000건
+```
+
+**2단계: 인덱스 제거 후 성능 측정**
+
+```sql
+-- 인덱스 제거
+DROP INDEX idx_order_user_created ON orders;
+
+-- 쿼리 실행 계획 확인
+EXPLAIN SELECT * FROM orders
+WHERE user_id = 'xxx'
+ORDER BY created_at DESC
+LIMIT 10;
+
+-- 실행 시간 측정
+SET profiling = 1;
+SELECT * FROM orders WHERE user_id = 'xxx' ORDER BY created_at DESC LIMIT 10;
+SHOW PROFILES;
+```
+
+**3단계: 인덱스 생성 후 성능 측정**
+
+```sql
+-- 인덱스 생성
+CREATE INDEX idx_order_user_created ON orders(user_id, created_at DESC);
+
+-- 동일 쿼리 재실행
+EXPLAIN SELECT * FROM orders
+WHERE user_id = 'xxx'
+ORDER BY created_at DESC
+LIMIT 10;
+
+-- 실행 시간 측정
+SELECT * FROM orders WHERE user_id = 'xxx' ORDER BY created_at DESC LIMIT 10;
+SHOW PROFILES;
+```
+
+**4단계: 결과 비교**
+
+| 지표 | 인덱스 없음 | 인덱스 적용 | 개선율 |
+|------|-----------|-----------|--------|
+| 실행 계획 | Full Scan | Index Scan | - |
+| 스캔 rows | 100,000 | 1,000 | 99% ↓ |
+| 실행 시간 | 500ms | 10ms | 98% ↓ |
+
+**5단계: 실제 애플리케이션 성능 측정**
+
+```kotlin
+// 성능 측정 테스트 코드
+@Test
+fun `주문 목록 조회 성능 테스트`() {
+    val userId = UUID.randomUUID()
+
+    // 데이터 준비: 사용자당 1,000개 주문 생성
+    repeat(1000) {
+        createTestOrder(userId)
+    }
+
+    // 성능 측정
+    val startTime = System.currentTimeMillis()
+    val result = orderService.getOrders(userId, null, 0, 10)
+    val endTime = System.currentTimeMillis()
+
+    val executionTime = endTime - startTime
+    println("실행 시간: ${executionTime}ms")
+
+    // 성능 기준: 100ms 이내
+    assertThat(executionTime).isLessThan(100)
+}
+```
+
+##### E. 인덱스 트레이드오프 분석
+
+**장점:**
+- ✅ SELECT 쿼리 성능 대폭 향상 (90-99%)
+- ✅ ORDER BY, WHERE 절 최적화
+- ✅ 페이징 성능 향상
+
+**단점:**
+- ⚠️ INSERT/UPDATE/DELETE 성능 약간 저하 (5-10%)
+- ⚠️ 저장 공간 추가 사용 (인덱스 크기: 테이블의 약 10-30%)
+- ⚠️ 인덱스 유지보수 비용
+
+**결론:**
+- **읽기 중심 워크로드 (90% 이상 SELECT)**: ✅ 인덱스 적용 강력 권장
+- **쓰기 중심 워크로드 (50% 이상 INSERT/UPDATE)**: ⚠️ 인덱스 선택적 적용
+
+이커머스 시스템은 **읽기:쓰기 비율이 약 9:1**이므로 인덱스 적용이 전체 성능에 매우 긍정적입니다.
 
 ---
 
