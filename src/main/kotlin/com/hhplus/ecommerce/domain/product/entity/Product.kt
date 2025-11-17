@@ -18,7 +18,10 @@ import jakarta.persistence.*
         Index(name = "idx_product_category_price", columnList = "category, price"),
 
         // 재고 있는 상품 필터링
-        Index(name = "idx_product_stock", columnList = "stock")
+        Index(name = "idx_product_stock", columnList = "stock"),
+
+        // 전체 인기 상품 조회 (카테고리 필터 없이 sales_count로만 정렬)
+        Index(name = "idx_product_sales_count", columnList = "sales_count DESC")
     ]
 )
 class Product(
