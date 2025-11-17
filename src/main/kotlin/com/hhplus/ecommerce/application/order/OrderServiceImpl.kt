@@ -10,13 +10,12 @@ import com.hhplus.ecommerce.domain.product.entity.Product
 import com.hhplus.ecommerce.domain.coupon.entity.*
 import com.hhplus.ecommerce.domain.order.entity.*
 import com.hhplus.ecommerce.domain.order.repository.OrderJpaRepository
+import org.springframework.data.domain.PageRequest
 import org.springframework.stereotype.Service
 import org.springframework.transaction.annotation.Transactional
 import java.time.LocalDate
-import java.time.LocalDateTime
 import java.time.format.DateTimeFormatter
 import java.util.UUID
-import kotlin.math.ceil
 
 @Service
 class OrderServiceImpl(
@@ -183,31 +182,23 @@ class OrderServiceImpl(
         // 사용자 존재 확인
         userService.getUser(userId)
 
-        val orders = if (status != null) {
-            val orderStatus = try {
-                OrderStatus.valueOf(status.uppercase())
+        // 상태 파라미터 변환 (nullable)
+        val orderStatus = status?.let {
+            try {
+                OrderStatus.valueOf(it.uppercase())
             } catch (e: IllegalArgumentException) {
                 throw InvalidOrderItemsException("Invalid order status: $status")
             }
-
-            orderRepository.findByUserIdAndStatus(userId, orderStatus)
-        } else {
-            orderRepository.findByUserId(userId)
         }
 
-        // 페이지네이션
-        val totalElements = orders.size
-        val totalPages = ceil(totalElements.toDouble() / size).toInt()
-        val start = page * size
-        val end = minOf(start + size, totalElements)
+        // Pageable 생성 (최신순 정렬은 Repository의 @Query에서 처리)
+        val pageable = PageRequest.of(page, size)
 
-        val pagedOrders = if (start < totalElements) {
-            orders.subList(start, end)
-        } else {
-            emptyList()
-        }
+        // DB에서 페이징 처리된 데이터 조회 (LIMIT, OFFSET 자동 적용)
+        val orderPage = orderRepository.findByUserIdWithPaging(userId, orderStatus, pageable)
 
-        val orderSummaries = pagedOrders.map { order ->
+        // DTO 변환
+        val orderSummaries = orderPage.content.map { order ->
             OrderSummaryDto(
                 orderId = order.id!!,
                 orderNumber = order.orderNumber,
@@ -220,13 +211,14 @@ class OrderServiceImpl(
             )
         }
 
+        // Page 객체에서 페이징 정보 추출
         val pagination = PaginationInfoDto(
-            currentPage = page,
-            totalPages = totalPages,
-            totalElements = totalElements,
-            size = size,
-            hasNext = page < totalPages - 1,
-            hasPrevious = page > 0
+            currentPage = orderPage.number,
+            totalPages = orderPage.totalPages,
+            totalElements = orderPage.totalElements.toInt(),
+            size = orderPage.size,
+            hasNext = orderPage.hasNext(),
+            hasPrevious = orderPage.hasPrevious()
         )
 
         return OrderListResult(
@@ -235,7 +227,7 @@ class OrderServiceImpl(
         )
     }
 
-    @org.springframework.transaction.annotation.Transactional
+    @Transactional
     override fun cancelOrder(orderId: UUID, request: CancelOrderCommand): CancelOrderResult {
         val order = orderRepository.findById(orderId)
             .orElseThrow { OrderNotFoundException(orderId) }
