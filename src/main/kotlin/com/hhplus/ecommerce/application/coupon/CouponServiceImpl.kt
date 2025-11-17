@@ -23,8 +23,6 @@ class CouponServiceImpl(
     private val couponRepository: CouponJpaRepository,
     private val userCouponRepository: UserCouponJpaRepository
 ) : CouponService {
-
-    private val DATE_FORMATTER = DateTimeFormatter.ofPattern("yyyy-MM-dd")
     private val DATETIME_FORMATTER = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss")
 
     @Transactional
@@ -144,6 +142,7 @@ class CouponServiceImpl(
         )
     }
 
+    @Transactional(readOnly = true)
     override fun getUserCoupons(userId: UUID, status: CouponStatus?): UserCouponListResult {
         val userCoupons = userCouponRepository.findByUserId(userId)
 
@@ -154,15 +153,23 @@ class CouponServiceImpl(
             userCoupons
         }
 
+        val couponIds = filtered.map { it.couponId }.distinct()
+        val coupons = if (couponIds.isNotEmpty()) {
+            couponRepository.findAllById(couponIds)
+        } else {
+            emptyList()
+        }
+        val couponMap = coupons.associateBy { it.id!! }
+
         val now = LocalDateTime.now()
 
         val items = filtered.map { uc ->
-            // 쿠폰 메타 정보(이름/discountRate) 조회 (없으면 기본값)
-            val coupon = couponRepository.findById(uc.couponId)
-                .orElseThrow{ CouponNotFoundException(uc.couponId) }
+            // 캐시된 쿠폰 정보 조회
+            val coupon = couponMap[uc.couponId]
+                ?: throw CouponNotFoundException(uc.couponId)
 
             val couponName = coupon.name
-            val discountRate = coupon?.discountRate ?: 0
+            val discountRate = coupon.discountRate
 
             // expiresAt parsing: 저장된 포맷 "yyyy-MM-dd HH:mm:ss"
             val expiresAtDate = try {
