@@ -7,10 +7,21 @@ import org.springframework.data.domain.Pageable
 import org.springframework.data.jpa.repository.JpaRepository
 import org.springframework.data.jpa.repository.Query
 import org.springframework.data.repository.query.Param
+import java.util.Optional
 import java.util.UUID
 
 interface OrderJpaRepository : JpaRepository<Order, UUID> {
     fun findByUserId(userId: UUID): List<Order>
+
+    /**
+     * 주문 상세 조회 시 N+1 쿼리 방지를 위해 Fetch Join 사용
+     */
+    @Query("""
+        SELECT DISTINCT o FROM Order o
+        LEFT JOIN FETCH o.items
+        WHERE o.id = :orderId
+    """)
+    fun findByIdWithItems(@Param("orderId") orderId: UUID): Optional<Order>
 
     @Query("""
         SELECT o FROM Order o

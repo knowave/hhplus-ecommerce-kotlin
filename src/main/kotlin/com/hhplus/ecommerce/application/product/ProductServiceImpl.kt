@@ -10,6 +10,7 @@ import org.springframework.cache.annotation.Cacheable
 import org.springframework.data.domain.PageRequest
 import org.springframework.data.domain.Sort
 import org.springframework.stereotype.Service
+import org.springframework.transaction.annotation.Transactional
 import java.time.LocalDateTime
 import java.time.format.DateTimeFormatter
 import java.util.UUID
@@ -23,6 +24,7 @@ class ProductServiceImpl(
         private val DATE_FORMATTER: DateTimeFormatter = DateTimeFormatter.ISO_LOCAL_DATE_TIME
     }
 
+    @Transactional(readOnly = true)
     override fun getProducts(request: GetProductsCommand): ProductListResult {
         // 1. 카테고리 파싱
         val productCategory = request.category?.let {
@@ -94,21 +96,9 @@ class ProductServiceImpl(
         unless = "#result == null"
     )
     override fun getTopProducts(days: Int, limit: Int): TopProductsResult {
-        // 1. 모든 상품을 판매량 기준으로 정렬
-        val allProducts = productRepository.findAll()
-
-        // 2. 판매량이 0보다 큰 상품만 필터링
-        val soldProducts = allProducts.filter { it.salesCount > 0 }
-
-        // 3. 정렬: 판매량 > 매출액 > productId
-        val sortedProducts = soldProducts.sortedWith(
-            compareByDescending<Product> { it.salesCount }
-                .thenByDescending { it.price * it.salesCount } // revenue
-                .thenBy { it.id }
-        )
-
-        // 4. Top N개만 선택
-        val topProducts = sortedProducts.take(limit)
+        // ✅ DB 정렬 최적화: DB에서 정렬 후 필요한 개수만 조회
+        val pageable = PageRequest.of(0, limit)
+        val topProducts = productRepository.findTopProducts(pageable)
 
         // 5. DTO 변환
         val topProductItems = topProducts.mapIndexed { index, product ->
