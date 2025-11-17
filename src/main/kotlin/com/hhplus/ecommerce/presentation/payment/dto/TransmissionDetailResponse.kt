@@ -1,14 +1,15 @@
 package com.hhplus.ecommerce.presentation.payment.dto
 
 import com.hhplus.ecommerce.application.payment.dto.TransmissionDetailResult
+import java.util.UUID
 
 /**
  * 데이터 전송 상태 조회 응답 DTO
  * GET /api/data-transmissions/{transmissionId}
  */
 data class TransmissionDetailResponse(
-    val transmissionId: Long,
-    val orderId: Long,
+    val transmissionId: UUID,
+    val orderId: UUID,
     val orderNumber: String,
     val status: String,
     val attempts: Int,

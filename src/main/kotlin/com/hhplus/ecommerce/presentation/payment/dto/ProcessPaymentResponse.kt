@@ -3,15 +3,16 @@ package com.hhplus.ecommerce.presentation.payment.dto
 import com.hhplus.ecommerce.application.payment.dto.BalanceInfoResult
 import com.hhplus.ecommerce.application.payment.dto.DataTransmissionInfoResult
 import com.hhplus.ecommerce.application.payment.dto.ProcessPaymentResult
+import java.util.UUID
 
 /**
  * 결제 처리 응답 DTO
  */
 data class ProcessPaymentResponse(
-    val paymentId: Long,
-    val orderId: Long,
+    val paymentId: UUID,
+    val orderId: UUID,
     val orderNumber: String,
-    val userId: Long,
+    val userId: UUID,
     val amount: Long,
     val paymentStatus: String,
     val orderStatus: String,
@@ -54,7 +55,7 @@ data class BalanceInfo(
 }
 
 data class DataTransmissionInfo(
-    val transmissionId: Long,
+    val transmissionId: UUID,
     val status: String,
     val scheduledAt: String
 ) {

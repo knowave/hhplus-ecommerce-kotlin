@@ -1,24 +1,35 @@
 package com.hhplus.ecommerce.domain.coupon.entity
 
+import com.hhplus.ecommerce.common.entity.BaseEntity
 import com.hhplus.ecommerce.common.exception.ExpiredCouponException
 import com.hhplus.ecommerce.common.exception.InvalidCouponException
-import com.hhplus.ecommerce.domain.coupon.CouponStatus
+import com.hhplus.ecommerce.domain.coupon.repository.CouponStatus
+import jakarta.persistence.*
 import java.time.LocalDateTime
-import java.time.format.DateTimeFormatter
+import java.util.*
 
-data class UserCoupon(
-    val id: Long,
-    val userId: Long,
-    val couponId: Long,
+@Entity
+@Table(name = "user_coupon")
+class UserCoupon(
+    @Column(nullable = false, columnDefinition = "BINARY(16)")
+    val userId: UUID,
+
+    @Column(nullable = false, columnDefinition = "BINARY(16)")
+    val couponId: UUID,
+
+    @Enumerated(EnumType.STRING)
+    @Column(nullable = false, length = 20)
     var status: CouponStatus,
-    val issuedAt: String,
-    val expiresAt: String,
-    var usedAt: String? = null
-) {
-    companion object {
-        private val DATE_FORMATTER: DateTimeFormatter = DateTimeFormatter.ISO_LOCAL_DATE_TIME
-    }
 
+    @Column(nullable = false)
+    val issuedAt: LocalDateTime,
+
+    @Column(nullable = false)
+    val expiresAt: LocalDateTime,
+
+    @Column
+    var usedAt: LocalDateTime? = null
+) : BaseEntity() {
     /**
      * 쿠폰 사용
      * @throws InvalidCouponException 쿠폰을 사용할 수 없는 상태인 경우
@@ -29,13 +40,12 @@ data class UserCoupon(
             throw InvalidCouponException("쿠폰을 사용할 수 없습니다. 상태: $status")
         }
 
-        val expiresAtTime = LocalDateTime.parse(expiresAt, DATE_FORMATTER)
-        if (expiresAtTime.isBefore(LocalDateTime.now())) {
+        if (expiresAt.isBefore(LocalDateTime.now())) {
             throw ExpiredCouponException(couponId)
         }
 
         status = CouponStatus.USED
-        usedAt = LocalDateTime.now().format(DATE_FORMATTER)
+        usedAt = LocalDateTime.now()
     }
 
     /**
@@ -43,8 +53,7 @@ data class UserCoupon(
      * @return 복구 성공 여부
      */
     fun restore(): Boolean {
-        val expiresAtTime = LocalDateTime.parse(expiresAt, DATE_FORMATTER)
-        if (expiresAtTime.isBefore(LocalDateTime.now())) {
+        if (expiresAt.isBefore(LocalDateTime.now())) {
             // 만료된 쿠폰은 복구하지 않음
             status = CouponStatus.EXPIRED
             return false
@@ -59,7 +68,6 @@ data class UserCoupon(
      * 쿠폰 만료 여부 확인
      */
     fun isExpired(): Boolean {
-        val expiresAtTime = LocalDateTime.parse(expiresAt, DATE_FORMATTER)
-        return expiresAtTime.isBefore(LocalDateTime.now())
+        return expiresAt.isBefore(LocalDateTime.now())
     }
 }

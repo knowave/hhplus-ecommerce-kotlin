@@ -1,16 +1,17 @@
 package com.hhplus.ecommerce.presentation.payment.dto
 
 import com.hhplus.ecommerce.application.payment.dto.*
+import java.util.UUID
 
 /**
  * 결제 정보 조회 응답 DTO
  * GET /api/payments/{paymentId}
  */
 data class PaymentDetailResponse(
-    val paymentId: Long,
-    val orderId: Long,
+    val paymentId: UUID,
+    val orderId: UUID,
     val orderNumber: String,
-    val userId: Long,
+    val userId: UUID,
     val amount: Long,
     val paymentStatus: String,
     val paidAt: String,
@@ -33,7 +34,7 @@ data class PaymentDetailResponse(
 }
 
 data class DataTransmissionDetailInfo(
-    val transmissionId: Long,
+    val transmissionId: String,
     val status: String,
     val sentAt: String?,
     val attempts: Int

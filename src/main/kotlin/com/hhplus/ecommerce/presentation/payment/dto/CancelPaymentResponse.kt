@@ -1,15 +1,16 @@
 package com.hhplus.ecommerce.presentation.payment.dto
 
 import com.hhplus.ecommerce.application.payment.dto.*
+import java.util.UUID
 
 /**
  * 결제 취소 응답 DTO
  */
 data class CancelPaymentResponse(
-    val paymentId: Long,
-    val orderId: Long,
+    val paymentId: UUID,
+    val orderId: UUID,
     val orderNumber: String,
-    val userId: Long,
+    val userId: UUID,
     val refundedAmount: Long,
     val paymentStatus: String,
     val orderStatus: String,

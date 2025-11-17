@@ -1,22 +1,34 @@
 package com.hhplus.ecommerce.domain.order.entity
 
-/**
- * 주문 아이템 도메인 모델
- *
- * 비즈니스 규칙:
- * 1. 수량은 1 이상이어야 함
- * 2. 단가는 0 이상이어야 함
- * 3. 소계 = 단가 × 수량
- */
-data class OrderItem(
-    val id: Long,
-    val productId: Long,
-    val orderId: Long,
+import com.hhplus.ecommerce.common.entity.BaseEntity
+import jakarta.persistence.*
+import java.util.*
+
+@Entity
+@Table(name = "order_items")
+class OrderItem(
+    @Column(nullable = false, columnDefinition = "BINARY(16)")
+    val productId: UUID,
+
+    @Column(nullable = false, columnDefinition = "BINARY(16)")
+    val userId: UUID,
+
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "order_id", nullable = false)
+    val order: Order,
+
+    @Column(nullable = false, length = 255)
     val productName: String,
+
+    @Column(nullable = false)
     val quantity: Int,
+
+    @Column(nullable = false)
     val unitPrice: Long,
+
+    @Column(nullable = false)
     val subtotal: Long
-) {
+) : BaseEntity() {
     /**
      * 주문 아이템 검증
      */

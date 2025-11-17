@@ -2,13 +2,14 @@ package com.hhplus.ecommerce.presentation.order.dto
 
 import com.hhplus.ecommerce.application.order.dto.OrderDetailResult
 import com.hhplus.ecommerce.application.order.dto.PaymentInfoDto
+import java.util.UUID
 
 /**
  * 주문 상세 조회 응답 DTO
  */
 data class OrderDetailResponse(
-    val orderId: Long,
-    val userId: Long,
+    val orderId: UUID,
+    val userId: UUID,
     val orderNumber: String,
     val items: List<OrderItemResponse>,
     val pricing: PricingInfo,

@@ -6,6 +6,7 @@ import com.hhplus.ecommerce.presentation.shipping.dto.*
 import io.swagger.v3.oas.annotations.Operation
 import org.springframework.http.ResponseEntity
 import org.springframework.web.bind.annotation.*
+import java.util.UUID
 
 @RestController
 @RequestMapping("/shippings")
@@ -15,7 +16,7 @@ class ShippingController(
 
     @Operation(summary = "배송 정보 조회", description = "주문 ID로 배송 정보를 조회합니다")
     @GetMapping("{orderId}")
-    fun getShipping(@PathVariable orderId: Long): ResponseEntity<ShippingDetailResponse> {
+    fun getShipping(@PathVariable orderId: UUID): ResponseEntity<ShippingDetailResponse> {
         val result = shippingService.getShipping(orderId)
         return ResponseEntity.ok(ShippingDetailResponse.from(result))
     }
@@ -23,7 +24,7 @@ class ShippingController(
     @Operation(summary = "배송 상태 수정", description = "배송 ID로 배송 상태를 수정합니다")
     @PatchMapping("{shippingId}/status")
     fun updateShippingStatus(
-        @PathVariable shippingId: Long,
+        @PathVariable shippingId: UUID,
         @RequestBody request: UpdateShippingStatusRequest
     ): ResponseEntity<UpdateShippingStatusResponse> {
         val command = UpdateShippingStatusCommand.command(request)
@@ -35,7 +36,7 @@ class ShippingController(
     @Operation(summary = "사용자 배송 목록 조회", description = "사용자 ID로 배송 목록을 조회합니다. 상태, 배송사, 기간 필터링 및 페이징을 지원합니다")
     @GetMapping("/users/{userId}/shippings")
     fun getUserShippings(
-        @PathVariable userId: Long,
+        @PathVariable userId: UUID,
         @RequestParam(required = false) status: String?,
         @RequestParam(required = false) carrier: String?,
         @RequestParam(required = false) from: String?,

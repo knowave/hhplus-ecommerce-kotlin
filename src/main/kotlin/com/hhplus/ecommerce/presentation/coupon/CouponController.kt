@@ -2,11 +2,12 @@ package com.hhplus.ecommerce.presentation.coupon
 
 import com.hhplus.ecommerce.application.coupon.CouponService
 import com.hhplus.ecommerce.application.coupon.dto.IssueCouponCommand
-import com.hhplus.ecommerce.domain.coupon.CouponStatus
+import com.hhplus.ecommerce.domain.coupon.repository.CouponStatus
 import com.hhplus.ecommerce.presentation.coupon.dto.*
 import io.swagger.v3.oas.annotations.Operation
 import org.springframework.http.ResponseEntity
 import org.springframework.web.bind.annotation.*
+import java.util.UUID
 
 @RestController
 @RequestMapping("/coupons")
@@ -17,7 +18,7 @@ class CouponController(
     @Operation(summary = "쿠폰 발급", description = "쿠폰 ID로 사용자에게 쿠폰을 발급합니다")
     @PostMapping("/{couponId}/issue")
     fun issueCoupon(
-        @PathVariable couponId: Long,
+        @PathVariable couponId: UUID,
         @RequestBody request: IssueCouponRequest
     ): ResponseEntity<IssueCouponResponse> {
         val command = IssueCouponCommand.command(request)
@@ -35,7 +36,7 @@ class CouponController(
 
     @Operation(summary = "쿠폰 상세 조회", description = "쿠폰 ID로 쿠폰의 상세 정보를 조회합니다")
     @GetMapping("/{couponId}")
-    fun getCouponDetail(@PathVariable couponId: Long): ResponseEntity<CouponDetailResponse> {
+    fun getCouponDetail(@PathVariable couponId: UUID): ResponseEntity<CouponDetailResponse> {
         val result = couponService.getCouponDetail(couponId)
         return ResponseEntity.ok(CouponDetailResponse.from(result))
     }
@@ -43,7 +44,7 @@ class CouponController(
     @Operation(summary = "사용자 쿠폰 목록 조회", description = "사용자 ID로 보유한 쿠폰 목록을 조회합니다. 상태별 필터링을 지원합니다")
     @GetMapping("/users/{userId}")
     fun getUserCoupons(
-        @PathVariable userId: Long,
+        @PathVariable userId: UUID,
         @RequestParam(required = false) status: CouponStatus?
     ): ResponseEntity<UserCouponListResponse> {
         val result = couponService.getUserCoupons(userId, status)
@@ -53,8 +54,8 @@ class CouponController(
     @Operation(summary = "사용자의 특정 쿠폰 조회", description = "사용자 ID와 사용자 쿠폰 ID로 특정 쿠폰의 상세 정보를 조회합니다")
     @GetMapping("/users/{userId}/coupons/{userCouponId}")
     fun getUserCoupon(
-        @PathVariable userId: Long,
-        @PathVariable userCouponId: Long
+        @PathVariable userId: UUID,
+        @PathVariable userCouponId: UUID
     ): ResponseEntity<UserCouponResponse> {
         val result = couponService.getUserCoupon(userId, userCouponId)
         return ResponseEntity.ok(UserCouponResponse.from(result))

@@ -3,9 +3,10 @@ package com.hhplus.ecommerce.presentation.coupon.dto
 import com.hhplus.ecommerce.application.coupon.dto.UserCouponItemDto
 import com.hhplus.ecommerce.application.coupon.dto.UserCouponListResult
 import com.hhplus.ecommerce.application.coupon.dto.UserCouponSummaryDto
+import java.util.UUID
 
 data class UserCouponListResponse(
-    val userId: Long,
+    val userId: UUID,
     val coupons: List<UserCouponItem>,
     val summary: UserCouponSummary
 ) {
@@ -21,8 +22,8 @@ data class UserCouponListResponse(
 }
 
 data class UserCouponItem(
-    val userCouponId: Long,
-    val couponId: Long,
+    val userCouponId: UUID,
+    val couponId: UUID,
     val couponName: String,
     val discountRate: Int,
     val status: String,

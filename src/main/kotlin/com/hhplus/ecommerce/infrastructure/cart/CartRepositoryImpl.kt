@@ -1,71 +1,44 @@
 package com.hhplus.ecommerce.infrastructure.cart
 
 import com.hhplus.ecommerce.domain.cart.entity.CartItem
-import com.hhplus.ecommerce.domain.cart.CartRepository
+import com.hhplus.ecommerce.domain.cart.repository.CartRepository
 import org.springframework.stereotype.Repository
-import java.time.LocalDateTime
+import java.util.UUID
 
-/**
- * 장바구니 인메모리 Repository 구현체
- *
- * 이유: 실제 DB 없이 메모리에서 장바구니 데이터를 관리합니다.
- * UserRepositoryImpl과 동일한 패턴으로 구현하여 일관성을 유지합니다.
- */
 @Repository
 class CartRepositoryImpl : CartRepository {
 
-    // ID 자동 생성을 위한 카운터
-    private var nextId: Long = 1L
+    // Mock 데이터 저장소: CartItem
+    private val cartItems: MutableMap<UUID, CartItem> = mutableMapOf()
 
-    // Mock 데이터 저장소: cartItemId -> CartItem
-    private val cartItems: MutableMap<Long, CartItem> = mutableMapOf()
-
-    // 샘플 데이터 초기화
-    init {
-        // 사용자 1의 장바구니에 샘플 아이템 추가
-        val item1 = CartItem(
-            id = generateId(),
-            userId = 1L,
-            productId = 15L,
-            quantity = 2,
-            addedAt = LocalDateTime.now().minusHours(5)
-        )
-        val item2 = CartItem(
-            id = generateId(),
-            userId = 1L,
-            productId = 7L,
-            quantity = 1,
-            addedAt = LocalDateTime.now().minusHours(1)
-        )
-        cartItems[item1.id] = item1
-        cartItems[item2.id] = item2
+    private fun assignId(cart: CartItem) {
+        if (cart.id == null) {
+            val idField = cart.javaClass.superclass.getDeclaredField("id")
+            idField.isAccessible = true
+            idField.set(cart, UUID.randomUUID())
+        }
     }
 
-    override fun findByUserId(userId: Long): List<CartItem> {
-        return cartItems.values
-            .filter { it.userId == userId }
-            .sortedBy { it.addedAt }
-    }
-
-    override fun findById(cartItemId: Long): CartItem? {
+    override fun findById(cartItemId: UUID): CartItem? {
         return cartItems[cartItemId]
     }
 
-    override fun findByUserIdAndProductId(userId: Long, productId: Long): CartItem? {
+    override fun findByUserIdAndProductId(userId: UUID, productId: UUID): CartItem? {
         return cartItems.values
             .firstOrNull { it.userId == userId && it.productId == productId }
     }
 
     override fun save(cartItem: CartItem): CartItem {
-        cartItems[cartItem.id] = cartItem
+        assignId(cartItem)
+        cartItems[cartItem.id!!] = cartItem
         return cartItem
     }
 
-    override fun delete(cartItemId: Long) {
+    override fun delete(cartItemId: UUID) {
         cartItems.remove(cartItemId)
     }
 
-    override fun deleteByUserId(userId: Long) {
+    override fun deleteByUserId(userId: UUID) {
         val userCartItems = cartItems.values
             .filter { it.userId == userId }
             .map { it.id }
@@ -73,17 +46,19 @@ class CartRepositoryImpl : CartRepository {
         userCartItems.forEach { cartItems.remove(it) }
     }
 
-    override fun generateId(): Long {
-        return nextId++
-    }
-
-    override fun findByUserIdAndProductIds(userId: Long, productIds: List<Long>): List<CartItem>? {
+    override fun findByUserIdAndProductIds(userId: UUID, productIds: List<UUID>): List<CartItem>? {
         return cartItems.values
             .filter { it.userId == userId && it.productId in productIds }
-            .sortedBy { it.addedAt }
+            .sortedBy { it.createdAt }
     }
 
-    override fun deleteManyByIds(cartItemIds: List<Long>) {
+    override fun deleteManyByIds(cartItemIds: List<UUID>) {
         cartItemIds.forEach { cartItems.remove(it) }
+    }
+
+    override fun findByUserId(userId: UUID): List<CartItem> {
+        return cartItems.values
+            .filter { it.userId == userId }
+            .sortedBy { it.createdAt }
     }
 }
