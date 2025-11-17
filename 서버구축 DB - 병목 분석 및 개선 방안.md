@@ -568,7 +568,7 @@ override fun createOrder(request: CreateOrderCommand): CreateOrderResult {
 | 작업 | 현재 | 개선 | 이유 |
 |------|------|------|------|
 | 재고 차감 | 비관적 락 | **비관적 락 유지** | 정확성이 최우선 |
-| 쿠폰 발급 | 비관적 락 | **분산 락 (Redis) + 낙관적 락** | 높은 동시성 요구 |
+| 쿠폰 발급 | 비관적 락 | **비관적 락 유지** 또는 **분산 락 (Redis)** | 현재는 비관적 락으로 충분, 향후 확장 시 Redis 고려 |
 | 잔액 차감 | 비관적 락 | **비관적 락 유지** | 정확성이 최우선 |
 | 상품 조회 | 락 없음 | **락 없음 유지** | 읽기 작업 |
 
@@ -2206,9 +2206,3 @@ Redis 서버 추가: 월 $100
 - JPA N+1 Problem Solutions
 - Distributed Locking with Redis
 - Cache-Aside Pattern
-
----
-
-**작성일**: 2025-11-13
-**작성자**: AI Assistant (Claude Code)
-**버전**: 1.0
