@@ -1,6 +1,7 @@
 package com.hhplus.ecommerce.application.order
 
 import com.hhplus.ecommerce.application.cart.CartService
+import com.hhplus.ecommerce.application.cart.dto.AddCartItemCommand
 import com.hhplus.ecommerce.application.coupon.CouponService
 import com.hhplus.ecommerce.application.order.dto.*
 import com.hhplus.ecommerce.application.product.ProductService
@@ -11,6 +12,7 @@ import com.hhplus.ecommerce.domain.coupon.entity.*
 import com.hhplus.ecommerce.domain.order.entity.*
 import com.hhplus.ecommerce.domain.order.event.OrderCreatedEvent
 import com.hhplus.ecommerce.domain.order.repository.OrderJpaRepository
+import org.slf4j.LoggerFactory
 import org.springframework.context.ApplicationEventPublisher
 import org.springframework.data.domain.PageRequest
 import org.springframework.stereotype.Service
@@ -31,6 +33,7 @@ class OrderServiceImpl(
 
     companion object {
         private val DATE_FORMATTER: DateTimeFormatter = DateTimeFormatter.ISO_LOCAL_DATE_TIME
+        private val logger = LoggerFactory.getLogger(OrderServiceImpl::class.java)
     }
 
     /**
@@ -52,6 +55,14 @@ class OrderServiceImpl(
         val user = userService.getUser(request.userId)
 
         val orderData = createOrderTransaction(request, user.id!!)
+
+        // - 카트 삭제가 실패해도 주문 생성은 이미 완료됨
+        try {
+            val productIds = request.items.map { it.productId }
+            cartService.deleteCarts(request.userId, productIds)
+        } catch (e: Exception) {
+            logger.warn("Failed to delete cart items for user ${request.userId} after order creation", e)
+        }
 
         applicationEventPublisher.publishEvent(
             OrderCreatedEvent(
@@ -281,6 +292,23 @@ class OrderServiceImpl(
         // 주문 상태 변경 (도메인 메서드 사용)
         order.cancel()
         orderRepository.save(order)
+
+        // - 주문 취소 → 주문 아이템을 카트에 다시 추가
+        // - 카트 복원이 실패해도 주문 취소는 이미 완료됨
+        try {
+            order.items.forEach { orderItem ->
+                cartService.addCartItem(
+                    request.userId,
+                    AddCartItemCommand(
+                        productId = orderItem.productId,
+                        quantity = orderItem.quantity
+                    )
+                )
+            }
+        } catch (e: Exception) {
+            // 카트 복원 실패는 주문 취소 성공에 영향을 주지 않음 (로그만 기록)
+            logger.warn("Failed to restore cart items for user ${request.userId} after order cancellation", e)
+        }
 
         return CancelOrderResult(
             orderId = order.id!!,
