@@ -1,87 +1,97 @@
 package com.hhplus.ecommerce.infrastructure.coupon
 
 import com.hhplus.ecommerce.domain.coupon.entity.Coupon
-import com.hhplus.ecommerce.domain.coupon.CouponRepository
+import com.hhplus.ecommerce.domain.coupon.repository.CouponRepository
 import com.hhplus.ecommerce.domain.coupon.entity.UserCoupon
 import org.springframework.stereotype.Repository
-import java.time.LocalDate
 import java.time.LocalDateTime
 import java.time.format.DateTimeFormatter
+import java.util.UUID
 
 @Repository
 class CouponRepositoryImpl : CouponRepository {
 
     private val DATE_FORMATTER = DateTimeFormatter.ofPattern("yyyy-MM-dd")
-    private val DATETIME_FORMATTER = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss")
 
-    private var nextUserCouponId: Long = 1L
+    private val coupons: MutableMap<UUID, Coupon> = mutableMapOf()
 
-    private val coupons: MutableMap<Long, Coupon> = mutableMapOf(
-        1L to Coupon(
-            id = 1L,
-            name = "신규 가입 환영 쿠폰",
-            description = "신규 회원을 위한 10% 할인 쿠폰입니다.",
-            discountRate = 10,
-            totalQuantity = 100,
-            issuedQuantity = 45,
-            startDate = LocalDate.now().minusDays(7).format(DATE_FORMATTER),
-            endDate = LocalDate.now().plusDays(23).format(DATE_FORMATTER),
-            validityDays = 30,
-            createdAt = LocalDateTime.now().minusDays(10).format(DATETIME_FORMATTER)
-        ),
-        2L to Coupon(
-            id = 2L,
-            name = "VIP 고객 감사 쿠폰",
-            description = "VIP 고객님들을 위한 특별 20% 할인 쿠폰입니다.",
-            discountRate = 20,
-            totalQuantity = 50,
-            issuedQuantity = 30,
-            startDate = LocalDate.now().minusDays(3).format(DATE_FORMATTER),
-            endDate = LocalDate.now().plusDays(27).format(DATE_FORMATTER),
-            validityDays = 60,
-            createdAt = LocalDateTime.now().minusDays(5).format(DATETIME_FORMATTER)
-        ),
-        3L to Coupon(
-            id = 3L,
-            name = "주말 특가 쿠폰",
-            description = "주말 한정 15% 할인 쿠폰입니다.",
-            discountRate = 15,
-            totalQuantity = 200,
-            issuedQuantity = 198,
-            startDate = LocalDate.now().minusDays(1).format(DATE_FORMATTER),
-            endDate = LocalDate.now().plusDays(2).format(DATE_FORMATTER),
-            validityDays = 7,
-            createdAt = LocalDateTime.now().minusDays(2).format(DATETIME_FORMATTER)
-        ),
-        4L to Coupon(
-            id = 4L,
-            name = "월말 결산 쿠폰",
-            description = "월말 특별 세일 30% 할인 쿠폰입니다.",
-            discountRate = 30,
-            totalQuantity = 30,
-            issuedQuantity = 30,
-            startDate = LocalDate.now().minusDays(5).format(DATE_FORMATTER),
-            endDate = LocalDate.now().minusDays(1).format(DATE_FORMATTER),
-            validityDays = 14,
-            createdAt = LocalDateTime.now().minusDays(7).format(DATETIME_FORMATTER)
-        ),
-        5L to Coupon(
-            id = 5L,
-            name = "첫 구매 혜택 쿠폰",
-            description = "첫 구매 고객을 위한 5% 할인 쿠폰입니다.",
-            discountRate = 5,
-            totalQuantity = 500,
-            issuedQuantity = 0,
-            startDate = LocalDate.now().plusDays(1).format(DATE_FORMATTER),
-            endDate = LocalDate.now().plusDays(30).format(DATE_FORMATTER),
-            validityDays = 90,
-            createdAt = LocalDateTime.now().format(DATETIME_FORMATTER)
-        )
-    )
+    init {
+        listOf<Coupon>(
+            Coupon(
+                name = "신규 가입 환영 쿠폰",
+                description = "신규 회원을 위한 10% 할인 쿠폰입니다.",
+                discountRate = 10,
+                totalQuantity = 100,
+                issuedQuantity = 45,
+                startDate = LocalDateTime.now().minusDays(7),
+                endDate = LocalDateTime.now().plusDays(23),
+                validityDays = 30,
+            ),
+            Coupon(
+                name = "VIP 고객 감사 쿠폰",
+                description = "VIP 고객님들을 위한 특별 20% 할인 쿠폰입니다.",
+                discountRate = 20,
+                totalQuantity = 50,
+                issuedQuantity = 30,
+                startDate = LocalDateTime.now().minusDays(3),
+                endDate = LocalDateTime.now().plusDays(27),
+                validityDays = 60,
+            ),
+            Coupon(
+                name = "주말 특가 쿠폰",
+                description = "주말 한정 15% 할인 쿠폰입니다.",
+                discountRate = 15,
+                totalQuantity = 200,
+                issuedQuantity = 198,
+                startDate = LocalDateTime.now().minusDays(1),
+                endDate = LocalDateTime.now().plusDays(2),
+                validityDays = 7,
+            ),
+            Coupon(
+                name = "월말 결산 쿠폰",
+                description = "월말 특별 세일 30% 할인 쿠폰입니다.",
+                discountRate = 30,
+                totalQuantity = 30,
+                issuedQuantity = 30,
+                startDate = LocalDateTime.now().minusDays(5),
+                endDate = LocalDateTime.now().minusDays(1),
+                validityDays = 14,
+            ),
+            Coupon(
+                name = "첫 구매 혜택 쿠폰",
+                description = "첫 구매 고객을 위한 5% 할인 쿠폰입니다.",
+                discountRate = 5,
+                totalQuantity = 500,
+                issuedQuantity = 0,
+                startDate = LocalDateTime.now().plusDays(1),
+                endDate = LocalDateTime.now().plusDays(30),
+                validityDays = 90,
+            )
+        ).forEach { coupon ->
+            assignCouponId(coupon)
+            coupons[coupon.id!!] = coupon
+        }
+    }
 
     private val userCoupons: MutableMap<String, UserCoupon> = mutableMapOf()
 
-    override fun findById(couponId: Long): Coupon? {
+    private fun assignCouponId(coupon: Coupon) {
+        if (coupon.id == null) {
+            val idField = coupon.javaClass.superclass.getDeclaredField("id")
+            idField.isAccessible = true
+            idField.set(coupon, UUID.randomUUID())
+        }
+    }
+
+    private fun assignUserCouponId(userCoupon: UserCoupon) {
+        if (userCoupon.id == null) {
+            val idField = userCoupon.javaClass.superclass.getDeclaredField("id")
+            idField.isAccessible = true
+            idField.set(userCoupon, UUID.randomUUID())
+        }
+    }
+
+    override fun findById(couponId: UUID): Coupon? {
         return coupons[couponId]
     }
 
@@ -90,10 +100,10 @@ class CouponRepositoryImpl : CouponRepository {
     }
 
     override fun findAvailableCoupons(): List<Coupon> {
-        val today = LocalDate.now()
+        val today = LocalDateTime.now()
         return coupons.values.filter { coupon ->
-            val startDate = LocalDate.parse(coupon.startDate, DATE_FORMATTER)
-            val endDate = LocalDate.parse(coupon.endDate, DATE_FORMATTER)
+            val startDate = LocalDateTime.parse(coupon.startDate.toString(), DATE_FORMATTER)
+            val endDate = LocalDateTime.parse(coupon.endDate.toString(), DATE_FORMATTER)
             val isInPeriod = !today.isBefore(startDate) && !today.isAfter(endDate)
             val hasStock = coupon.issuedQuantity < coupon.totalQuantity
 
@@ -102,11 +112,12 @@ class CouponRepositoryImpl : CouponRepository {
     }
 
     override fun save(coupon: Coupon): Coupon {
-        coupons[coupon.id] = coupon
+        assignCouponId(coupon)
+        coupons[coupon.id!!] = coupon
         return coupon
     }
 
-    override fun findUserCoupon(userId: Long, couponId: Long): UserCoupon? {
+    override fun findUserCoupon(userId: UUID, couponId: UUID): UserCoupon? {
         val key = "$userId-$couponId"
         return userCoupons[key]
     }
@@ -117,15 +128,11 @@ class CouponRepositoryImpl : CouponRepository {
         return userCoupon
     }
 
-    override fun generateUserCouponId(): Long {
-        return nextUserCouponId++
-    }
-
-    override fun findUserCouponsByUserId(userId: Long): List<UserCoupon> {
+    override fun findUserCouponsByUserId(userId: UUID): List<UserCoupon> {
         return userCoupons.values.filter { it.userId == userId }
     }
 
-    override fun findUserCouponByIdAndUserId(id: Long, userId: Long): UserCoupon? {
+    override fun findUserCouponByIdAndUserId(id: UUID, userId: UUID): UserCoupon? {
         return userCoupons.values.firstOrNull { it.id == id && it.userId == userId }
     }
 }

@@ -1,10 +1,12 @@
 package com.hhplus.ecommerce.application.payment.dto
 
+import java.util.UUID
+
 data class CancelPaymentResult(
-    val paymentId: Long,
-    val orderId: Long,
+    val paymentId: UUID,
+    val orderId: UUID,
     val orderNumber: String,
-    val userId: Long,
+    val userId: UUID,
     val refundedAmount: Long,
     val paymentStatus: String,
     val orderStatus: String,

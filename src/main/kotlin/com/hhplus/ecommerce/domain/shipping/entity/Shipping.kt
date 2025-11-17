@@ -1,24 +1,51 @@
 package com.hhplus.ecommerce.domain.shipping.entity
 
+import com.hhplus.ecommerce.common.entity.BaseEntity
+import jakarta.persistence.*
 import java.time.LocalDateTime
+import java.util.*
 
-/**
- * 배송 도메인 모델
- */
-data class Shipping(
-    val id: Long,
-    val orderId: Long,
+@Entity
+@Table(name = "shipping")
+class Shipping(
+    @Column(nullable = false, columnDefinition = "BINARY(16)")
+    val orderId: UUID,
+
+    @Column(nullable = false, length = 100)
     val carrier: String,
+
+    @Column(nullable = false, length = 100)
     val trackingNumber: String,
-    val shippingStartAt: LocalDateTime?,
+
+    @Column
+    val shippingStartAt: LocalDateTime? = null,
+
+    @Column(nullable = false)
     val estimatedArrivalAt: LocalDateTime,
-    val deliveredAt: LocalDateTime?,
+
+    @Column
+    var deliveredAt: LocalDateTime? = null,
+
+    @Enumerated(EnumType.STRING)
+    @Column(nullable = false, length = 20)
     var status: ShippingStatus,
-    val isDelayed: Boolean = false,
-    val isExpired: Boolean = false,
-    val createdAt: LocalDateTime,
-    var updatedAt: LocalDateTime
-)
+
+    @Column(nullable = false)
+    var isDelayed: Boolean = false,
+
+    @Column(nullable = false)
+    val isExpired: Boolean = false
+) : BaseEntity() {
+
+    fun updateStatus(newStatus: ShippingStatus, newDeliveredAt: LocalDateTime? = null) {
+        this.status = newStatus
+        
+        if (newStatus == ShippingStatus.DELIVERED && newDeliveredAt != null) {
+            this.deliveredAt = newDeliveredAt
+            this.isDelayed = newDeliveredAt.isAfter(this.estimatedArrivalAt)
+        }
+    }
+}
 
 /**
  * 배송 상태

@@ -1,10 +1,12 @@
 package com.hhplus.ecommerce.application.payment.dto
 
+import java.util.UUID
+
 data class ProcessPaymentResult(
-    val paymentId: Long,
-    val orderId: Long,
+    val paymentId: UUID,
+    val orderId: UUID,
     val orderNumber: String,
-    val userId: Long,
+    val userId: UUID,
     val amount: Long,
     val paymentStatus: String,
     val orderStatus: String,
@@ -20,7 +22,7 @@ data class BalanceInfoResult(
 )
 
 data class DataTransmissionInfoResult(
-    val transmissionId: Long,
+    val transmissionId: UUID,
     val status: String,
     val scheduledAt: String
 )

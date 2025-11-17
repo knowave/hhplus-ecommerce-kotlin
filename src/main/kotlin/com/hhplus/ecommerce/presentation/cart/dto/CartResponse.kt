@@ -2,9 +2,10 @@ package com.hhplus.ecommerce.presentation.cart.dto
 
 import com.hhplus.ecommerce.application.cart.dto.CartResult
 import com.hhplus.ecommerce.domain.cart.entity.CartItem
+import java.util.UUID
 
 data class CartResponse(
-    val userId: Long,
+    val userId: UUID,
     val items: List<CartItemResponse>,
     val summary: CartSummary
 ) {

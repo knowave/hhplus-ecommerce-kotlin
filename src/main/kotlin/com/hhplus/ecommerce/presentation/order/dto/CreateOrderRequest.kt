@@ -1,15 +1,17 @@
 package com.hhplus.ecommerce.presentation.order.dto
 
+import java.util.UUID
+
 /**
  * 주문 생성 요청 DTO
  */
 data class CreateOrderRequest(
-    val userId: Long,
+    val userId: UUID,
     val items: List<OrderItemRequest>,
-    val couponId: Long? = null
+    val couponId: UUID? = null
 )
 
 data class OrderItemRequest(
-    val productId: Long,
+    val productId: UUID,
     val quantity: Int
 )

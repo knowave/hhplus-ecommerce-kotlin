@@ -4,13 +4,14 @@ import com.hhplus.ecommerce.application.order.dto.AppliedCouponInfoDto
 import com.hhplus.ecommerce.application.order.dto.CreateOrderResult
 import com.hhplus.ecommerce.application.order.dto.OrderItemResult
 import com.hhplus.ecommerce.application.order.dto.PricingInfoDto
+import java.util.UUID
 
 /**
  * 주문 생성 응답 DTO
  */
 data class CreateOrderResponse(
-    val orderId: Long,
-    val userId: Long,
+    val orderId: UUID,
+    val userId: UUID,
     val orderNumber: String,
     val items: List<OrderItemResponse>,
     val pricing: PricingInfo,
@@ -33,8 +34,8 @@ data class CreateOrderResponse(
 }
 
 data class OrderItemResponse(
-    val orderItemId: Long,
-    val productId: Long,
+    val orderItemId: UUID,
+    val productId: UUID,
     val productName: String,
     val quantity: Int,
     val unitPrice: Long,
@@ -73,7 +74,7 @@ data class PricingInfo(
 }
 
 data class AppliedCouponInfo(
-    val couponId: Long,
+    val couponId: UUID,
     val couponName: String,
     val discountRate: Int
 ) {
