@@ -18,6 +18,7 @@ import io.kotest.matchers.shouldBe
 import io.kotest.matchers.shouldNotBe
 import org.springframework.boot.test.autoconfigure.orm.jpa.DataJpaTest
 import org.springframework.context.annotation.ComponentScan
+import org.springframework.context.annotation.Import
 import org.springframework.test.context.TestPropertySource
 import org.springframework.transaction.PlatformTransactionManager
 import org.springframework.transaction.TransactionDefinition
@@ -36,8 +37,14 @@ import java.util.concurrent.atomic.AtomicInteger
         "spring.jpa.hibernate.ddl-auto=create-drop",
         "spring.datasource.url=jdbc:h2:mem:testdb",
         "spring.datasource.driver-class-name=org.h2.Driver",
-        "spring.jpa.database-platform=org.hibernate.dialect.H2Dialect"
+        "spring.jpa.database-platform=org.hibernate.dialect.H2Dialect",
+        "spring.data.redis.host=localhost",
+        "spring.data.redis.port=6379"
     ]
+)
+@Import(
+    com.hhplus.ecommerce.config.EmbeddedRedisConfig::class,
+    com.hhplus.ecommerce.config.TestRedisConfig::class
 )
 class CouponServiceIntegrationTest(
     private val couponService: CouponService,

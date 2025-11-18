@@ -52,6 +52,9 @@ dependencies {
     testImplementation("io.mockk:mockk:1.13.12")
     testImplementation("com.ninja-squad:springmockk:4.0.2")
 
+    // Embedded Redis for testing
+    testImplementation("it.ozimov:embedded-redis:0.7.3")
+
     testRuntimeOnly("org.junit.platform:junit-platform-launcher")
 }
 

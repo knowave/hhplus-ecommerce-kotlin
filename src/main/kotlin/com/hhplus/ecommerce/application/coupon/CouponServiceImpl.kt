@@ -2,6 +2,8 @@ package com.hhplus.ecommerce.application.coupon
 
 import com.hhplus.ecommerce.application.coupon.dto.*
 import com.hhplus.ecommerce.common.exception.*
+import com.hhplus.ecommerce.common.lock.RedisDistributedLock
+import com.hhplus.ecommerce.common.lock.LockAcquisitionFailedException
 import com.hhplus.ecommerce.domain.coupon.entity.*
 import com.hhplus.ecommerce.domain.coupon.repository.CouponJpaRepository
 import com.hhplus.ecommerce.domain.coupon.repository.CouponStatus
@@ -21,19 +23,60 @@ import kotlin.math.max
 @Service
 class CouponServiceImpl(
     private val couponRepository: CouponJpaRepository,
-    private val userCouponRepository: UserCouponJpaRepository
+    private val userCouponRepository: UserCouponJpaRepository,
+    private val redisDistributedLock: RedisDistributedLock
 ) : CouponService {
     private val DATETIME_FORMATTER = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss")
 
-    @Transactional
+    /**
+     * 쿠폰 발급
+     *
+     * 선착순 쿠폰 발급을 위한 2단계 동시성 제어:
+     *
+     * 1단계: Redis 분산 락 (외부 계층)
+     *   - 멀티 서버 환경에서 동시성 제어
+     *   - 대량 요청을 Redis 레벨에서 제어하여 DB 부하 감소
+     *   - 락 획득 실패 시 즉시 예외 반환 (빠른 실패)
+     *
+     * 2단계: DB 비관적 락 (내부 계층)
+     *   - Redis 장애 시에도 데이터 정합성 보장 (최종 방어선)
+     *   - issuedQuantity 증가의 원자성 보장
+     *
+     * 왜 Redis 분산 락만으로는 부족한가?
+     * - Redis 장애 시 동시성 제어 불가능
+     * - 네트워크 분할 등으로 인한 데이터 불일치 가능
+     * - DB가 최종 진실의 원천(Source of Truth)이므로 DB 레벨 보호 필요
+     *
+     * 왜 비관적 락만으로는 부족한가?
+     * - 대량 요청 시 DB 커넥션 풀 고갈
+     * - 모든 요청이 DB에 부하를 주어 성능 저하
+     * - 락 대기 시간 증가로 타임아웃 발생 가능성
+     */
     override fun issueCoupon(couponId: UUID, request: IssueCouponCommand): IssueCouponResult {
-        // 비관적 락을 사용하여 쿠폰 조회 (동시 발급 제어)
+        val lockKey = "coupon:issue:$couponId"
+
+        // Redis 분산 락 획득 시도 (대기 시간: 3초, 락 보유 시간: 10초)
+        return redisDistributedLock.executeWithLock(
+            lockKey = lockKey,
+            waitTimeMs = 3000,
+            leaseTimeMs = 10000
+        ) {
+            // 트랜잭션 시작: Redis 락 내에서 DB 작업 수행
+            issueCouponInternal(couponId, request)
+        }
+    }
+
+    /**
+     * 쿠폰 발급 내부 로직 (Redis 락 획득 후 실행)
+     */
+    @Transactional
+    private fun issueCouponInternal(couponId: UUID, request: IssueCouponCommand): IssueCouponResult {
+        // DB 비관적 락을 사용하여 쿠폰 조회 (이중 안전장치)
         val coupon = couponRepository.findByIdWithLock(couponId)
-            .orElseThrow{ CouponNotFoundException(couponId) }
+            .orElseThrow { CouponNotFoundException(couponId) }
 
         // 1) 중복 발급 검증 (1인 1매 제한)
         val existingUserCoupon = userCouponRepository.findFirstByUserIdAndCouponId(request.userId, couponId)
-
         if (existingUserCoupon != null) {
             throw CouponAlreadyIssuedException(request.userId, couponId)
         }
