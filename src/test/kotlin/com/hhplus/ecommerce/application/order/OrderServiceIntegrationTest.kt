@@ -8,8 +8,6 @@ import com.hhplus.ecommerce.common.exception.InsufficientStockException
 import com.hhplus.ecommerce.domain.coupon.entity.Coupon
 import com.hhplus.ecommerce.domain.coupon.repository.CouponJpaRepository
 import com.hhplus.ecommerce.domain.coupon.repository.CouponStatus
-import com.hhplus.ecommerce.domain.coupon.repository.UserCouponJpaRepository
-import com.hhplus.ecommerce.domain.order.repository.OrderJpaRepository
 import com.hhplus.ecommerce.domain.product.entity.Product
 import com.hhplus.ecommerce.domain.product.entity.ProductCategory
 import com.hhplus.ecommerce.application.order.dto.*
@@ -44,13 +42,11 @@ import java.util.concurrent.atomic.AtomicInteger
     ]
 )
 class OrderServiceIntegrationTest(
-    private val orderRepository: OrderJpaRepository,
     private val productService: ProductService,
     private val couponService: CouponService,
     private val userService: UserService,
     private val orderService: OrderService,
     private val couponRepository: CouponJpaRepository,
-    private val userCouponRepository: UserCouponJpaRepository,
     private val entityManager: EntityManager,
     private val transactionManager: PlatformTransactionManager
 ) : DescribeSpec() {
@@ -126,9 +122,7 @@ class OrderServiceIntegrationTest(
         }
 
         afterEach {
-            // 테스트 데이터 정리
-            userCouponRepository.deleteAll()
-            orderRepository.deleteAll()
+            // @DataJpaTest 자동 롤백으로 테스트 격리
         }
 
         describe("OrderService 통합 테스트 - 주문 전체 플로우") {
@@ -348,12 +342,15 @@ class OrderServiceIntegrationTest(
                                 latch.countDown()
                                 latch.await() // 모든 스레드가 준비될 때까지 대기
 
-                                val command = CreateOrderCommand(
-                                    userId = userId,
-                                    items = listOf(OrderItemCommand(productId, 1)),
-                                    couponId = null
-                                )
-                                orderService.createOrder(command)
+                                // 각 스레드에서 새로운 트랜잭션으로 실행
+                                executeInNewTransaction {
+                                    val command = CreateOrderCommand(
+                                        userId = userId,
+                                        items = listOf(OrderItemCommand(productId, 1)),
+                                        couponId = null
+                                    )
+                                    orderService.createOrder(command)
+                                }
 
                                 successCount.incrementAndGet()
                             } catch (e: InsufficientStockException) {
@@ -373,12 +370,14 @@ class OrderServiceIntegrationTest(
                         Thread.sleep(100)
                     }
 
-                    // then - 재고 검증
-                    val updatedProduct = productService.findProductById(productId)
+                    // then - 재고 검증 (별도 트랜잭션에서 조회)
+                    executeInNewTransaction {
+                        val updatedProduct = productService.findProductById(productId)
 
-                    // 동시성 테스트: 성공 + 실패 = 20명 확인
-                    (successCount.get() + failCount.get()) shouldBe 20
-                    updatedProduct.stock shouldBe (10 - successCount.get())
+                        // 동시성 테스트: 성공 + 실패 = 20명 확인
+                        (successCount.get() + failCount.get()) shouldBe 20
+                        updatedProduct.stock shouldBe (10 - successCount.get())
+                    }
                 }
 
                 it("5개 재고를 10명이 동시에 1개씩 주문하면 정확히 5명만 성공한다") {
@@ -424,12 +423,15 @@ class OrderServiceIntegrationTest(
                                 latch.countDown()
                                 latch.await()
 
-                                val command = CreateOrderCommand(
-                                    userId = userId,
-                                    items = listOf(OrderItemCommand(productId, 1)),
-                                    couponId = null
-                                )
-                                orderService.createOrder(command)
+                                // 각 스레드에서 새로운 트랜잭션으로 실행
+                                executeInNewTransaction {
+                                    val command = CreateOrderCommand(
+                                        userId = userId,
+                                        items = listOf(OrderItemCommand(productId, 1)),
+                                        couponId = null
+                                    )
+                                    orderService.createOrder(command)
+                                }
 
                                 successCount.incrementAndGet()
                             } catch (e: InsufficientStockException) {
@@ -447,12 +449,14 @@ class OrderServiceIntegrationTest(
                         Thread.sleep(100)
                     }
 
-                    // then - 재고 검증
-                    val updatedProduct = productService.findProductById(productId)
+                    // then - 재고 검증 (별도 트랜잭션에서 조회)
+                    executeInNewTransaction {
+                        val updatedProduct = productService.findProductById(productId)
 
-                    // 동시성 테스트: 성공 + 실패 = 10명 확인
-                    (successCount.get() + failCount.get()) shouldBe 10
-                    updatedProduct.stock shouldBe (5 - successCount.get())
+                        // 동시성 테스트: 성공 + 실패 = 10명 확인
+                        (successCount.get() + failCount.get()) shouldBe 10
+                        updatedProduct.stock shouldBe (5 - successCount.get())
+                    }
                 }
             }
         }
