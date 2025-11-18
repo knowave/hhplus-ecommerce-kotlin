@@ -102,10 +102,7 @@ class CouponServiceIntegrationTest(
         }
 
         afterEach {
-            executeInNewTransaction {
-                userCouponRepository.deleteAll()
-                couponRepository.deleteAll()
-            }
+            // @DataJpaTest 자동 롤백으로 테스트 격리
         }
 
         describe("CouponService 통합 테스트 - Service와 Repository 통합") {
@@ -275,8 +272,11 @@ class CouponServiceIntegrationTest(
                                 latch.countDown()
                                 latch.await() // 모든 스레드가 준비될 때까지 대기
 
-                                val command = IssueCouponCommand(userId = userId)
-                                couponService.issueCoupon(couponId, command)
+                                // 각 스레드에서 새로운 트랜잭션으로 실행
+                                executeInNewTransaction {
+                                    val command = IssueCouponCommand(userId = userId)
+                                    couponService.issueCoupon(couponId, command)
+                                }
 
                                 successCount.incrementAndGet()
                             } catch (e: CouponSoldOutException) {
@@ -305,15 +305,17 @@ class CouponServiceIntegrationTest(
                     successCount.get() shouldBe 100
                     failCount.get() shouldBe 100
 
-                    // then - 쿠폰의 발급 수량 검증
-                    val updatedCoupon = couponRepository.findById(couponId).get()
-                    println("최종 발급 수량: ${updatedCoupon.issuedQuantity}")
-                    updatedCoupon.issuedQuantity shouldBe 100
+                    // then - 쿠폰의 발급 수량 검증 (별도 트랜잭션에서 조회)
+                    executeInNewTransaction {
+                        val updatedCoupon = couponRepository.findById(couponId).get()
+                        println("최종 발급 수량: ${updatedCoupon.issuedQuantity}")
+                        updatedCoupon.issuedQuantity shouldBe 100
 
-                    // then - 실제 발급된 UserCoupon 개수 검증
-                    val issuedUserCoupons = userCouponRepository.findAll()
-                    println("실제 UserCoupon 개수: ${issuedUserCoupons.size}")
-                    issuedUserCoupons.filter { it.couponId == couponId }.size shouldBe 100
+                        // then - 실제 발급된 UserCoupon 개수 검증
+                        val issuedUserCoupons = userCouponRepository.findAll()
+                        println("실제 UserCoupon 개수: ${issuedUserCoupons.size}")
+                        issuedUserCoupons.filter { it.couponId == couponId }.size shouldBe 100
+                    }
                 }
 
                 it("10개의 쿠폰을 50명이 동시에 발급받을 때 정확히 10명만 성공한다") {
@@ -360,8 +362,11 @@ class CouponServiceIntegrationTest(
                                 latch.countDown()
                                 latch.await() // 모든 스레드가 준비될 때까지 대기
 
-                                val command = IssueCouponCommand(userId = userId)
-                                couponService.issueCoupon(couponId, command)
+                                // 각 스레드에서 새로운 트랜잭션으로 실행
+                                executeInNewTransaction {
+                                    val command = IssueCouponCommand(userId = userId)
+                                    couponService.issueCoupon(couponId, command)
+                                }
 
                                 successCount.incrementAndGet()
                             } catch (e: CouponSoldOutException) {
@@ -387,15 +392,17 @@ class CouponServiceIntegrationTest(
                     successCount.get() shouldBe 10
                     failCount.get() shouldBe 40
 
-                    // then - 쿠폰의 발급 수량 검증
-                    val updatedCoupon = couponRepository.findById(couponId).get()
-                    println("최종 발급 수량: ${updatedCoupon.issuedQuantity}")
-                    updatedCoupon.issuedQuantity shouldBe 10
+                    // then - 쿠폰의 발급 수량 검증 (별도 트랜잭션에서 조회)
+                    executeInNewTransaction {
+                        val updatedCoupon = couponRepository.findById(couponId).get()
+                        println("최종 발급 수량: ${updatedCoupon.issuedQuantity}")
+                        updatedCoupon.issuedQuantity shouldBe 10
 
-                    // then - 실제 발급된 UserCoupon 개수 검증
-                    val issuedUserCoupons = userCouponRepository.findAll()
-                    println("실제 UserCoupon 개수: ${issuedUserCoupons.size}")
-                    issuedUserCoupons.filter { it.couponId == couponId }.size shouldBe 10
+                        // then - 실제 발급된 UserCoupon 개수 검증
+                        val issuedUserCoupons = userCouponRepository.findAll()
+                        println("실제 UserCoupon 개수: ${issuedUserCoupons.size}")
+                        issuedUserCoupons.filter { it.couponId == couponId }.size shouldBe 10
+                    }
                 }
             }
         }

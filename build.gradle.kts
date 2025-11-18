@@ -53,7 +53,9 @@ dependencies {
     testImplementation("com.ninja-squad:springmockk:4.0.2")
 
     // Embedded Redis for testing
-    testImplementation("it.ozimov:embedded-redis:0.7.3")
+    testImplementation("it.ozimov:embedded-redis:0.7.3") {
+        exclude(group = "org.slf4j", module = "slf4j-simple")
+    }
 
     testRuntimeOnly("org.junit.platform:junit-platform-launcher")
 }
