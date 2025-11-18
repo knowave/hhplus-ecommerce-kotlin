@@ -4,6 +4,7 @@ import com.hhplus.ecommerce.application.coupon.dto.*
 import com.hhplus.ecommerce.common.exception.CouponAlreadyIssuedException
 import com.hhplus.ecommerce.common.exception.CouponSoldOutException
 import com.hhplus.ecommerce.common.exception.InvalidCouponDateException
+import com.hhplus.ecommerce.common.lock.RedisDistributedLock
 import com.hhplus.ecommerce.domain.coupon.repository.CouponJpaRepository
 import com.hhplus.ecommerce.domain.coupon.repository.UserCouponJpaRepository
 import com.hhplus.ecommerce.domain.coupon.repository.CouponStatus
@@ -18,6 +19,7 @@ import io.mockk.every
 import io.mockk.mockk
 import io.mockk.spyk
 import io.mockk.verify
+import io.mockk.slot
 import java.time.LocalDate
 import java.time.LocalDateTime
 import java.time.format.DateTimeFormatter
@@ -31,6 +33,7 @@ import java.util.concurrent.atomic.AtomicInteger
 class CouponServiceUnitTest : DescribeSpec({
     lateinit var couponRepository: CouponJpaRepository
     lateinit var userCouponRepository: UserCouponJpaRepository
+    lateinit var redisDistributedLock: RedisDistributedLock
     lateinit var couponService: CouponServiceImpl
     val dateFormatter: DateTimeFormatter = DateTimeFormatter.ofPattern("yyyy-MM-dd")
     val dateTimeFormatter: DateTimeFormatter = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss")
@@ -38,7 +41,17 @@ class CouponServiceUnitTest : DescribeSpec({
     beforeEach {
         couponRepository = mockk()
         userCouponRepository = mockk()
-        couponService = CouponServiceImpl(couponRepository, userCouponRepository)
+        redisDistributedLock = mockk()
+
+        // Redis 분산 락 mock: executeWithLock 호출 시 전달된 람다를 즉시 실행
+        every {
+            redisDistributedLock.executeWithLock<IssueCouponResult>(any(), any(), any(), any())
+        } answers {
+            val action = arg<() -> IssueCouponResult>(3)
+            action()
+        }
+
+        couponService = CouponServiceImpl(couponRepository, userCouponRepository, redisDistributedLock)
     }
 
     describe("CouponService 단위 테스트 - issueCoupon") {
