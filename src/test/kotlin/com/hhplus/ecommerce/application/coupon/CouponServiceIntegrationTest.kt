@@ -5,6 +5,7 @@ import com.hhplus.ecommerce.application.user.UserService
 import com.hhplus.ecommerce.application.user.dto.CreateUserCommand
 import com.hhplus.ecommerce.common.exception.CouponAlreadyIssuedException
 import com.hhplus.ecommerce.common.exception.CouponNotFoundException
+import com.hhplus.ecommerce.common.lock.LockAcquisitionFailedException
 import com.hhplus.ecommerce.domain.coupon.repository.CouponJpaRepository
 import com.hhplus.ecommerce.domain.coupon.repository.UserCouponJpaRepository
 import com.hhplus.ecommerce.domain.coupon.repository.CouponStatus
@@ -227,8 +228,8 @@ class CouponServiceIntegrationTest(
                 }
             }
 
-            context("동시성 테스트 - 쿠폰 발급") {
-                it("100개의 쿠폰을 200명이 동시에 발급받을 때 정확히 100명만 성공한다") {
+            context("동시성 테스트 - 쿠폰 발급 (분산락 + 비관적 락 조합)") {
+                it("100개의 쿠폰을 200명이 동시에 발급받을 때 정확히 100명만 성공한다 (분산락이 Redis에서 1차 방어)") {
                     // given - 쿠폰과 사용자를 별도 트랜잭션에서 생성하고 커밋
                     val couponId = executeInNewTransaction {
                         val coupon = Coupon(
@@ -318,7 +319,7 @@ class CouponServiceIntegrationTest(
                     }
                 }
 
-                it("10개의 쿠폰을 50명이 동시에 발급받을 때 정확히 10명만 성공한다") {
+                it("10개의 쿠폰을 50명이 동시에 발급받을 때 정확히 10명만 성공한다 (비관적 락이 DB에서 최종 방어)") {
                     // given - 쿠폰과 사용자를 별도 트랜잭션에서 생성하고 커밋
                     val couponId = executeInNewTransaction {
                         val coupon = Coupon(
@@ -402,6 +403,104 @@ class CouponServiceIntegrationTest(
                         val issuedUserCoupons = userCouponRepository.findAll()
                         println("실제 UserCoupon 개수: ${issuedUserCoupons.size}")
                         issuedUserCoupons.filter { it.couponId == couponId }.size shouldBe 10
+                    }
+                }
+
+                it("분산락 + 비관적 락 조합 검증 - 대량 동시 요청에서 정확한 재고 관리") {
+                    // given - 재고 50개인 쿠폰 생성
+                    val couponId = executeInNewTransaction {
+                        val coupon = Coupon(
+                            name = "분산락+비관적락 테스트 쿠폰",
+                            description = "분산락과 비관적 락의 조합 효과 검증",
+                            discountRate = 15,
+                            totalQuantity = 50,
+                            issuedQuantity = 0,
+                            startDate = LocalDateTime.now(),
+                            endDate = LocalDateTime.now().plusDays(30),
+                            validityDays = 30
+                        )
+                        val savedCoupon = couponRepository.save(coupon)
+                        savedCoupon.id!!
+                    }
+
+                    // given - 100명의 사용자 생성
+                    val userCount = 100
+                    val userIds = mutableListOf<UUID>()
+
+                    repeat(userCount) {
+                        val userId = executeInNewTransaction {
+                            val user = userService.createUser(CreateUserCommand(balance = 100000L))
+                            user.id!!
+                        }
+                        userIds.add(userId)
+                    }
+
+                    // when - 100명이 동시에 쿠폰 발급 시도
+                    // 분산락: Redis에서 1차 제어 (lock_key: coupon:issue:{couponId})
+                    // 비관적 락: DB에서 2차 방어 (SELECT ... FOR UPDATE)
+                    val threadCount = 100
+                    val executorService = Executors.newFixedThreadPool(threadCount)
+                    val latch = CountDownLatch(threadCount)
+
+                    val successCount = AtomicInteger(0)
+                    val soldOutCount = AtomicInteger(0)
+                    val lockTimeoutCount = AtomicInteger(0)
+                    val otherFailCount = AtomicInteger(0)
+
+                    for (i in 0 until threadCount) {
+                        val userId = userIds[i]
+                        executorService.submit {
+                            try {
+                                latch.countDown()
+                                latch.await() // 모든 스레드가 준비될 때까지 대기
+
+                                // 각 스레드에서 새로운 트랜잭션으로 실행
+                                executeInNewTransaction {
+                                    val command = IssueCouponCommand(userId = userId)
+                                    couponService.issueCoupon(couponId, command)
+                                }
+
+                                successCount.incrementAndGet()
+                            } catch (e: CouponSoldOutException) {
+                                // 비관적 락에서 감지된 재고 부족
+                                soldOutCount.incrementAndGet()
+                            } catch (e: LockAcquisitionFailedException) {
+                                // 분산 락 획득 실패 (Redis 레벨에서 차단)
+                                lockTimeoutCount.incrementAndGet()
+                            } catch (e: CouponAlreadyIssuedException) {
+                                // 중복 발급 방지
+                                otherFailCount.incrementAndGet()
+                            } catch (e: Exception) {
+                                e.printStackTrace()
+                                otherFailCount.incrementAndGet()
+                            }
+                        }
+                    }
+
+                    executorService.shutdown()
+                    while (!executorService.isTerminated) {
+                        Thread.sleep(100)
+                    }
+
+                    // then - 결과 검증
+                    // Assertion
+                    val totalRequests = successCount.get() + soldOutCount.get() + lockTimeoutCount.get() + otherFailCount.get()
+                    totalRequests shouldBe 100
+
+                    // 정확히 50명만 성공, 50명은 실패해야 함
+                    successCount.get() shouldBe 50
+
+                    // 나머지 50명은 CouponSoldOutException 또는 LockAcquisitionFailedException
+                    (soldOutCount.get() + lockTimeoutCount.get()) shouldBe 50
+
+                    // 데이터 정합성 검증
+                    executeInNewTransaction {
+                        val updatedCoupon = couponRepository.findById(couponId).get()
+                        updatedCoupon.issuedQuantity shouldBe 50
+
+                        // 실제 발급된 UserCoupon 개수 검증
+                        val issuedUserCoupons = userCouponRepository.findAll()
+                        issuedUserCoupons.filter { it.couponId == couponId }.size shouldBe 50
                     }
                 }
             }
