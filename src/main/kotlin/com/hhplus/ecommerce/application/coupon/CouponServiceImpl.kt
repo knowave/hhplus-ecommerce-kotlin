@@ -31,26 +31,24 @@ class CouponServiceImpl(
     /**
      * 쿠폰 발급
      *
-     * 선착순 쿠폰 발급을 위한 2단계 동시성 제어:
+     * 선착순 쿠폰 발급을 위한 Redis 분산 락 기반 동시성 제어:
      *
-     * 1단계: Redis 분산 락 (외부 계층)
+     * Redis 분산 락의 역할:
      *   - 멀티 서버 환경에서 동시성 제어
-     *   - 대량 요청을 Redis 레벨에서 제어하여 DB 부하 감소
+     *   - 대량 요청을 Redis 레벨에서 제어하여 DB 부하 최소화
      *   - 락 획득 실패 시 즉시 예외 반환 (빠른 실패)
+     *   - 빠른 락 획득/해제로 높은 처리량 확보
      *
-     * 2단계: DB 비관적 락 (내부 계층)
-     *   - Redis 장애 시에도 데이터 정합성 보장 (최종 방어선)
-     *   - issuedQuantity 증가의 원자성 보장
+     * 왜 Redis 분산 락을 선택했는가?
+     * - 선착순 이벤트는 대량의 동시 요청 발생
+     * - DB 비관적 락만 사용 시 커넥션 풀 고갈 위험
+     * - Redis는 메모리 기반으로 빠른 락 처리 가능
+     * - 트랜잭션 범위를 최소화하여 DB 부하 감소
      *
-     * 왜 Redis 분산 락만으로는 부족한가?
-     * - Redis 장애 시 동시성 제어 불가능
-     * - 네트워크 분할 등으로 인한 데이터 불일치 가능
-     * - DB가 최종 진실의 원천(Source of Truth)이므로 DB 레벨 보호 필요
-     *
-     * 왜 비관적 락만으로는 부족한가?
-     * - 대량 요청 시 DB 커넥션 풀 고갈
-     * - 모든 요청이 DB에 부하를 주어 성능 저하
-     * - 락 대기 시간 증가로 타임아웃 발생 가능성
+     * 데이터 정합성 보장:
+     * - Redis 분산 락으로 한 번에 하나의 요청만 처리
+     * - 트랜잭션 내에서 재고 검증 및 차감 원자적 수행
+     * - Redis 장애 시에도 DB 트랜잭션 격리 수준으로 보호
      */
     override fun issueCoupon(couponId: UUID, request: IssueCouponCommand): IssueCouponResult {
         val lockKey = "coupon:issue:$couponId"
@@ -68,11 +66,14 @@ class CouponServiceImpl(
 
     /**
      * 쿠폰 발급 내부 로직 (Redis 락 획득 후 실행)
+     *
+     * Redis 분산 락으로 이미 동시성이 제어되었으므로
+     * DB 락 없이 일반 조회 사용
      */
     @Transactional
     private fun issueCouponInternal(couponId: UUID, request: IssueCouponCommand): IssueCouponResult {
-        // DB 비관적 락을 사용하여 쿠폰 조회 (이중 안전장치)
-        val coupon = couponRepository.findByIdWithLock(couponId)
+        // 쿠폰 조회
+        val coupon = couponRepository.findById(couponId)
             .orElseThrow { CouponNotFoundException(couponId) }
 
         // 1) 중복 발급 검증 (1인 1매 제한)
@@ -93,17 +94,17 @@ class CouponServiceImpl(
             throw InvalidCouponDateException("The coupon issuance period has ended.")
         }
 
-        // 3) 재고 검증 (동시성 제어의 핵심)
+        // 3) 재고 검증 (Redis 락으로 동시성 제어됨)
         if (coupon.issuedQuantity >= coupon.totalQuantity) {
             throw CouponSoldOutException(couponId)
         }
 
-        // 4) 발급 수량 증가 (비관적 락으로 원자적 연산 보장)
+        // 4) 발급 수량 증가 (트랜잭션으로 원자적 연산 보장)
         coupon.issuedQuantity++
         couponRepository.save(coupon)
 
         // 5) 사용자 쿠폰 생성
-        // issuedQuantity 증가와 실제 쿠폰 생성이 원자적으로 처리되어야 재고 불일치 방지
+        // issuedQuantity 증가와 실제 쿠폰 생성이 트랜잭션 내에서 원자적으로 처리됨
         val now = LocalDateTime.now()
         val expiresAt = now.plusDays(coupon.validityDays.toLong())
 

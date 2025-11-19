@@ -228,8 +228,8 @@ class CouponServiceIntegrationTest(
                 }
             }
 
-            context("동시성 테스트 - 쿠폰 발급 (분산락 + 비관적 락 조합)") {
-                it("100개의 쿠폰을 200명이 동시에 발급받을 때 정확히 100명만 성공한다 (분산락이 Redis에서 1차 방어)") {
+            context("동시성 테스트 - 쿠폰 발급 (Redis 분산락)") {
+                it("100개의 쿠폰을 200명이 동시에 발급받을 때 정확히 100명만 성공한다 (Redis 분산락으로 동시성 제어)") {
                     // given - 쿠폰과 사용자를 별도 트랜잭션에서 생성하고 커밋
                     val couponId = executeInNewTransaction {
                         val coupon = Coupon(
@@ -319,7 +319,7 @@ class CouponServiceIntegrationTest(
                     }
                 }
 
-                it("10개의 쿠폰을 50명이 동시에 발급받을 때 정확히 10명만 성공한다 (비관적 락이 DB에서 최종 방어)") {
+                it("10개의 쿠폰을 50명이 동시에 발급받을 때 정확히 10명만 성공한다 (Redis 분산락으로 동시성 제어)") {
                     // given - 쿠폰과 사용자를 별도 트랜잭션에서 생성하고 커밋
                     val couponId = executeInNewTransaction {
                         val coupon = Coupon(
@@ -406,12 +406,12 @@ class CouponServiceIntegrationTest(
                     }
                 }
 
-                it("분산락 + 비관적 락 조합 검증 - 대량 동시 요청에서 정확한 재고 관리") {
+                it("Redis 분산락 검증 - 대량 동시 요청에서 정확한 재고 관리") {
                     // given - 재고 50개인 쿠폰 생성
                     val couponId = executeInNewTransaction {
                         val coupon = Coupon(
-                            name = "분산락+비관적락 테스트 쿠폰",
-                            description = "분산락과 비관적 락의 조합 효과 검증",
+                            name = "Redis 분산락 테스트 쿠폰",
+                            description = "Redis 분산락의 동시성 제어 효과 검증",
                             discountRate = 15,
                             totalQuantity = 50,
                             issuedQuantity = 0,
@@ -436,8 +436,7 @@ class CouponServiceIntegrationTest(
                     }
 
                     // when - 100명이 동시에 쿠폰 발급 시도
-                    // 분산락: Redis에서 1차 제어 (lock_key: coupon:issue:{couponId})
-                    // 비관적 락: DB에서 2차 방어 (SELECT ... FOR UPDATE)
+                    // Redis 분산락으로 동시성 제어 (lock_key: coupon:issue:{couponId})
                     val threadCount = 100
                     val executorService = Executors.newFixedThreadPool(threadCount)
                     val latch = CountDownLatch(threadCount)
@@ -462,10 +461,10 @@ class CouponServiceIntegrationTest(
 
                                 successCount.incrementAndGet()
                             } catch (e: CouponSoldOutException) {
-                                // 비관적 락에서 감지된 재고 부족
+                                // 재고 부족 감지
                                 soldOutCount.incrementAndGet()
                             } catch (e: LockAcquisitionFailedException) {
-                                // 분산 락 획득 실패 (Redis 레벨에서 차단)
+                                // Redis 분산 락 획득 실패 (대기 시간 초과)
                                 lockTimeoutCount.incrementAndGet()
                             } catch (e: CouponAlreadyIssuedException) {
                                 // 중복 발급 방지
