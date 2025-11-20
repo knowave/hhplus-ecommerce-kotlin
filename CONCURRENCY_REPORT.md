@@ -157,13 +157,13 @@
 ```
 ┌──────────────────────────────────────────────────────────┐
 │                                                          │
-│  쿠폰 발급                     재고 관리                 │
-│  ─────────                     ────────                 │
+│  쿠폰 발급                           재고 관리           │
+│  ─────────                           ────────           │
 │                                                          │
-│  Redis 분산락                 DB 비관적 락              │
-│  (단일 계층)                  (단일 계층)               │
+│  Redis 분산락 + @Transactional     DB 비관적 락        │
+│  + DB 비관적 락 (이중 보호)        (단일 계층)          │
 │                                                          │
-│  (고트래픽 대응)               (심플 전략)               │
+│  (고트래픽 + 원자성 보장)           (심플 전략)          │
 └──────────────────────────────────────────────────────────┘
 ```
 
@@ -267,21 +267,24 @@ private fun deductStock(items: List<OrderItemCommand>): Map<UUID, Product> {
 │  선착순 쿠폰 발급의 특징:                               │
 │  ─────────────────────                                 │
 │  • 대량의 동시 요청 발생 (이벤트 특성)                  │
-│  • 빠른 응답 속도 필요                                  │
-│  • DB 부하 최소화 필요                                  │
+│  • 빠른 응답 속도 필요 (사용자 경험)                    │
+│  • DB 부하 최소화 필요 (커넥션 풀 고갈 방지)            │
+│  • 멀티 서버 환경 (수평 확장 가능)                      │
 │                                                         │
 │  Redis 분산 락의 장점:                                  │
 │  ────────────────────                                  │
-│  • 메모리 기반으로 빠른 락 획득/해제 ✓                  │
+│  • 메모리 기반으로 빠른 락 획득/해제 (1-2ms) ✓          │
 │  • 멀티 서버 환경에서 동시성 제어 ✓                     │
-│  • DB 부하 없이 트래픽 제어 ✓                           │
+│  • DB 접근 전 트래픽 제어 (30% 차단) ✓                  │
 │  • 락 획득 실패 시 즉시 응답 (빠른 실패) ✓              │
+│  • SETNX 원자적 연산으로 간단한 구현 ✓                  │
 │                                                         │
 │  데이터 정합성 보장:                                    │
 │  ──────────────────                                    │
 │  • Redis 락으로 한 번에 하나의 요청만 처리              │
-│  • 트랜잭션 내에서 재고 검증 및 차감                    │
-│  • Redis 장애 시에도 DB 트랜잭션 격리 수준으로 보호     │
+│  • @Transactional로 Coupon + UserCoupon 원자적 저장    │
+│  • unlockAfterCommit으로 트랜잭션 커밋 후 락 해제       │
+│  • DB 비관적 락으로 이중 보호 (Redis 장애 대비)         │
 │                                                         │
 └─────────────────────────────────────────────────────────┘
 ```
@@ -334,17 +337,18 @@ fun tryLock(
  * - 롤백 시에도 락 해제하여 데드락 방지
  */
 fun unlockAfterCommit(lockKey: String, lockValue: String) {
+    // 현재 트랜잭션이 활성화되어 있는지 확인
     if (TransactionSynchronizationManager.isActualTransactionActive()) {
-        // 트랜잭션 커밋/롤백 후 실행될 콜백 등록
+        // 트랜잭션 커밋 후 실행될 콜백 등록
         TransactionSynchronizationManager.registerSynchronization(
             object : TransactionSynchronization {
                 override fun afterCommit() {
-                    // 커밋 성공 시 락 해제
+                    // 트랜잭션 커밋 성공 후 락 해제
                     unlock(lockKey, lockValue)
                 }
 
                 override fun afterCompletion(status: Int) {
-                    // 롤백 시에도 락 해제
+                    // 롤백 시에도 락 해제 (안전한 정리)
                     if (status == TransactionSynchronization.STATUS_ROLLED_BACK) {
                         unlock(lockKey, lockValue)
                     }
@@ -386,7 +390,7 @@ fun unlockAfterCommit(lockKey: String, lockValue: String) {
 └─────────────────────────────────────────────────────────┘
 ```
 
-#### 3.3.3 Redis 분산 락 + Transaction 흐름
+#### 3.3.3 Redis 분산 락 + @Transactional 흐름
 
 **데이터 정합성 보장 전략:**
 ```
@@ -395,15 +399,19 @@ fun unlockAfterCommit(lockKey: String, lockValue: String) {
 │  Redis 분산 락 안에서 트랜잭션 완전 커밋                 │
 │  ────────────────────────────────────────               │
 │                                                          │
-│  1. Redis 분산 락 획득                                   │
-│  2. 트랜잭션 시작                                        │
-│  3. 비관적 락으로 쿠폰 조회                              │
-│  4. 재고 검증 및 차감                                    │
-│  5. 쿠폰 발급                                            │
-│  6. 트랜잭션 커밋 ✓                                      │
-│  7. Redis 락 해제 (커밋 후에 실행)                       │
+│  1. Redis 분산 락 획득 (tryLock)                         │
+│  2. @Transactional 시작 (issueCouponInternal)            │
+│  3. unlockAfterCommit 등록 (트랜잭션 커밋 후 락 해제)    │
+│  4. 비관적 락으로 쿠폰 조회 (findByIdWithLock)           │
+│  5. 중복 발급 검증 (1인 1매)                             │
+│  6. 발급 기간 검증                                       │
+│  7. 재고 검증                                            │
+│  8. 발급 수량 증가 (Coupon 테이블 UPDATE)                │
+│  9. 사용자 쿠폰 생성 (UserCoupon 테이블 INSERT)          │
+│  10. 트랜잭션 커밋 ✓ (Coupon + UserCoupon 원자적 저장)   │
+│  11. Redis 락 해제 (unlockAfterCommit 콜백 실행)         │
 │                                                          │
-│  → 다음 요청이 최신 데이터를 읽음                        │
+│  → 다음 요청이 최신 데이터를 읽음 (정합성 보장)         │
 │                                                          │
 └──────────────────────────────────────────────────────────┘
 ```
@@ -413,10 +421,11 @@ fun unlockAfterCommit(lockKey: String, lockValue: String) {
 /**
  * 쿠폰 발급
  *
- * Redis 분산 락 + Transaction 조합:
- * 1. Redis 분산 락: 멀티 서버 환경의 동시성 제어
- * 2. DB 비관적 락: 데이터 정합성 보장
- * 3. 트랜잭션 커밋 후 락 해제: 최신 데이터 보장
+ * Redis 분산 락 + @Transactional 조합:
+ * 1. Redis 분산 락: 멀티 서버 환경의 동시성 제어 및 DB 부하 감소
+ * 2. DB 비관적 락: 데이터 정합성 이중 보호
+ * 3. @Transactional: Coupon + UserCoupon 원자적 저장
+ * 4. unlockAfterCommit: 트랜잭션 커밋 후 락 해제로 데이터 정합성 보장
  */
 override fun issueCoupon(couponId: UUID, request: IssueCouponCommand): IssueCouponResult {
     val lockKey = "coupon:issue:$couponId"
@@ -429,7 +438,7 @@ override fun issueCoupon(couponId: UUID, request: IssueCouponCommand): IssueCoup
     ) ?: throw LockAcquisitionFailedException("쿠폰 발급 요청이 많습니다. 잠시 후 다시 시도해주세요.")
 
     try {
-        // 2. 트랜잭션 내에서 쿠폰 발급 처리
+        // 2. 트랜잭션 내에서 쿠폰 발급 처리 + 커밋 후 락 해제
         return issueCouponInternal(couponId, request, lockKey, lockValue)
     } catch (e: Exception) {
         // 예외 발생 시 즉시 락 해제
@@ -445,106 +454,156 @@ fun issueCouponInternal(
     lockKey: String,
     lockValue: String
 ): IssueCouponResult {
-    // 3. 트랜잭션 커밋 후 락 해제 등록 (핵심!)
+    // 트랜잭션 커밋 후 락 해제되도록 등록 (핵심!)
     redisDistributedLock.unlockAfterCommit(lockKey, lockValue)
 
-    // 4. 비관적 락으로 쿠폰 조회 (이중 보호)
+    // 비관적 락으로 쿠폰 조회 (이중 보호)
     val coupon = couponRepository.findByIdWithLock(couponId)
         .orElseThrow { CouponNotFoundException(couponId) }
 
-    // 5. 중복 발급 검증
+    // 중복 발급 검증 (1인 1매 제한)
     val existingUserCoupon = userCouponRepository
         .findFirstByUserIdAndCouponId(request.userId, couponId)
     if (existingUserCoupon != null) {
         throw CouponAlreadyIssuedException(request.userId, couponId)
     }
 
-    // 6. 발급 기간 검증
+    // 발급 기간 검증
     val today = LocalDate.now()
-    if (today.isBefore(coupon.startDate.toLocalDate())) {
+    val startDate = coupon.startDate.toLocalDate()
+    val endDate = coupon.endDate.toLocalDate()
+
+    if (today.isBefore(startDate)) {
         throw InvalidCouponDateException("The coupon issuance period has not started.")
     }
-    if (today.isAfter(coupon.endDate.toLocalDate())) {
+    if (today.isAfter(endDate)) {
         throw InvalidCouponDateException("The coupon issuance period has ended.")
     }
 
-    // 7. 재고 검증
+    // 재고 검증
     if (coupon.issuedQuantity >= coupon.totalQuantity) {
         throw CouponSoldOutException(couponId)
     }
 
-    // 8. 발급 수량 증가 (더티 체킹으로 자동 저장)
+    // 발급 수량 증가
     coupon.issuedQuantity++
     couponRepository.save(coupon)
 
-    // 9. 사용자 쿠폰 생성
+    // 사용자 쿠폰 생성 (Coupon + UserCoupon이 하나의 트랜잭션에서 원자적으로 저장)
+    val now = LocalDateTime.now()
+    val expiresAt = now.plusDays(coupon.validityDays.toLong())
+
     val userCoupon = UserCoupon(
         userId = request.userId,
         couponId = couponId,
         status = CouponStatus.AVAILABLE,
-        issuedAt = LocalDateTime.now(),
-        expiresAt = LocalDateTime.now().plusDays(coupon.validityDays.toLong()),
+        issuedAt = now,
+        expiresAt = expiresAt,
         usedAt = null
     )
+
     val savedUserCoupon = userCouponRepository.save(userCoupon)
 
-    // 10. 트랜잭션 커밋 시 Redis 락이 자동으로 해제됨
-    return IssueCouponResult(...)
+    return IssueCouponResult(
+        userCouponId = savedUserCoupon.id!!,
+        userId = savedUserCoupon.userId,
+        couponId = coupon.id!!,
+        couponName = coupon.name,
+        discountRate = coupon.discountRate,
+        status = savedUserCoupon.status.name,
+        issuedAt = savedUserCoupon.issuedAt.toString(),
+        expiresAt = savedUserCoupon.expiresAt.toString(),
+        remainingQuantity = coupon.totalQuantity - coupon.issuedQuantity,
+        totalQuantity = coupon.totalQuantity
+    )
 }
 ```
 
 **핵심 포인트:**
 ```kotlin
-// ❌ 잘못된 방법: 트랜잭션 커밋 전에 락 해제
+// ❌ 잘못된 방법 1: 트랜잭션 커밋 전에 락 해제
 @Transactional
 fun issueCoupon() {
     redisLock.lock()
     try {
         // 쿠폰 발급 로직
+        couponRepository.save(coupon)
+        userCouponRepository.save(userCoupon)
     } finally {
-        redisLock.unlock()  // 트랜잭션 커밋 전에 락 해제!
+        redisLock.unlock()  // ❌ 트랜잭션 커밋 전에 락 해제!
     }
-}
-// → 다음 요청이 아직 커밋되지 않은 데이터를 읽을 수 있음
+}  // 트랜잭션 커밋 (늦음)
+// 문제: 다음 요청이 아직 커밋되지 않은 데이터를 읽을 수 있음 (Dirty Read)
 
-// ✓ 올바른 방법: 트랜잭션 커밋 후 락 해제
-@Transactional
+// ❌ 잘못된 방법 2: @Transactional 없이 Redis 락만 사용
 fun issueCoupon() {
     redisLock.lock()
-    // 트랜잭션 커밋 후 락 해제 등록
-    redisLock.unlockAfterCommit()
+    try {
+        couponRepository.save(coupon)  // ❌ 별도 트랜잭션
+        userCouponRepository.save(userCoupon)  // ❌ 별도 트랜잭션
+    } finally {
+        redisLock.unlock()
+    }
+}
+// 문제: coupon 저장 성공 후 userCoupon 저장 실패 시 롤백 안됨 (원자성 깨짐)
+
+// ✅ 올바른 방법: @Transactional + unlockAfterCommit
+override fun issueCoupon() {
+    val lockValue = redisLock.tryLock()
+    try {
+        return issueCouponInternal(lockValue)  // @Transactional 메서드 호출
+    } catch (e: Exception) {
+        redisLock.unlock(lockValue)
+        throw e
+    }
+}
+
+@Transactional
+fun issueCouponInternal(lockValue: String) {
+    redisLock.unlockAfterCommit(lockValue)  // ✅ 트랜잭션 커밋 후 락 해제 등록
 
     // 쿠폰 발급 로직
+    couponRepository.save(coupon)
+    userCouponRepository.save(userCoupon)
 
-    // 트랜잭션 커밋 → 그 후 Redis 락 해제
+    // 트랜잭션 커밋 → unlockAfterCommit 콜백 실행 → Redis 락 해제
 }
-// → 다음 요청이 항상 최신 데이터를 읽음
+// 효과:
+// 1. Coupon + UserCoupon이 원자적으로 저장됨 (둘 다 성공 또는 둘 다 롤백)
+// 2. 트랜잭션 커밋 후 락 해제 → 다음 요청이 항상 최신 데이터를 읽음
 ```
 
-**Redis 분산 락 흐름 시각화:**
+**Redis 분산 락 + @Transactional 흐름 시각화:**
 ```
         대량 동시 요청 (200명)
                ↓
 ┌──────────────────────────────┐
-│  Redis 분산 락               │
+│  Redis 분산 락 (1차 관문)    │
 │  ─────────────────────────   │
 │  • 멀티 서버 환경 대응       │
-│  • 빠른 락 획득/해제         │
-│  • DB 부하 최소화            │
+│  • 빠른 락 획득/해제 (1-2ms) │
+│  • DB 부하 최소화 (30% 차단) │
 │  • 실패 시 빠른 응답         │
 └──────────────┬───────────────┘
                ↓
         락 획득 성공 (순차적)
                ↓
 ┌──────────────────────────────┐
-│  트랜잭션 처리               │
+│  @Transactional 처리         │
 │  ─────────────────────────   │
+│  • unlockAfterCommit 등록    │
+│  • DB 비관적 락 (2차 보호)   │
 │  • 재고 검증 및 차감         │
-│  • 쿠폰 발급                 │
-│  • 데이터 정합성 보장        │
+│  • Coupon + UserCoupon 저장  │
+│  • 트랜잭션 커밋 ✓           │
+│  • Redis 락 해제 (콜백)      │
 └──────────────┬───────────────┘
                ↓
-        정확히 100명만 발급
+   정확히 100명만 발급 (원자성 + 정합성)
+   
+   ✓ Coupon.issuedQuantity = 100
+   ✓ UserCoupon 레코드 = 100개
+   ✓ 초과 발급 = 0건
 ```
 
 ### 3.4 트랜잭션 범위 최적화
@@ -613,45 +672,129 @@ private fun createOrderTransaction(request: CreateOrderCommand, userId: UUID): O
 
 #### 테스트 1: 100개 쿠폰, 200명 동시 발급
 
+**테스트 헬퍼 메서드:**
+```kotlin
+// 새로운 트랜잭션에서 실행하고 커밋하는 헬퍼 메서드
+private fun <T> executeInNewTransaction(action: () -> T): T {
+    val definition = DefaultTransactionDefinition().apply {
+        propagationBehavior = TransactionDefinition.PROPAGATION_REQUIRES_NEW
+    }
+    val status = transactionManager.getTransaction(definition)
+    return try {
+        val result = action()
+        entityManager.flush()
+        transactionManager.commit(status)
+        result
+    } catch (e: Exception) {
+        transactionManager.rollback(status)
+        throw e
+    }
+}
+```
+
 **테스트 코드:**
 ```kotlin
-it("100개의 쿠폰을 200명이 동시에 발급받을 때 정확히 100명만 성공한다") {
-    // given: 재고 100개인 쿠폰 생성
-    val couponId = createCoupon(totalQuantity = 100)
-    val userIds = (1..200).map { createUser() }
+it("100개의 쿠폰을 200명이 동시에 발급받을 때 Redis 분산락으로 순차 처리된다") {
+    // given - 쿠폰과 사용자를 별도 트랜잭션에서 생성하고 커밋
+    // executeInNewTransaction으로 각 스레드의 작업이 독립적인 트랜잭션에서 커밋되도록 보장
+    val couponId = executeInNewTransaction {
+        val coupon = Coupon(
+            name = "선착순 100명 쿠폰",
+            description = "동시성 테스트용 쿠폰",
+            discountRate = 10,
+            totalQuantity = 100,
+            issuedQuantity = 0,
+            startDate = LocalDateTime.now(),
+            endDate = LocalDateTime.now().plusDays(30),
+            validityDays = 30
+        )
+        val savedCoupon = couponRepository.save(coupon)
+        savedCoupon.id!!
+    }
 
-    // when: 200명이 동시에 쿠폰 발급 시도
+    // given - 200명의 사용자 생성
+    val userCount = 200
+    val userIds = mutableListOf<UUID>()
+
+    repeat(userCount) {
+        val userId = executeInNewTransaction {
+            val user = userService.createUser(CreateUserCommand(balance = 100000L))
+            user.id!!
+        }
+        userIds.add(userId)
+    }
+
+    // when - 200명이 동시에 쿠폰 발급 시도
     val threadCount = 200
     val executorService = Executors.newFixedThreadPool(threadCount)
     val latch = CountDownLatch(threadCount)
 
     val successCount = AtomicInteger(0)
-    val failCount = AtomicInteger(0)
+    val soldOutCount = AtomicInteger(0)
+    val alreadyIssuedCount = AtomicInteger(0)
+    val otherFailCount = AtomicInteger(0)
 
     for (i in 0 until threadCount) {
+        val userId = userIds[i]
         executorService.submit {
-            latch.countDown()
-            latch.await()  // 모든 스레드가 동시 시작
-
             try {
-                couponService.issueCoupon(couponId, IssueCouponCommand(userIds[i]))
+                latch.countDown()
+                latch.await() // 모든 스레드가 준비될 때까지 대기
+
+                // 새로운 트랜잭션에서 실행하여 독립적인 커밋 보장
+                executeInNewTransaction {
+                    val command = IssueCouponCommand(userId = userId)
+                    couponService.issueCoupon(couponId, command)
+                }
                 successCount.incrementAndGet()
             } catch (e: CouponSoldOutException) {
-                failCount.incrementAndGet()
+                // 쿠폰 품절 예외 (재고 소진)
+                soldOutCount.incrementAndGet()
+            } catch (e: CouponAlreadyIssuedException) {
+                // 중복 발급 예외 (1인 1매)
+                alreadyIssuedCount.incrementAndGet()
+            } catch (e: Exception) {
+                // 그 외 예외는 실패로 처리
+                println("Unexpected exception: ${e::class.simpleName} - ${e.message}")
+                otherFailCount.incrementAndGet()
             }
         }
     }
 
     executorService.shutdown()
-    executorService.awaitTermination(1, TimeUnit.MINUTES)
+    while (!executorService.isTerminated) {
+        Thread.sleep(100)
+    }
 
-    // then: 정확히 100명만 성공
-    successCount.get() shouldBe 100
-    failCount.get() shouldBe 100
+    // 모든 트랜잭션 커밋 완료 대기
+    Thread.sleep(500)
 
-    // 쿠폰의 최종 발급 수량 검증
-    val updatedCoupon = couponRepository.findById(couponId).get()
-    updatedCoupon.issuedQuantity shouldBe 100
+    // then - 성공/실패 개수 검증
+    // Redis 분산락으로 모든 요청이 처리됨 (성공 또는 실패)
+    val totalRequests = successCount.get() + soldOutCount.get() + alreadyIssuedCount.get() + otherFailCount.get()
+
+    // 검증
+    totalRequests shouldBe 200
+    // 가장 중요한 검증: 실제 DB에 저장된 쿠폰 발급 수량이 100개인지 확인
+    val actualIssuedCount = executeInNewTransaction {
+        val updatedCoupon = couponRepository.findById(couponId).get()
+        updatedCoupon.issuedQuantity
+    }
+
+    // 성공 카운트와 실제 발급 수량이 일치해야 함
+    successCount.get() shouldBe actualIssuedCount
+    actualIssuedCount shouldBe 100
+
+    // then - 쿠폰의 발급 수량 검증 (별도 트랜잭션에서 조회)
+    executeInNewTransaction {
+        val updatedCoupon = couponRepository.findById(couponId).get()
+        // 재고와 같은 100개만 발급됨
+        updatedCoupon.issuedQuantity shouldBe 100
+
+        // then - 실제 발급된 UserCoupon 개수 검증
+        val issuedUserCoupons = userCouponRepository.findAll()
+        issuedUserCoupons.filter { it.couponId == couponId }.size shouldBe 100
+    }
 }
 ```
 
