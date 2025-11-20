@@ -144,9 +144,14 @@ finalAmount = totalAmount - discountAmount
 - 3회 실패 시 주문 실패 처리
 
 ### 5.2 쿠폰 동시성
-- **비관적 락 사용**
+- **Redis 분산 락 + DB 비관적 락 + Transaction 조합**
+  - Redis 분산 락: 멀티 서버 환경의 동시성 제어 및 DB 부하 감소
+  - DB 비관적 락: 데이터 정합성 보장 (이중 보호)
+  - Transaction: 데이터 원자성 보장
+  - **트랜잭션 커밋 후 Redis 락 해제**: 다음 요청이 최신 데이터를 읽도록 보장 (핵심!)
 - 선착순 발급 시 `issued_quantity` 증가를 원자적으로 처리
 - 동시 발급 시도가 `total_quantity`를 초과하지 않도록 보장
+- 락 획득 실패 시 빠른 실패 응답 (사용자 대기 시간 최소화)
 
 ### 5.3 트랜잭션 격리 수준
 - 기본 격리 수준: `READ_COMMITTED`

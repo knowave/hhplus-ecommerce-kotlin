@@ -1,8 +1,12 @@
 package com.hhplus.ecommerce.common.lock
 
 import org.springframework.data.redis.core.RedisTemplate
+import org.springframework.data.redis.core.script.DefaultRedisScript
 import org.springframework.stereotype.Component
+import org.springframework.transaction.support.TransactionSynchronization
+import org.springframework.transaction.support.TransactionSynchronizationManager
 import java.time.Duration
+import java.util.UUID
 import java.util.concurrent.TimeUnit
 
 /**
@@ -19,78 +23,88 @@ class RedisDistributedLock(
     private val redisTemplate: RedisTemplate<String, String>
 ) {
 
+    private val unlockScript = DefaultRedisScript<Long>().apply {
+        setScriptText("""
+            if redis.call("get", KEYS[1]) == ARGV[1] then
+                return redis.call("del", KEYS[1])
+            else
+                return 0
+            end
+        """)
+        setResultType(Long::class.java)
+    }
+
     /**
      * 분산 락 획득 시도
      *
-     * @param lockKey 락 키 (예: "coupon:issue:${couponId}")
-     * @param waitTimeMs 락 획득 대기 시간 (밀리초)
-     * @param leaseTimeMs 락 보유 시간 (밀리초) - 락 획득 후 자동 해제되는 시간
      * @return 락 획득 성공 여부
      */
-    fun tryLock(
-        lockKey: String,
-        waitTimeMs: Long = 3000,
-        leaseTimeMs: Long = 5000
-    ): Boolean {
+    fun tryLock(lockKey: String, waitTimeMs: Long = 3000, leaseTimeMs: Long = 5000): String? {
+        val lockValue = "${UUID.randomUUID()}-${Thread.currentThread().id}"
         val startTime = System.currentTimeMillis()
-        val lockValue = Thread.currentThread().id.toString()
+        val endTime = startTime + waitTimeMs
 
-        while (System.currentTimeMillis() - startTime < waitTimeMs) {
-            // SETNX (SET if Not exists) 방식으로 락 획득 시도
+        while (System.currentTimeMillis() < endTime) {
             val acquired = redisTemplate.opsForValue()
                 .setIfAbsent(lockKey, lockValue, Duration.ofMillis(leaseTimeMs)) ?: false
 
             if (acquired) {
-                return true
+                return lockValue
             }
 
-            // 락 획득 실패 시 짧은 대기 후 재시도
+            val remainingTime = endTime - System.currentTimeMillis()
+            if (remainingTime <= 0) break
+
+            val sleepTime = minOf(50L, remainingTime)
+
             try {
-                TimeUnit.MILLISECONDS.sleep(50)
+                TimeUnit.MILLISECONDS.sleep(sleepTime)
             } catch (e: InterruptedException) {
                 Thread.currentThread().interrupt()
-                return false
+                return null
             }
         }
 
-        return false
+        return null
     }
 
     /**
      * 분산 락 해제
-     *
-     * @param lockKey 락 키
      */
-    fun unlock(lockKey: String) {
-        redisTemplate.delete(lockKey)
+    fun unlock(lockKey: String, lockValue: String): Boolean {
+        return try {
+            val result = redisTemplate.execute(
+                unlockScript,
+                listOf(lockKey),
+                lockValue
+            )
+            result == 1L
+        } catch (e: Exception) {
+            return false
+        }
     }
 
-    /**
-     * 락 획득 후 작업 실행 (고차 함수)
-     *
-     * @param lockKey 락 키
-     * @param waitTimeMs 락 획득 대기 시간 (밀리초)
-     * @param leaseTimeMs 락 보유 시간 (밀리초)
-     * @param action 락 획득 후 실행할 작업
-     * @return 작업 실행 결과
-     * @throws LockAcquisitionFailedException 락 획득 실패 시
-     */
-    fun <T> executeWithLock(
-        lockKey: String,
-        waitTimeMs: Long = 3000,
-        leaseTimeMs: Long = 5000,
-        action: () -> T
-    ): T {
-        val acquired = tryLock(lockKey, waitTimeMs, leaseTimeMs)
+    fun unlockAfterCommit(lockKey: String, lockValue: String) {
+        // 현재 트랜잭션이 활성화되어 있는지 확인
+        if (TransactionSynchronizationManager.isActualTransactionActive()) {
+            // 트랜잭션 커밋 후 실행될 콜백 등록
+            TransactionSynchronizationManager.registerSynchronization(
+                object : TransactionSynchronization {
+                    override fun afterCommit() {
+                        unlock(lockKey, lockValue)
+                    }
 
-        if (!acquired) {
-            throw LockAcquisitionFailedException("Failed to acquire lock for key: $lockKey")
-        }
-
-        return try {
-            action()
-        } finally {
-            unlock(lockKey)
+                    override fun afterCompletion(status: Int) {
+                        // 롤백 시에도 락 해제
+                        if (status == TransactionSynchronization.STATUS_ROLLED_BACK) {
+                            unlock(lockKey, lockValue)
+                        }
+                    }
+                }
+            )
+        } else {
+            // 트랜잭션이 없으면 즉시 해제
+            unlock(lockKey, lockValue)
         }
     }
 }

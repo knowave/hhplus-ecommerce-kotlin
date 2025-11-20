@@ -10,7 +10,9 @@ import com.hhplus.ecommerce.domain.coupon.repository.CouponStatus
 import com.hhplus.ecommerce.domain.coupon.repository.UserCouponJpaRepository
 import org.springframework.http.HttpStatus
 import org.springframework.stereotype.Service
+import org.springframework.transaction.annotation.Propagation
 import org.springframework.transaction.annotation.Transactional
+import org.springframework.transaction.support.TransactionTemplate
 import org.springframework.web.server.ResponseStatusException
 import java.time.LocalDate
 import java.time.LocalDateTime
@@ -24,7 +26,8 @@ import kotlin.math.max
 class CouponServiceImpl(
     private val couponRepository: CouponJpaRepository,
     private val userCouponRepository: UserCouponJpaRepository,
-    private val redisDistributedLock: RedisDistributedLock
+    private val redisDistributedLock: RedisDistributedLock,
+    private val transactionTemplate: TransactionTemplate
 ) : CouponService {
     private val DATETIME_FORMATTER = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss")
 
@@ -45,44 +48,47 @@ class CouponServiceImpl(
      * - Redis는 메모리 기반으로 빠른 락 처리 가능
      * - 트랜잭션 범위를 최소화하여 DB 부하 감소
      *
-     * 데이터 정합성 보장:
-     * - Redis 분산 락으로 한 번에 하나의 요청만 처리
-     * - 트랜잭션 내에서 재고 검증 및 차감 원자적 수행
-     * - Redis 장애 시에도 DB 트랜잭션 격리 수준으로 보호
+     * 데이터 정합성 보장 (핵심):
+     * - Redis 분산 락 안에서 트랜잭션 완전 커밋
+     * - TransactionTemplate으로 프로그래밍 방식 트랜잭션 관리
+     * - 트랜잭션 커밋 후 Redis 락 해제 (순서 보장)
+     * - 다음 요청이 최신 데이터를 읽도록 보장
      */
     override fun issueCoupon(couponId: UUID, request: IssueCouponCommand): IssueCouponResult {
         val lockKey = "coupon:issue:$couponId"
 
-        // Redis 분산 락 획득 시도 (대기 시간: 3초, 락 보유 시간: 10초)
-        return redisDistributedLock.executeWithLock(
+        val lockValue = redisDistributedLock.tryLock(
             lockKey = lockKey,
             waitTimeMs = 3000,
             leaseTimeMs = 10000
-        ) {
-            // 트랜잭션 시작: Redis 락 내에서 DB 작업 수행
-            issueCouponInternal(couponId, request)
+        ) ?: throw LockAcquisitionFailedException("쿠폰 발급 요청이 많습니다. 잠시 후 다시 시도해주세요.")
+
+        try {
+            // 2~5. 트랜잭션 내에서 실행 + 커밋 후 락 해제
+            return issueCouponInternal(couponId, request, lockKey, lockValue)
+        } catch (e: Exception) {
+            // 예외 발생 시 즉시 락 해제
+            redisDistributedLock.unlock(lockKey, lockValue)
+            throw e
         }
     }
 
-    /**
-     * 쿠폰 발급 내부 로직 (Redis 락 획득 후 실행)
-     *
-     * Redis 분산 락으로 이미 동시성이 제어되었으므로
-     * DB 락 없이 일반 조회 사용
-     */
     @Transactional
-    private fun issueCouponInternal(couponId: UUID, request: IssueCouponCommand): IssueCouponResult {
-        // 쿠폰 조회
-        val coupon = couponRepository.findById(couponId)
+    fun issueCouponInternal(couponId: UUID, request: IssueCouponCommand, lockKey: String, lockValue: String): IssueCouponResult {
+        // 트랜잭션 커밋 후 락 해제되도록 등록
+        redisDistributedLock.unlockAfterCommit(lockKey, lockValue)
+
+        // 비관적 락으로 쿠폰 조회
+        val coupon = couponRepository.findByIdWithLock(couponId)
             .orElseThrow { CouponNotFoundException(couponId) }
 
-        // 1) 중복 발급 검증 (1인 1매 제한)
+        // 중복 발급 검증
         val existingUserCoupon = userCouponRepository.findFirstByUserIdAndCouponId(request.userId, couponId)
         if (existingUserCoupon != null) {
             throw CouponAlreadyIssuedException(request.userId, couponId)
         }
 
-        // 2) 발급 기간 검증
+        // 발급 기간 검증
         val today = LocalDate.now()
         val startDate = coupon.startDate.toLocalDate()
         val endDate = coupon.endDate.toLocalDate()
@@ -94,17 +100,16 @@ class CouponServiceImpl(
             throw InvalidCouponDateException("The coupon issuance period has ended.")
         }
 
-        // 3) 재고 검증 (Redis 락으로 동시성 제어됨)
+        // 재고 검증
         if (coupon.issuedQuantity >= coupon.totalQuantity) {
             throw CouponSoldOutException(couponId)
         }
 
-        // 4) 발급 수량 증가 (트랜잭션으로 원자적 연산 보장)
+        // 발급 수량 증가
         coupon.issuedQuantity++
         couponRepository.save(coupon)
 
-        // 5) 사용자 쿠폰 생성
-        // issuedQuantity 증가와 실제 쿠폰 생성이 트랜잭션 내에서 원자적으로 처리됨
+        // 사용자 쿠폰 생성
         val now = LocalDateTime.now()
         val expiresAt = now.plusDays(coupon.validityDays.toLong())
 
@@ -112,14 +117,13 @@ class CouponServiceImpl(
             userId = request.userId,
             couponId = couponId,
             status = CouponStatus.AVAILABLE,
-            issuedAt = LocalDateTime.now(),
+            issuedAt = now,
             expiresAt = expiresAt,
             usedAt = null
         )
 
         val savedUserCoupon = userCouponRepository.save(userCoupon)
 
-        // 6) 응답 생성
         return IssueCouponResult(
             userCouponId = savedUserCoupon.id!!,
             userId = savedUserCoupon.userId,

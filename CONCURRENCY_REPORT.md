@@ -294,25 +294,67 @@ fun tryLock(
     lockKey: String,
     waitTimeMs: Long = 3000,    // 락 획득 대기 시간
     leaseTimeMs: Long = 5000    // 락 보유 시간 (자동 해제)
-): Boolean {
+): String? {
+    val lockValue = "${UUID.randomUUID()}-${Thread.currentThread().id}"
     val startTime = System.currentTimeMillis()
-    val lockValue = Thread.currentThread().id.toString()
+    val endTime = startTime + waitTimeMs
 
-    while (System.currentTimeMillis() - startTime < waitTimeMs) {
+    while (System.currentTimeMillis() < endTime) {
         // SETNX (SET if Not eXists) 방식으로 락 획득
         val acquired = redisTemplate.opsForValue()
             .setIfAbsent(lockKey, lockValue, Duration.ofMillis(leaseTimeMs))
             ?: false
 
         if (acquired) {
-            return true  // 락 획득 성공
+            return lockValue  // 락 획득 성공 (lockValue 반환)
         }
 
-        // 짧은 대기 후 재시도
-        TimeUnit.MILLISECONDS.sleep(50)
+        val remainingTime = endTime - System.currentTimeMillis()
+        if (remainingTime <= 0) break
+
+        val sleepTime = minOf(50L, remainingTime)
+
+        try {
+            TimeUnit.MILLISECONDS.sleep(sleepTime)
+        } catch (e: InterruptedException) {
+            Thread.currentThread().interrupt()
+            return null
+        }
     }
 
-    return false  // 락 획득 실패
+    return null  // 락 획득 실패
+}
+
+/**
+ * 트랜잭션 커밋 후 락 해제
+ *
+ * 데이터 정합성의 핵심:
+ * - 트랜잭션이 완전히 커밋된 후 락 해제
+ * - 다음 요청이 최신 데이터를 읽도록 보장
+ * - 롤백 시에도 락 해제하여 데드락 방지
+ */
+fun unlockAfterCommit(lockKey: String, lockValue: String) {
+    if (TransactionSynchronizationManager.isActualTransactionActive()) {
+        // 트랜잭션 커밋/롤백 후 실행될 콜백 등록
+        TransactionSynchronizationManager.registerSynchronization(
+            object : TransactionSynchronization {
+                override fun afterCommit() {
+                    // 커밋 성공 시 락 해제
+                    unlock(lockKey, lockValue)
+                }
+
+                override fun afterCompletion(status: Int) {
+                    // 롤백 시에도 락 해제
+                    if (status == TransactionSynchronization.STATUS_ROLLED_BACK) {
+                        unlock(lockKey, lockValue)
+                    }
+                }
+            }
+        )
+    } else {
+        // 트랜잭션이 없으면 즉시 해제
+        unlock(lockKey, lockValue)
+    }
 }
 ```
 
@@ -344,51 +386,139 @@ fun tryLock(
 └─────────────────────────────────────────────────────────┘
 ```
 
-#### 3.3.3 Redis 분산 락 흐름
+#### 3.3.3 Redis 분산 락 + Transaction 흐름
+
+**데이터 정합성 보장 전략:**
+```
+┌──────────────────────────────────────────────────────────┐
+│                                                          │
+│  Redis 분산 락 안에서 트랜잭션 완전 커밋                 │
+│  ────────────────────────────────────────               │
+│                                                          │
+│  1. Redis 분산 락 획득                                   │
+│  2. 트랜잭션 시작                                        │
+│  3. 비관적 락으로 쿠폰 조회                              │
+│  4. 재고 검증 및 차감                                    │
+│  5. 쿠폰 발급                                            │
+│  6. 트랜잭션 커밋 ✓                                      │
+│  7. Redis 락 해제 (커밋 후에 실행)                       │
+│                                                          │
+│  → 다음 요청이 최신 데이터를 읽음                        │
+│                                                          │
+└──────────────────────────────────────────────────────────┘
+```
 
 **CouponServiceImpl.kt**
 ```kotlin
+/**
+ * 쿠폰 발급
+ *
+ * Redis 분산 락 + Transaction 조합:
+ * 1. Redis 분산 락: 멀티 서버 환경의 동시성 제어
+ * 2. DB 비관적 락: 데이터 정합성 보장
+ * 3. 트랜잭션 커밋 후 락 해제: 최신 데이터 보장
+ */
 override fun issueCoupon(couponId: UUID, request: IssueCouponCommand): IssueCouponResult {
     val lockKey = "coupon:issue:$couponId"
 
-    // Redis 분산 락 획득
-    return redisDistributedLock.executeWithLock(
+    // 1. Redis 분산 락 획득 시도 (3초 대기, 10초 유지)
+    val lockValue = redisDistributedLock.tryLock(
         lockKey = lockKey,
         waitTimeMs = 3000,
         leaseTimeMs = 10000
-    ) {
-        issueCouponInternal(couponId, request)
+    ) ?: throw LockAcquisitionFailedException("쿠폰 발급 요청이 많습니다. 잠시 후 다시 시도해주세요.")
+
+    try {
+        // 2. 트랜잭션 내에서 쿠폰 발급 처리
+        return issueCouponInternal(couponId, request, lockKey, lockValue)
+    } catch (e: Exception) {
+        // 예외 발생 시 즉시 락 해제
+        redisDistributedLock.unlock(lockKey, lockValue)
+        throw e
     }
 }
 
 @Transactional
-private fun issueCouponInternal(couponId: UUID, request: IssueCouponCommand): IssueCouponResult {
-    // 쿠폰 조회 (Redis 락으로 이미 동시성 제어됨)
-    val coupon = couponRepository.findById(couponId)
+fun issueCouponInternal(
+    couponId: UUID,
+    request: IssueCouponCommand,
+    lockKey: String,
+    lockValue: String
+): IssueCouponResult {
+    // 3. 트랜잭션 커밋 후 락 해제 등록 (핵심!)
+    redisDistributedLock.unlockAfterCommit(lockKey, lockValue)
+
+    // 4. 비관적 락으로 쿠폰 조회 (이중 보호)
+    val coupon = couponRepository.findByIdWithLock(couponId)
         .orElseThrow { CouponNotFoundException(couponId) }
 
-    // 중복 발급 검증
+    // 5. 중복 발급 검증
     val existingUserCoupon = userCouponRepository
         .findFirstByUserIdAndCouponId(request.userId, couponId)
     if (existingUserCoupon != null) {
         throw CouponAlreadyIssuedException(request.userId, couponId)
     }
 
-    // 재고 검증 (Redis 락으로 동시성 제어됨)
+    // 6. 발급 기간 검증
+    val today = LocalDate.now()
+    if (today.isBefore(coupon.startDate.toLocalDate())) {
+        throw InvalidCouponDateException("The coupon issuance period has not started.")
+    }
+    if (today.isAfter(coupon.endDate.toLocalDate())) {
+        throw InvalidCouponDateException("The coupon issuance period has ended.")
+    }
+
+    // 7. 재고 검증
     if (coupon.issuedQuantity >= coupon.totalQuantity) {
         throw CouponSoldOutException(couponId)
     }
 
-    // 발급 수량 증가 (트랜잭션으로 원자적 연산 보장)
+    // 8. 발급 수량 증가 (더티 체킹으로 자동 저장)
     coupon.issuedQuantity++
     couponRepository.save(coupon)
 
-    // 사용자 쿠폰 생성
-    val userCoupon = UserCoupon(...)
-    userCouponRepository.save(userCoupon)
+    // 9. 사용자 쿠폰 생성
+    val userCoupon = UserCoupon(
+        userId = request.userId,
+        couponId = couponId,
+        status = CouponStatus.AVAILABLE,
+        issuedAt = LocalDateTime.now(),
+        expiresAt = LocalDateTime.now().plusDays(coupon.validityDays.toLong()),
+        usedAt = null
+    )
+    val savedUserCoupon = userCouponRepository.save(userCoupon)
 
+    // 10. 트랜잭션 커밋 시 Redis 락이 자동으로 해제됨
     return IssueCouponResult(...)
 }
+```
+
+**핵심 포인트:**
+```kotlin
+// ❌ 잘못된 방법: 트랜잭션 커밋 전에 락 해제
+@Transactional
+fun issueCoupon() {
+    redisLock.lock()
+    try {
+        // 쿠폰 발급 로직
+    } finally {
+        redisLock.unlock()  // 트랜잭션 커밋 전에 락 해제!
+    }
+}
+// → 다음 요청이 아직 커밋되지 않은 데이터를 읽을 수 있음
+
+// ✓ 올바른 방법: 트랜잭션 커밋 후 락 해제
+@Transactional
+fun issueCoupon() {
+    redisLock.lock()
+    // 트랜잭션 커밋 후 락 해제 등록
+    redisLock.unlockAfterCommit()
+
+    // 쿠폰 발급 로직
+
+    // 트랜잭션 커밋 → 그 후 Redis 락 해제
+}
+// → 다음 요청이 항상 최신 데이터를 읽음
 ```
 
 **Redis 분산 락 흐름 시각화:**
