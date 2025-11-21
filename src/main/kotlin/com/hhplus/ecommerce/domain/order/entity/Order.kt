@@ -1,7 +1,9 @@
 package com.hhplus.ecommerce.domain.order.entity
 
 import com.hhplus.ecommerce.common.entity.BaseEntity
+import com.hhplus.ecommerce.common.exception.InvalidOrderStatusException
 import com.hhplus.ecommerce.common.exception.OrderAlreadyCancelledException
+import com.hhplus.ecommerce.common.exception.OrderForbiddenException
 import com.hhplus.ecommerce.common.exception.OrderNotRefundableException
 import com.hhplus.ecommerce.common.exception.PaymentFailedException
 import jakarta.persistence.*
@@ -135,6 +137,24 @@ class Order(
      */
     fun isRefunded(): Boolean {
         return status == OrderStatus.REFUNDED
+    }
+
+    /**
+     * 주문자 본인 확인
+     */
+    fun validateOwner(requestUserId: UUID) {
+        if (this.userId != requestUserId) {
+            throw OrderForbiddenException()
+        }
+    }
+
+    /**
+     * 결제 가능 상태 확인
+     */
+    fun validatePaymentEligibility() {
+        if (this.status != OrderStatus.PENDING) {
+            throw InvalidOrderStatusException(this.status.name)
+        }
     }
 }
 

@@ -247,7 +247,7 @@ class PaymentServiceIntegrationTest(
 
                 // when & then - 두 번째 사용자가 결제 시도
                 val paymentCommand = ProcessPaymentCommand(userId = user2.id!!)
-                shouldThrow<ForbiddenException> {
+                shouldThrow<OrderForbiddenException> {
                     paymentService.processPayment(order.orderId, paymentCommand)
                 }
             }
