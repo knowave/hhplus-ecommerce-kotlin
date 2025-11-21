@@ -8,8 +8,6 @@ import com.hhplus.ecommerce.application.order.dto.CreateOrderCommand
 import com.hhplus.ecommerce.application.order.dto.OrderItemCommand
 import com.hhplus.ecommerce.application.payment.dto.ProcessPaymentCommand
 import com.hhplus.ecommerce.application.user.dto.CreateUserCommand
-import com.hhplus.ecommerce.domain.payment.repository.DataTransmissionJpaRepository
-import com.hhplus.ecommerce.domain.payment.repository.PaymentJpaRepository
 import com.hhplus.ecommerce.domain.product.entity.Product
 import com.hhplus.ecommerce.domain.product.entity.ProductCategory
 import io.kotest.assertions.throwables.shouldThrow
@@ -21,7 +19,14 @@ import io.kotest.matchers.shouldNotBe
 import org.springframework.boot.test.autoconfigure.orm.jpa.DataJpaTest
 import org.springframework.context.annotation.ComponentScan
 import org.springframework.test.context.TestPropertySource
+import org.springframework.transaction.PlatformTransactionManager
+import org.springframework.transaction.TransactionDefinition
+import org.springframework.transaction.support.DefaultTransactionDefinition
+import jakarta.persistence.EntityManager
 import java.util.UUID
+import java.util.concurrent.CountDownLatch
+import java.util.concurrent.Executors
+import java.util.concurrent.atomic.AtomicInteger
 
 @DataJpaTest
 @ComponentScan(basePackages = ["com.hhplus.ecommerce"])
@@ -34,18 +39,35 @@ import java.util.UUID
     ]
 )
 class PaymentServiceIntegrationTest(
-    private val paymentJpaRepository: PaymentJpaRepository,
-    private val transmissionJpaRepository: DataTransmissionJpaRepository,
     private val orderService: OrderService,
     private val userService: UserService,
     private val productService: ProductService,
-    private val paymentService: PaymentService
+    private val paymentService: PaymentService,
+    private val entityManager: EntityManager,
+    private val transactionManager: PlatformTransactionManager
 ) : DescribeSpec() {
     override fun extensions(): List<Extension> = listOf(SpringExtension)
 
     private lateinit var testUserId: UUID
     private lateinit var product1Id: UUID
     private lateinit var product2Id: UUID
+
+    // 새로운 트랜잭션에서 실행하고 커밋하는 헬퍼 메서드
+    private fun <T> executeInNewTransaction(action: () -> T): T {
+        val definition = DefaultTransactionDefinition().apply {
+            propagationBehavior = TransactionDefinition.PROPAGATION_REQUIRES_NEW
+        }
+        val status = transactionManager.getTransaction(definition)
+        return try {
+            val result = action()
+            entityManager.flush()
+            transactionManager.commit(status)
+            result
+        } catch (e: Exception) {
+            transactionManager.rollback(status)
+            throw e
+        }
+    }
 
     init {
         beforeSpec {
@@ -81,9 +103,7 @@ class PaymentServiceIntegrationTest(
         }
 
         afterEach {
-            // 각 테스트 후 결제 데이터만 정리
-            transmissionJpaRepository.deleteAll()
-            paymentJpaRepository.deleteAll()
+            // @DataJpaTest 자동 롤백으로 테스트 격리
         }
 
     describe("PaymentService 통합 테스트 - 결제 전체 플로우") {
@@ -227,7 +247,7 @@ class PaymentServiceIntegrationTest(
 
                 // when & then - 두 번째 사용자가 결제 시도
                 val paymentCommand = ProcessPaymentCommand(userId = user2.id!!)
-                shouldThrow<ForbiddenException> {
+                shouldThrow<OrderForbiddenException> {
                     paymentService.processPayment(order.orderId, paymentCommand)
                 }
             }
@@ -308,6 +328,159 @@ class PaymentServiceIntegrationTest(
                 shouldThrow<TransmissionNotFoundException> {
                     paymentService.getTransmissionDetail(nonExistentTransmissionId)
                 }
+            }
+        }
+
+        context("비관적 락 동시성 테스트 - 결제 처리") {
+            it("20명의 사용자가 각각 다른 상품을 주문 후 동시에 결제하면 모두 성공한다") {
+                // given - 각 사용자별로 충분한 재고를 가진 상품 20개 생성
+                val testProducts = mutableListOf<UUID>()
+                repeat(20) { index ->
+                    val testProduct = executeInNewTransaction {
+                        val product = Product(
+                            name = "Concurrent Test Product $index",
+                            description = "Stock 1 - For User $index",
+                            price = 50000L,
+                            stock = 1,
+                            category = ProductCategory.ELECTRONICS,
+                            specifications = emptyMap(),
+                            salesCount = 0
+                        )
+                        val saved = productService.updateProduct(product)
+                        saved.id!!
+                    }
+                    testProducts.add(testProduct)
+                }
+
+                // given - 20명 사용자와 각각의 주문 생성 (각자 다른 상품)
+                val userCount = 20
+                val userOrderPairs = mutableListOf<Pair<UUID, UUID>>()
+                
+                repeat(userCount) { index ->
+                    val user = executeInNewTransaction {
+                        userService.createUser(CreateUserCommand(balance = 2000000L))
+                    }
+                    
+                    val order = executeInNewTransaction {
+                        val createOrderCommand = CreateOrderCommand(
+                            userId = user.id!!,
+                            items = listOf(OrderItemCommand(productId = testProducts[index], quantity = 1)),
+                            couponId = null
+                        )
+                        orderService.createOrder(createOrderCommand)
+                    }
+                    
+                    userOrderPairs.add(Pair(user.id!!, order.orderId))
+                }
+
+                // when - 20명이 각자의 주문을 동시에 결제 시도 (비관적 락 테스트)
+                val threadCount = 20
+                val executorService = Executors.newFixedThreadPool(threadCount)
+                val latch = CountDownLatch(threadCount)
+
+                val successCount = AtomicInteger(0)
+                val failCount = AtomicInteger(0)
+                val exceptions = mutableListOf<Exception>()
+
+                for (i in 0 until threadCount) {
+                    val (userId, orderId) = userOrderPairs[i]
+                    
+                    executorService.submit {
+                        try {
+                            latch.countDown()
+                            latch.await() // 모든 스레드가 준비될 때까지 대기
+
+                            // 각 스레드에서 새로운 트랜잭션으로 실행 (비관적 락 테스트)
+                            executeInNewTransaction {
+                                val paymentCommand = ProcessPaymentCommand(userId = userId)
+                                paymentService.processPayment(orderId, paymentCommand)
+                            }
+
+                            successCount.incrementAndGet()
+                        } catch (e: Exception) {
+                            println("Exception in thread $i: ${e::class.simpleName} - ${e.message}")
+                            exceptions.add(e)
+                            failCount.incrementAndGet()
+                        }
+                    }
+                }
+
+                executorService.shutdown()
+                while (!executorService.isTerminated) {
+                    Thread.sleep(100)
+                }
+
+                // then - 결과 검증
+                (successCount.get() + failCount.get()) shouldBe 20
+                successCount.get() shouldBe 20  // 모든 사용자가 자신의 주문 결제 성공
+                failCount.get() shouldBe 0  // 실패 없음
+            }
+
+            it("비관적락으로 동시 주문 생성 제어 - 같은 상품, 제한된 재고(10개), 20명 동시 주문") {
+                // given - 재고 10개인 상품 생성
+                val testProduct = executeInNewTransaction {
+                    val product = Product(
+                        name = "Limited Stock Test Product",
+                        description = "Stock 10 - Only 10 users can create order",
+                        price = 50000L,
+                        stock = 10,
+                        category = ProductCategory.ELECTRONICS,
+                        specifications = emptyMap(),
+                        salesCount = 0
+                    )
+                    val saved = productService.updateProduct(product)
+                    saved.id!!
+                }
+
+                // when - 20명이 동시에 같은 상품의 주문 생성 시도 (비관적락 테스트)
+                // 각 스레드가 독립적인 트랜잭션에서 주문 생성을 시도
+                val userCount = 20
+                val executorService = Executors.newFixedThreadPool(userCount)
+                val latch = CountDownLatch(userCount)
+
+                val successCount = AtomicInteger(0)
+                val insufficientStockCount = AtomicInteger(0)
+                val otherFailCount = AtomicInteger(0)
+
+                for (i in 0 until userCount) {
+                    executorService.submit {
+                        try {
+                            latch.countDown()
+                            latch.await() // 모든 스레드가 준비될 때까지 대기
+
+                            // 각 스레드에서 새로운 트랜잭션으로 실행
+                            executeInNewTransaction {
+                                val user = userService.createUser(CreateUserCommand(balance = 2000000L))
+                                val createOrderCommand = CreateOrderCommand(
+                                    userId = user.id!!,
+                                    items = listOf(OrderItemCommand(productId = testProduct, quantity = 1)),
+                                    couponId = null
+                                )
+                                orderService.createOrder(createOrderCommand)
+                            }
+
+                            successCount.incrementAndGet()
+                        } catch (e: InsufficientStockException) {
+                            // 비관적 락에 의해 재고 부족 예외 발생 (정상 동작)
+                            insufficientStockCount.incrementAndGet()
+                        } catch (e: Exception) {
+                            println("Unexpected exception in thread $i: ${e::class.simpleName} - ${e.message}")
+                            e.printStackTrace()
+                            otherFailCount.incrementAndGet()
+                        }
+                    }
+                }
+
+                executorService.shutdown()
+                while (!executorService.isTerminated) {
+                    Thread.sleep(100)
+                }
+
+                // then
+                (successCount.get() + insufficientStockCount.get() + otherFailCount.get()) shouldBe 20
+                successCount.get() shouldBe 10  // 재고 10개이므로 정확히 10명만 주문 생성 성공
+                insufficientStockCount.get() shouldBe 10  // 나머지 10명은 비관적 락에 의해 재고부족 예외
+                otherFailCount.get() shouldBe 0  // 예상치 못한 예외는 없음
             }
         }
     }

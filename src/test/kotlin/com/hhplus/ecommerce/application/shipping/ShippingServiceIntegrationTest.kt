@@ -51,7 +51,8 @@ class ShippingServiceIntegrationTest (
     private lateinit var product2Id: UUID
 
     init {
-        beforeSpec {
+        beforeEach {
+            // 각 테스트마다 새로운 데이터 생성
             val createUserCommand = CreateUserCommand(
                 balance = 3000000L
             )
@@ -91,6 +92,15 @@ class ShippingServiceIntegrationTest (
 
             val createdOrder = orderService.createOrder(orderCommand)
             testOrderId = createdOrder.orderId
+        }
+
+        afterEach {
+            // 테스트 후 데이터 정리
+            try {
+                shippingRepository.deleteAll()
+            } catch (e: Exception) {
+                // 정리 실패 무시
+            }
         }
 
         describe("getShipping") {

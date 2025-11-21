@@ -286,15 +286,14 @@ class ProductServiceUnitTest : DescribeSpec({
         context("정상 케이스") {
             it("판매량 기준으로 상위 상품을 조회한다") {
                 // given
-                val products = listOf(
-                    createProduct("상품1", 10000L, 100, ProductCategory.ELECTRONICS, 50),
+                // ✅ DB 정렬 최적화: findTopProducts 메서드를 mock하도록 변경
+                val topProducts = listOf(
                     createProduct("상품2", 20000L, 200, ProductCategory.FASHION, 200),
                     createProduct("상품3", 15000L, 150, ProductCategory.FOOD, 150),
-                    createProduct("상품4", 30000L, 50, ProductCategory.BOOKS, 100),
-                    createProduct("상품5", 25000L, 80, ProductCategory.HOME, 0) // 판매량 0
+                    createProduct("상품4", 30000L, 50, ProductCategory.BOOKS, 100)
                 )
 
-                every { productRepository.findAll() } returns products
+                every { productRepository.findTopProducts(any()) } returns topProducts
 
                 // when
                 val result = productService.getTopProducts(days = 3, limit = 3)
@@ -310,17 +309,16 @@ class ProductServiceUnitTest : DescribeSpec({
                 result.products[2].rank shouldBe 3
                 result.period.days shouldBe 3
 
-                verify(exactly = 1) { productRepository.findAll() }
+                verify(exactly = 1) { productRepository.findTopProducts(any()) }
             }
 
             it("판매량이 0인 상품은 제외된다") {
-                // given
+                // ✅ DB 정렬: DB에서 이미 salesCount > 0으로 필터링됨
                 val products = listOf(
-                    createProduct("판매된 상품", 10000L, 100, ProductCategory.ELECTRONICS, 50),
-                    createProduct("안 팔린 상품", 20000L, 200, ProductCategory.FASHION, 0)
+                    createProduct("판매된 상품", 10000L, 100, ProductCategory.ELECTRONICS, 50)
                 )
 
-                every { productRepository.findAll() } returns products
+                every { productRepository.findTopProducts(any()) } returns products
 
                 // when
                 val result = productService.getTopProducts(days = 3, limit = 5)
@@ -330,17 +328,17 @@ class ProductServiceUnitTest : DescribeSpec({
                 result.products[0].name shouldBe "판매된 상품"
                 result.products[0].salesCount shouldBe 50
 
-                verify(exactly = 1) { productRepository.findAll() }
+                verify(exactly = 1) { productRepository.findTopProducts(any()) }
             }
 
             it("판매량이 같을 때 매출액(가격 * 판매량)으로 정렬한다") {
                 // given
                 val products = listOf(
-                    createProduct("저가 상품", 10000L, 100, ProductCategory.ELECTRONICS, 100),
-                    createProduct("고가 상품", 50000L, 100, ProductCategory.FASHION, 100)
+                    createProduct("고가 상품", 50000L, 100, ProductCategory.FASHION, 100),
+                    createProduct("저가 상품", 10000L, 100, ProductCategory.ELECTRONICS, 100)
                 )
 
-                every { productRepository.findAll() } returns products
+                every { productRepository.findTopProducts(any()) } returns products
 
                 // when
                 val result = productService.getTopProducts(days = 3, limit = 5)
@@ -352,17 +350,17 @@ class ProductServiceUnitTest : DescribeSpec({
                 result.products[1].name shouldBe "저가 상품" // 매출액 1,000,000
                 result.products[1].revenue shouldBe 1000000L
 
-                verify(exactly = 1) { productRepository.findAll() }
+                verify(exactly = 1) { productRepository.findTopProducts(any()) }
             }
 
             it("판매량과 매출액이 같을 때는 이름 순으로 안정적으로 정렬된다") {
                 // given
                 val products = listOf(
-                    createProduct("상품B", 10000L, 100, ProductCategory.ELECTRONICS, 100),
-                    createProduct("상품A", 10000L, 100, ProductCategory.FASHION, 100)
+                    createProduct("상품A", 10000L, 100, ProductCategory.FASHION, 100),
+                    createProduct("상품B", 10000L, 100, ProductCategory.ELECTRONICS, 100)
                 )
 
-                every { productRepository.findAll() } returns products
+                every { productRepository.findTopProducts(any()) } returns products
 
                 // when
                 val result = productService.getTopProducts(days = 3, limit = 5)
@@ -372,17 +370,17 @@ class ProductServiceUnitTest : DescribeSpec({
                 // UUID는 랜덤이므로 이름으로만 검증
                 result.products.map { it.name }.toSet() shouldBe setOf("상품A", "상품B")
 
-                verify(exactly = 1) { productRepository.findAll() }
+                verify(exactly = 1) { productRepository.findTopProducts(any()) }
             }
 
             it("limit보다 적은 상품만 있어도 정상 처리한다") {
                 // given
                 val products = listOf(
-                    createProduct("상품1", 10000L, 100, ProductCategory.ELECTRONICS, 50),
-                    createProduct("상품2", 20000L, 200, ProductCategory.FASHION, 100)
+                    createProduct("상품2", 20000L, 200, ProductCategory.FASHION, 100),
+                    createProduct("상품1", 10000L, 100, ProductCategory.ELECTRONICS, 50)
                 )
 
-                every { productRepository.findAll() } returns products
+                every { productRepository.findTopProducts(any()) } returns products
 
                 // when
                 val result = productService.getTopProducts(days = 3, limit = 5)
@@ -390,17 +388,12 @@ class ProductServiceUnitTest : DescribeSpec({
                 // then
                 result.products shouldHaveSize 2
 
-                verify(exactly = 1) { productRepository.findAll() }
+                verify(exactly = 1) { productRepository.findTopProducts(any()) }
             }
 
             it("판매된 상품이 없으면 빈 목록을 반환한다") {
                 // given
-                val products = listOf(
-                    createProduct("상품1", 10000L, 100, ProductCategory.ELECTRONICS, 0),
-                    createProduct("상품2", 20000L, 200, ProductCategory.FASHION, 0)
-                )
-
-                every { productRepository.findAll() } returns products
+                every { productRepository.findTopProducts(any()) } returns emptyList()
 
                 // when
                 val result = productService.getTopProducts(days = 3, limit = 5)
@@ -408,7 +401,7 @@ class ProductServiceUnitTest : DescribeSpec({
                 // then
                 result.products.shouldBeEmpty()
 
-                verify(exactly = 1) { productRepository.findAll() }
+                verify(exactly = 1) { productRepository.findTopProducts(any()) }
             }
 
             it("period 정보가 정확하게 설정된다") {
@@ -417,7 +410,7 @@ class ProductServiceUnitTest : DescribeSpec({
                     createProduct("상품1", 10000L, 100, ProductCategory.ELECTRONICS, 50)
                 )
 
-                every { productRepository.findAll() } returns products
+                every { productRepository.findTopProducts(any()) } returns products
 
                 // when
                 val result = productService.getTopProducts(days = 7, limit = 5)
@@ -427,7 +420,7 @@ class ProductServiceUnitTest : DescribeSpec({
                 result.period.startDate shouldNotBe null
                 result.period.endDate shouldNotBe null
 
-                verify(exactly = 1) { productRepository.findAll() }
+                verify(exactly = 1) { productRepository.findTopProducts(any()) }
             }
         }
 
@@ -435,25 +428,24 @@ class ProductServiceUnitTest : DescribeSpec({
             it("limit이 1이어도 정상 처리한다") {
                 // given
                 val products = listOf(
-                    createProduct("상품1", 10000L, 100, ProductCategory.ELECTRONICS, 100),
-                    createProduct("상품2", 20000L, 200, ProductCategory.FASHION, 50)
+                    createProduct("상품1", 10000L, 100, ProductCategory.ELECTRONICS, 100)
                 )
 
-                every { productRepository.findAll() } returns products
+                every { productRepository.findTopProducts(any()) } returns products
 
                 // when
                 val result = productService.getTopProducts(days = 3, limit = 1)
 
                 // then
                 result.products shouldHaveSize 1
-                result.products[0].name shouldBe "상품1" // 판매량 100이 더 높음
+                result.products[0].name shouldBe "상품1"
 
-                verify(exactly = 1) { productRepository.findAll() }
+                verify(exactly = 1) { productRepository.findTopProducts(any()) }
             }
 
             it("상품이 전혀 없어도 빈 목록을 반환한다") {
                 // given
-                every { productRepository.findAll() } returns emptyList()
+                every { productRepository.findTopProducts(any()) } returns emptyList()
 
                 // when
                 val result = productService.getTopProducts(days = 3, limit = 5)
@@ -461,7 +453,7 @@ class ProductServiceUnitTest : DescribeSpec({
                 // then
                 result.products.shouldBeEmpty()
 
-                verify(exactly = 1) { productRepository.findAll() }
+                verify(exactly = 1) { productRepository.findTopProducts(any()) }
             }
         }
     }

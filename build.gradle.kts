@@ -32,6 +32,10 @@ dependencies {
     implementation("org.springframework.boot:spring-boot-starter-data-jpa")
     implementation("io.github.cdimascio:dotenv-kotlin:6.5.1")
 
+    // Redis & Cache
+    implementation("org.springframework.boot:spring-boot-starter-data-redis")
+    implementation("org.springframework.boot:spring-boot-starter-cache")
+
     runtimeOnly("com.mysql:mysql-connector-j")
     runtimeOnly("com.h2database:h2")
 
@@ -47,6 +51,11 @@ dependencies {
     // MockK
     testImplementation("io.mockk:mockk:1.13.12")
     testImplementation("com.ninja-squad:springmockk:4.0.2")
+
+    // Embedded Redis for testing
+    testImplementation("it.ozimov:embedded-redis:0.7.3") {
+        exclude(group = "org.slf4j", module = "slf4j-simple")
+    }
 
     testRuntimeOnly("org.junit.platform:junit-platform-launcher")
 }

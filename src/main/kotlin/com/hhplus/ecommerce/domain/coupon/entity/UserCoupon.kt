@@ -9,7 +9,25 @@ import java.time.LocalDateTime
 import java.util.*
 
 @Entity
-@Table(name = "user_coupon")
+@Table(
+    name = "user_coupon",
+    indexes = [
+        // 사용자의 쿠폰 목록 조회 (가장 빈번한 쿼리)
+        Index(name = "idx_user_coupon_user_id", columnList = "user_id"),
+
+        // 쿠폰별 발급 내역 조회
+        Index(name = "idx_user_coupon_coupon_id", columnList = "coupon_id"),
+
+        // 중복 발급 체크 (userId + couponId 조합)
+        Index(name = "idx_user_coupon_user_coupon", columnList = "user_id, coupon_id"),
+
+        // 사용자의 특정 상태 쿠폰 조회 (예: 사용 가능한 쿠폰만)
+        Index(name = "idx_user_coupon_user_status", columnList = "user_id, status"),
+
+        // 만료 예정 쿠폰 조회 (배치 작업용)
+        Index(name = "idx_user_coupon_expires_at", columnList = "expires_at")
+    ]
+)
 class UserCoupon(
     @Column(nullable = false, columnDefinition = "BINARY(16)")
     val userId: UUID,

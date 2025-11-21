@@ -24,6 +24,7 @@ import io.kotest.core.spec.style.DescribeSpec
 import io.kotest.matchers.shouldBe
 import io.kotest.matchers.shouldNotBe
 import io.mockk.*
+import org.springframework.test.util.ReflectionTestUtils
 import java.time.LocalDateTime
 import java.util.Optional
 import java.util.UUID
@@ -164,7 +165,7 @@ class PaymentServiceUnitTest : DescribeSpec({
                 }
             }
 
-            it("다른 사용자의 주문 결제 시 ForbiddenException 발생") {
+            it("다른 사용자의 주문 결제 시 OrderForbiddenException 발생") {
                 // given
                 val orderId = UUID.randomUUID()
                 val userId = UUID.randomUUID()
@@ -180,40 +181,42 @@ class PaymentServiceUnitTest : DescribeSpec({
                     status = OrderStatus.PENDING
                 )
 
+                ReflectionTestUtils.setField(order, "id", orderId)
+
                 val command = ProcessPaymentCommand(userId = otherUserId)
 
                 every { orderService.getOrder(orderId) } returns order
 
                 // when & then
-                shouldThrow<ForbiddenException> {
+                shouldThrow<OrderForbiddenException> {
                     paymentService.processPayment(orderId, command)
                 }
             }
 
-            it("PENDING이 아닌 주문에 대한 결제 시 InvalidOrderStatusException 발생") {
-                // given
-                val orderId = UUID.randomUUID()
-                val userId = UUID.randomUUID()
+                it("PENDING이 아닌 주문에 대한 결제 시 InvalidOrderStatusException 발생") {
+                    // given
+                    val orderId = UUID.randomUUID()
+                    val userId = UUID.randomUUID()
 
-                val order = Order(
-                    userId = userId,
-                    orderNumber = "ORD-001",
-                    totalAmount = 50000L,
-                    discountAmount = 0L,
-                    finalAmount = 50000L,
-                    appliedCouponId = null,
-                    status = OrderStatus.PAID  // 이미 결제됨
-                )
+                    val order = Order(
+                        userId = userId,
+                        orderNumber = "ORD-001",
+                        totalAmount = 50000L,
+                        discountAmount = 0L,
+                        finalAmount = 50000L,
+                        appliedCouponId = null,
+                        status = OrderStatus.PAID  // 이미 결제됨
+                    )
 
-                val command = ProcessPaymentCommand(userId = userId)
+                    val command = ProcessPaymentCommand(userId = userId)
 
-                every { orderService.getOrder(orderId) } returns order
+                    every { orderService.getOrder(orderId) } returns order
 
-                // when & then
-                shouldThrow<InvalidOrderStatusException> {
-                    paymentService.processPayment(orderId, command)
+                    // when & then
+                    shouldThrow<InvalidOrderStatusException> {
+                        paymentService.processPayment(orderId, command)
+                    }
                 }
-            }
 
             it("이미 결제 레코드가 존재하는 경우 AlreadyPaidException 발생") {
                 // given
