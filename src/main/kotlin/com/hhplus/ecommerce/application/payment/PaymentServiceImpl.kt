@@ -46,14 +46,10 @@ class PaymentServiceImpl(
         val order = orderService.getOrder(orderId)
 
         // 권한 확인
-        if (order.userId != request.userId) {
-            throw ForbiddenException("access denied order")
-        }
+        order.validateOwner(request.userId)
 
         // 주문 상태 확인 (PENDING만 결제 가능)
-        if (order.status != OrderStatus.PENDING) {
-            throw InvalidOrderStatusException(orderId, order.status.name)
-        }
+        order.validatePaymentEligibility()
 
         // 이미 결제된 주문인지 확인
         val existingPayment = paymentRepository.findByOrderId(orderId)

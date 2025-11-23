@@ -753,7 +753,7 @@ sequenceDiagram
     DB-->>UserRepo: User
     UserRepo-->>Service: User
 
-    Service->>CouponRepo: findByIdWithOptimisticLock(couponId)
+    Service->>CouponRepo: findByIdWithLock(couponId)
     CouponRepo->>DB: SELECT * FROM coupons<br/>WHERE id = ? FOR UPDATE
     DB-->>CouponRepo: Coupon
     CouponRepo-->>Service: Coupon
@@ -777,17 +777,16 @@ sequenceDiagram
         Controller-->>User: 400 Bad Request<br/>이미 발급받은 쿠폰입니다
     end
 
-    Note over Service: 4. 쿠폰 발급 (낙관적 락)
-    Service->>Service: coupon.issue()<br/>(issued_quantity++, version++)
-    Service->>CouponRepo: save(coupon)
-    CouponRepo->>DB: UPDATE coupons<br/>SET issued_quantity = issued_quantity + 1,<br/>version = version + 1<br/>WHERE id = ? AND version = ?<br/>AND issued_quantity < total_quantity
+    Note over Service: 4. 쿠폰 발급 (비관적 락)
+    Service->>Service: 재고 검증<br/>issued_quantity < total_quantity
 
-    alt 동시성 충돌 or 수량 초과
-        DB-->>CouponRepo: 0 rows affected
-        CouponRepo-->>Service: OptimisticLockException or CouponSoldOutException
-        Service-->>Controller: Exception
-        Controller-->>User: 400 Bad Request or 409 Conflict<br/>쿠폰이 매진되었습니다
-    else 발급 성공
+    alt 수량 초과
+        Service-->>Controller: CouponSoldOutException
+        Controller-->>User: 400 Bad Request<br/>쿠폰이 매진되었습니다
+    else 발급 가능
+        Service->>Service: coupon.issue()<br/>(issued_quantity++)
+        Service->>CouponRepo: save(coupon)
+        CouponRepo->>DB: UPDATE coupons<br/>SET issued_quantity = issued_quantity + 1<br/>WHERE id = ?
         DB-->>CouponRepo: Success
     end
 
@@ -804,7 +803,7 @@ sequenceDiagram
 ```
 
 **핵심 로직**:
-- 낙관적 락으로 동시성 제어 (`version` 필드)
+- 비관적 락으로 동시성 제어 (`FOR UPDATE`)
 - `issued_quantity < total_quantity` 조건 체크
 - 중복 발급 방지 (`user_id`, `coupon_id` 조합)
 - 발급 후 30일 자동 만료

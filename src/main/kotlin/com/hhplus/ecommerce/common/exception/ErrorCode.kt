@@ -23,6 +23,7 @@ enum class ErrorCode(
     INVALID_ORDER_ITEMS("O004", "Invalid order items", HttpStatus.BAD_REQUEST),
     ORDER_ALREADY_CANCELLED("O005", "Order is already cancelled", HttpStatus.BAD_REQUEST),
     ORDER_NOT_REFUNDABLE("O006", "Only paid orders can be refunded", HttpStatus.BAD_REQUEST),
+    ORDER_FORBIDDEN("O006", "Access denied order", HttpStatus.FORBIDDEN),
 
     // Payment related
     INSUFFICIENT_BALANCE("PAY001", "Insufficient balance", HttpStatus.BAD_REQUEST),
