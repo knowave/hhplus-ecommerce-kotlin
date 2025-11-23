@@ -4,6 +4,7 @@ import com.hhplus.ecommerce.application.coupon.dto.*
 import com.hhplus.ecommerce.common.exception.CouponAlreadyIssuedException
 import com.hhplus.ecommerce.common.exception.CouponSoldOutException
 import com.hhplus.ecommerce.common.exception.InvalidCouponDateException
+import com.hhplus.ecommerce.common.lock.RedisDistributedLock
 import com.hhplus.ecommerce.domain.coupon.repository.CouponJpaRepository
 import com.hhplus.ecommerce.domain.coupon.repository.UserCouponJpaRepository
 import com.hhplus.ecommerce.domain.coupon.repository.CouponStatus
@@ -15,9 +16,12 @@ import io.kotest.matchers.shouldBe
 import io.kotest.matchers.shouldNotBe
 import io.kotest.matchers.string.shouldContain
 import io.mockk.every
+import io.mockk.just
 import io.mockk.mockk
+import io.mockk.runs
 import io.mockk.spyk
 import io.mockk.verify
+import io.mockk.slot
 import java.time.LocalDate
 import java.time.LocalDateTime
 import java.time.format.DateTimeFormatter
@@ -31,6 +35,8 @@ import java.util.concurrent.atomic.AtomicInteger
 class CouponServiceUnitTest : DescribeSpec({
     lateinit var couponRepository: CouponJpaRepository
     lateinit var userCouponRepository: UserCouponJpaRepository
+    lateinit var redisDistributedLock: RedisDistributedLock
+    lateinit var transactionTemplate: org.springframework.transaction.support.TransactionTemplate
     lateinit var couponService: CouponServiceImpl
     val dateFormatter: DateTimeFormatter = DateTimeFormatter.ofPattern("yyyy-MM-dd")
     val dateTimeFormatter: DateTimeFormatter = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss")
@@ -38,7 +44,26 @@ class CouponServiceUnitTest : DescribeSpec({
     beforeEach {
         couponRepository = mockk()
         userCouponRepository = mockk()
-        couponService = CouponServiceImpl(couponRepository, userCouponRepository)
+        redisDistributedLock = mockk(relaxed = true)
+        transactionTemplate = mockk(relaxed = true)
+
+        // Redis 분산 락 mock
+        // tryLock: 락 획득 성공 시 lockValue 반환
+        every {
+            redisDistributedLock.tryLock(any(), any(), any())
+        } returns "mock-lock-value-${UUID.randomUUID()}"
+
+        // unlockAfterCommit: 아무 동작 안함 (relaxed로 자동 처리)
+        every {
+            redisDistributedLock.unlockAfterCommit(any(), any())
+        } just runs
+
+        // unlock: 아무 동작 안함 (relaxed로 자동 처리)
+        every {
+            redisDistributedLock.unlock(any(), any())
+        } returns true
+
+        couponService = CouponServiceImpl(couponRepository, userCouponRepository, redisDistributedLock, transactionTemplate)
     }
 
     describe("CouponService 단위 테스트 - issueCoupon") {
@@ -512,11 +537,6 @@ class CouponServiceUnitTest : DescribeSpec({
                 }
 
                 // then - 성공/실패 개수 검증
-                println("=== ConcurrentHashMap 쿠폰 발급 결과 ===")
-                println("성공: ${successCount.get()}, 실패: ${failCount.get()}")
-                println("최종 재고: ${couponStock[couponId]?.get()}")
-                println("발급된 사용자 수: ${issuedUsers.size}")
-
                 successCount.get() shouldBe 10
                 failCount.get() shouldBe 40
                 couponStock[couponId]?.get() shouldBe 0
@@ -565,9 +585,6 @@ class CouponServiceUnitTest : DescribeSpec({
                 }
 
                 // then
-                println("=== AtomicInteger compareAndSet 테스트 ===")
-                println("최종 값: ${counter.get()}, 성공 횟수: ${successCount.get()}")
-
                 counter.get() shouldBe 0
                 successCount.get() shouldBe 100
             }

@@ -89,6 +89,11 @@ class OrderNotRefundableException(status: OrderStatus) : BaseException(
     message = "Order cannot be refunded. Current status: $status"
 )
 
+class OrderForbiddenException() : BaseException(
+    errorCode = ErrorCode.ORDER_FORBIDDEN,
+    message = "Access denied Forbidden"
+)
+
 // Payment related
 class InsufficientBalanceException(
     required: Long,
@@ -112,9 +117,9 @@ class PaymentNotFoundException(paymentId: UUID) : BaseException(
     message = "Payment not found with id: $paymentId"
 )
 
-class InvalidOrderStatusException(orderId: UUID, currentStatus: String) : BaseException(
+class InvalidOrderStatusException(currentStatus: String) : BaseException(
     errorCode = ErrorCode.INVALID_ORDER_STATUS,
-    message = "Invalid order status for payment. Order id: $orderId, Status: $currentStatus"
+    message = "Invalid order status for payment. Status: $currentStatus"
 )
 
 class AlreadyPaidException(orderId: UUID) : BaseException(

@@ -18,6 +18,18 @@ services:
     networks:
       - hhplus-network
 
+  redis:
+    image: redis:7-alpine
+    container_name: hhplus-redis
+    ports:
+      - "${REDIS_PORT:-6379}:6379"
+    volumes:
+      - redis-data:/data
+    networks:
+      - hhplus-network
+    restart: unless-stopped
+    command: redis-server --appendonly yes
+
   app:
     build:
       context: .
@@ -32,14 +44,20 @@ services:
       DB_NAME: hhplus
       DB_USER: hhplus
       DB_PASSWORD: hhplus
+      REDIS_HOST: redis
+      REDIS_PORT: 6379
+      REDIS_PASSWORD: ""
     depends_on:
       - db
+      - redis
     networks:
       - hhplus-network
     restart: unless-stopped
 
 volumes:
   mysql-data:
+    driver: local
+  redis-data:
     driver: local
 
 networks:

@@ -1,6 +1,7 @@
 package com.hhplus.ecommerce.application.order
 
 import com.hhplus.ecommerce.application.cart.CartService
+import com.hhplus.ecommerce.application.cart.dto.AddCartItemCommand
 import com.hhplus.ecommerce.application.coupon.CouponService
 import com.hhplus.ecommerce.application.order.dto.*
 import com.hhplus.ecommerce.application.product.ProductService
@@ -9,14 +10,16 @@ import com.hhplus.ecommerce.common.exception.*
 import com.hhplus.ecommerce.domain.product.entity.Product
 import com.hhplus.ecommerce.domain.coupon.entity.*
 import com.hhplus.ecommerce.domain.order.entity.*
+import com.hhplus.ecommerce.domain.order.event.OrderCreatedEvent
 import com.hhplus.ecommerce.domain.order.repository.OrderJpaRepository
+import org.slf4j.LoggerFactory
+import org.springframework.context.ApplicationEventPublisher
+import org.springframework.data.domain.PageRequest
 import org.springframework.stereotype.Service
 import org.springframework.transaction.annotation.Transactional
 import java.time.LocalDate
-import java.time.LocalDateTime
 import java.time.format.DateTimeFormatter
 import java.util.UUID
-import kotlin.math.ceil
 
 @Service
 class OrderServiceImpl(
@@ -24,43 +27,82 @@ class OrderServiceImpl(
     private val productService: ProductService,
     private val couponService: CouponService,
     private val userService: UserService,
-    private val cartService: CartService
+    private val cartService: CartService,
+    private val applicationEventPublisher: ApplicationEventPublisher
 ) : OrderService {
 
     companion object {
         private val DATE_FORMATTER: DateTimeFormatter = DateTimeFormatter.ISO_LOCAL_DATE_TIME
+        private val logger = LoggerFactory.getLogger(OrderServiceImpl::class.java)
     }
 
-    @Transactional
+    /**
+     * 주문 생성 (트랜잭션 범위 최적화)
+     *
+     * 트랜잭션 밖에서:
+     * - 요청 검증
+     * - 사용자 조회
+     * - 이벤트 발행
+     * - 응답 생성
+     *
+     * 트랜잭션 내에서:
+     * - 재고 차감
+     * - 쿠폰 사용
+     * - 주문 저장
+     */
     override fun createOrder(request: CreateOrderCommand): CreateOrderResult {
-        // 1. 요청 검증
         validateOrderRequest(request)
         val user = userService.getUser(request.userId)
 
-        // 3. 재고 차감 (비즈니스 정책: 주문 생성 시점에 즉시 차감)
-        // 비관적 락으로 상품 조회 및 재고 차감 (검증 포함)
+        val orderData = createOrderTransaction(request, user.id!!)
+
+        // - 카트 삭제가 실패해도 주문 생성은 이미 완료됨
+        try {
+            val productIds = request.items.map { it.productId }
+            cartService.deleteCarts(request.userId, productIds)
+        } catch (e: Exception) {
+            logger.warn("Failed to delete cart items for user ${request.userId} after order creation", e)
+        }
+
+        applicationEventPublisher.publishEvent(
+            OrderCreatedEvent(
+                orderId = orderData.orderId,
+                userId = request.userId,
+                productIds = orderData.productIds
+            )
+        )
+
+        return CreateOrderResult(
+            orderId = orderData.orderId,
+            userId = orderData.userId,
+            orderNumber = orderData.orderNumber,
+            items = orderData.items,
+            pricing = orderData.pricing,
+            status = orderData.status,
+            createdAt = orderData.createdAt
+        )
+    }
+
+    /**
+     * 주문 생성 트랜잭션
+     * 트랜잭션 범위를 최소화하여 락 보유 시간 단축
+     */
+    @Transactional
+    private fun createOrderTransaction(request: CreateOrderCommand, userId: UUID): OrderCreationData {
         val products = deductStock(request.items)
 
-        // 5. 쿠폰 검증 및 사용 처리
         val userCoupon = if (request.couponId != null) {
-            val validatedCoupon = validateAndUseCoupon(request.couponId, request.userId)
-            validatedCoupon
-        } else {
-            null
-        }
+            validateAndUseCoupon(request.couponId, request.userId)
+        } else null
 
         val coupon = if (userCoupon != null) {
             couponService.findCouponById(userCoupon.couponId)
-        } else {
-            null
-        }
+        } else null
 
-        // 6. 금액 계산
         val totalAmount = calculateTotalAmount(request.items, products)
         val discountAmount = calculateDiscountAmount(totalAmount, coupon)
         val finalAmount = totalAmount - discountAmount
 
-        // 7. 주문 생성
         val orderNumber = generateOrderNumber()
         val order = Order(
             userId = request.userId,
@@ -76,7 +118,7 @@ class OrderServiceImpl(
             val product = products[item.productId]!!
             OrderItem(
                 productId = product.id!!,
-                userId = user.id!!,
+                userId = userId,
                 order = order,
                 productName = product.name,
                 quantity = item.quantity,
@@ -85,15 +127,10 @@ class OrderServiceImpl(
             )
         }
 
-        // OrderItem을 Order의 items에 추가하고 저장 (Cascade로 OrderItem도 함께 저장됨)
         order.items.addAll(orderItems)
         val savedOrder = orderRepository.save(order)
 
-        val productIds = products.values.map { it.id!! }
-        cartService.deleteCarts(request.userId, productIds)
-
-        // 8. 응답 생성
-        return CreateOrderResult(
+        return OrderCreationData(
             orderId = savedOrder.id!!,
             userId = savedOrder.userId,
             orderNumber = savedOrder.orderNumber,
@@ -120,12 +157,15 @@ class OrderServiceImpl(
                 }
             ),
             status = order.status.name,
-            createdAt = order.createdAt!!.toString()
+            createdAt = order.createdAt!!.toString(),
+            productIds = products.values.map { it.id!! }
         )
     }
 
+    @Transactional(readOnly = true)
     override fun getOrderDetail(orderId: UUID, userId: UUID): OrderDetailResult {
-        val order = orderRepository.findById(orderId)
+        // ✅ Fetch Join 사용하여 N+1 쿼리 방지
+        val order = orderRepository.findByIdWithItems(orderId)
             .orElseThrow{ throw OrderNotFoundException(orderId) }
 
         // 권한 확인
@@ -179,35 +219,28 @@ class OrderServiceImpl(
         )
     }
 
+    @Transactional(readOnly = true)
     override fun getOrders(userId: UUID, status: String?, page: Int, size: Int): OrderListResult {
         // 사용자 존재 확인
         userService.getUser(userId)
 
-        val orders = if (status != null) {
-            val orderStatus = try {
-                OrderStatus.valueOf(status.uppercase())
+        // 상태 파라미터 변환 (nullable)
+        val orderStatus = status?.let {
+            try {
+                OrderStatus.valueOf(it.uppercase())
             } catch (e: IllegalArgumentException) {
                 throw InvalidOrderItemsException("Invalid order status: $status")
             }
-
-            orderRepository.findByUserIdAndStatus(userId, orderStatus)
-        } else {
-            orderRepository.findByUserId(userId)
         }
 
-        // 페이지네이션
-        val totalElements = orders.size
-        val totalPages = ceil(totalElements.toDouble() / size).toInt()
-        val start = page * size
-        val end = minOf(start + size, totalElements)
+        // Pageable 생성 (최신순 정렬은 Repository의 @Query에서 처리)
+        val pageable = PageRequest.of(page, size)
 
-        val pagedOrders = if (start < totalElements) {
-            orders.subList(start, end)
-        } else {
-            emptyList()
-        }
+        // DB에서 페이징 처리된 데이터 조회 (LIMIT, OFFSET 자동 적용)
+        val orderPage = orderRepository.findByUserIdWithPaging(userId, orderStatus, pageable)
 
-        val orderSummaries = pagedOrders.map { order ->
+        // DTO 변환
+        val orderSummaries = orderPage.content.map { order ->
             OrderSummaryDto(
                 orderId = order.id!!,
                 orderNumber = order.orderNumber,
@@ -220,13 +253,14 @@ class OrderServiceImpl(
             )
         }
 
+        // Page 객체에서 페이징 정보 추출
         val pagination = PaginationInfoDto(
-            currentPage = page,
-            totalPages = totalPages,
-            totalElements = totalElements,
-            size = size,
-            hasNext = page < totalPages - 1,
-            hasPrevious = page > 0
+            currentPage = orderPage.number,
+            totalPages = orderPage.totalPages,
+            totalElements = orderPage.totalElements.toInt(),
+            size = orderPage.size,
+            hasNext = orderPage.hasNext(),
+            hasPrevious = orderPage.hasPrevious()
         )
 
         return OrderListResult(
@@ -235,7 +269,7 @@ class OrderServiceImpl(
         )
     }
 
-    @org.springframework.transaction.annotation.Transactional
+    @Transactional
     override fun cancelOrder(orderId: UUID, request: CancelOrderCommand): CancelOrderResult {
         val order = orderRepository.findById(orderId)
             .orElseThrow { OrderNotFoundException(orderId) }
@@ -258,6 +292,23 @@ class OrderServiceImpl(
         // 주문 상태 변경 (도메인 메서드 사용)
         order.cancel()
         orderRepository.save(order)
+
+        // - 주문 취소 → 주문 아이템을 카트에 다시 추가
+        // - 카트 복원이 실패해도 주문 취소는 이미 완료됨
+        try {
+            order.items.forEach { orderItem ->
+                cartService.addCartItem(
+                    request.userId,
+                    AddCartItemCommand(
+                        productId = orderItem.productId,
+                        quantity = orderItem.quantity
+                    )
+                )
+            }
+        } catch (e: Exception) {
+            // 카트 복원 실패는 주문 취소 성공에 영향을 주지 않음 (로그만 기록)
+            logger.warn("Failed to restore cart items for user ${request.userId} after order cancellation", e)
+        }
 
         return CancelOrderResult(
             orderId = order.id!!,

@@ -5,13 +5,15 @@ import com.hhplus.ecommerce.common.exception.ProductNotFoundException
 import com.hhplus.ecommerce.domain.product.entity.ProductCategory
 import com.hhplus.ecommerce.domain.product.entity.Product
 import com.hhplus.ecommerce.domain.product.repository.ProductJpaRepository
+import org.springframework.cache.annotation.CacheEvict
+import org.springframework.cache.annotation.Cacheable
 import org.springframework.data.domain.PageRequest
 import org.springframework.data.domain.Sort
 import org.springframework.stereotype.Service
+import org.springframework.transaction.annotation.Transactional
 import java.time.LocalDateTime
 import java.time.format.DateTimeFormatter
 import java.util.UUID
-import kotlin.math.ceil
 
 @Service
 class ProductServiceImpl(
@@ -22,6 +24,7 @@ class ProductServiceImpl(
         private val DATE_FORMATTER: DateTimeFormatter = DateTimeFormatter.ISO_LOCAL_DATE_TIME
     }
 
+    @Transactional(readOnly = true)
     override fun getProducts(request: GetProductsCommand): ProductListResult {
         // 1. 카테고리 파싱
         val productCategory = request.category?.let {
@@ -77,22 +80,25 @@ class ProductServiceImpl(
         )
     }
 
+    /**
+     * 인기 상품 조회 (캐싱 적용)
+     *
+     * 조회 빈도가 높고 실시간성이 덜 중요한 데이터이므로 3분간 캐싱합니다.
+     * 캐시 키: "days:{days}:limit:{limit}"
+     *
+     * @param days 집계 기간 (일)
+     * @param limit 조회할 상품 개수
+     * @return 인기 상품 목록
+     */
+    @Cacheable(
+        value = ["topProducts"],
+        key = "'days:' + #days + ':limit:' + #limit",
+        unless = "#result == null"
+    )
     override fun getTopProducts(days: Int, limit: Int): TopProductsResult {
-        // 1. 모든 상품을 판매량 기준으로 정렬
-        val allProducts = productRepository.findAll()
-
-        // 2. 판매량이 0보다 큰 상품만 필터링
-        val soldProducts = allProducts.filter { it.salesCount > 0 }
-
-        // 3. 정렬: 판매량 > 매출액 > productId
-        val sortedProducts = soldProducts.sortedWith(
-            compareByDescending<Product> { it.salesCount }
-                .thenByDescending { it.price * it.salesCount } // revenue
-                .thenBy { it.id }
-        )
-
-        // 4. Top N개만 선택
-        val topProducts = sortedProducts.take(limit)
+        // ✅ DB 정렬 최적화: DB에서 정렬 후 필요한 개수만 조회
+        val pageable = PageRequest.of(0, limit)
+        val topProducts = productRepository.findTopProducts(pageable)
 
         // 5. DTO 변환
         val topProductItems = topProducts.mapIndexed { index, product ->
@@ -124,11 +130,30 @@ class ProductServiceImpl(
         )
     }
 
+    /**
+     * 상품 ID로 조회 (캐싱 적용)
+     *
+     * 상품 정보는 조회 빈도가 매우 높고 변경 빈도가 낮으므로 10분간 캐싱합니다.
+     * 캐시 키: 상품 ID
+     *
+     * @param id 상품 ID
+     * @return 상품 정보
+     */
+    @Cacheable(value = ["products"], key = "#id")
     override fun findProductById(id: UUID): Product {
         return productRepository.findById(id)
             .orElseThrow { ProductNotFoundException(id) }
     }
 
+    /**
+     * 상품 정보 업데이트 (캐시 무효화)
+     *
+     * 상품 정보가 변경되면 해당 상품의 캐시를 즉시 삭제하여 일관성을 유지합니다.
+     *
+     * @param product 업데이트할 상품
+     * @return 업데이트된 상품
+     */
+    @CacheEvict(value = ["products"], key = "#product.id")
     override fun updateProduct(product: Product): Product {
         return productRepository.save(product)
     }

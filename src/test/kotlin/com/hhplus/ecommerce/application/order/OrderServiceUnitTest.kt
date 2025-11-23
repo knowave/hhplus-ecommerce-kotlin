@@ -32,6 +32,7 @@ import io.mockk.every
 import io.mockk.mockk
 import io.mockk.slot
 import io.mockk.verify
+import org.springframework.context.ApplicationEventPublisher
 import java.time.LocalDateTime
 import java.util.Optional
 import java.util.UUID
@@ -44,6 +45,7 @@ class OrderServiceUnitTest : DescribeSpec({
     lateinit var userService: UserService
     lateinit var orderService: OrderServiceImpl
     lateinit var cartService: CartService
+    lateinit var applicationEventPublisher: ApplicationEventPublisher
 
     beforeEach {
         orderRepository = mockk(relaxed = true)
@@ -51,13 +53,15 @@ class OrderServiceUnitTest : DescribeSpec({
         couponService = mockk(relaxed = true)
         userService = mockk(relaxed = true)
         cartService = mockk(relaxed = true)
+        applicationEventPublisher = mockk(relaxed = true)
 
         orderService = OrderServiceImpl(
             orderRepository = orderRepository,
             productService = productService,
             couponService = couponService,
             userService = userService,
-            cartService = cartService
+            cartService = cartService,
+            applicationEventPublisher = applicationEventPublisher
         )
     }
 

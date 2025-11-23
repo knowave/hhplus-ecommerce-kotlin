@@ -14,6 +14,7 @@
 13. InMemoryDB 에서 사용한 `Repository` class와 `RepositoryImpl` class는 사용하지않고 수정도 하지않는다.
 14. Repository는 `JpaRepository`를 사용할것.
 15. 동시성 제어는 Transaction을 사용
+16. `서버구축 DB - 병목 분석 및 개선 방안.md` 파일을 확인하여 동시성제어 및 병목 제어
 
 ## 테스트 코드
 1. 테스트 코드는 `kotest`로 진행.

@@ -23,6 +23,24 @@ interface ProductJpaRepository : JpaRepository<Product, UUID> {
     ): Page<Product>
 
     /**
+     * ✅ DB 정렬 최적화: 인기 상품 조회
+     * 
+     * salesCount > 0인 상품을 판매량 기준으로 정렬하여 반환합니다.
+     * 메모리에서 전체 상품을 정렬하는 것보다 DB에서 정렬하고 필요한 개수만 반환합니다.
+     * 
+     * 정렬 기준:
+     * 1. salesCount DESC (판매량)
+     * 2. (price * salesCount) DESC (매출액)
+     * 3. id ASC (안정적 정렬)
+     */
+    @Query("""
+        SELECT p FROM Product p
+        WHERE p.salesCount > 0
+        ORDER BY p.salesCount DESC, (p.price * p.salesCount) DESC, p.id ASC
+    """)
+    fun findTopProducts(pageable: Pageable): List<Product>
+
+    /**
      * 비관적 락을 사용하여 상품을 조회합니다.
      *
      * 동시성 제어가 필요한 경우 사용합니다:
