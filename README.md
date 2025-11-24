@@ -523,20 +523,38 @@ fun chargeBalance(userId: Long, amount: Long): User {
 }
 ```
 
-**쿠폰 발급 시 동시성 제어 (선착순)**:
+**쿠폰 발급 시 동시성 제어 (선착순 - 어노테이션 기반 Redis 분산 락)**:
 ```kotlin
-fun issueCoupon(couponId: Long, userId: Long): UserCoupon {
-    return lockManager.executeWithCouponLock(couponId) {
-        val coupon = findCouponById(couponId)
+@DistributedLock(
+    key = "'coupon:issue:' + #couponId",
+    waitTimeMs = 3000,
+    leaseTimeMs = 10000,
+    errorMessage = "쿠폰 발급 요청이 많습니다. 잠시 후 다시 시도해주세요.",
+    unlockAfterCommit = true
+)
+@Transactional
+fun issueCoupon(couponId: UUID, request: IssueCouponCommand): IssueCouponResult {
+    // 비관적 락으로 쿠폰 조회 (이중 보호)
+    val coupon = couponRepository.findByIdWithLock(couponId)
+        .orElseThrow { CouponNotFoundException(couponId) }
 
-        // 재고 확인 및 차감
-        coupon.decreaseStock()
-        updateCoupon(coupon)
-
-        // 사용자 쿠폰 발급
-        val userCoupon = UserCoupon(...)
-        saveUserCoupon(userCoupon)
+    // 중복 발급 검증
+    val existingUserCoupon = userCouponRepository.findFirstByUserIdAndCouponId(request.userId, couponId)
+    if (existingUserCoupon != null) {
+        throw CouponAlreadyIssuedException(request.userId, couponId)
     }
+
+    // 재고 검증 및 차감
+    coupon.validateIssuable(couponId)
+    
+    coupon.issuedQuantity++
+    couponRepository.save(coupon)
+
+    // 사용자 쿠폰 발급
+    val userCoupon = UserCoupon(...)
+    userCouponRepository.save(userCoupon)
+
+    return IssueCouponResult(...)
 }
 ```
 

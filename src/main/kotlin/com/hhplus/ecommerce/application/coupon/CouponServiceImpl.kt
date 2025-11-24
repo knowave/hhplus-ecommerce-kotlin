@@ -81,9 +81,7 @@ class CouponServiceImpl(
         }
 
         // 재고 검증
-        if (coupon.issuedQuantity >= coupon.totalQuantity) {
-            throw CouponSoldOutException(couponId)
-        }
+        coupon.validateIssuable(couponId)
 
         // 발급 수량 증가
         coupon.issuedQuantity++
