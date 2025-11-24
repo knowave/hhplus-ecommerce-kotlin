@@ -2,17 +2,14 @@ package com.hhplus.ecommerce.application.coupon
 
 import com.hhplus.ecommerce.application.coupon.dto.*
 import com.hhplus.ecommerce.common.exception.*
-import com.hhplus.ecommerce.common.lock.RedisDistributedLock
-import com.hhplus.ecommerce.common.lock.LockAcquisitionFailedException
+import com.hhplus.ecommerce.common.lock.DistributedLock
 import com.hhplus.ecommerce.domain.coupon.entity.*
 import com.hhplus.ecommerce.domain.coupon.repository.CouponJpaRepository
 import com.hhplus.ecommerce.domain.coupon.repository.CouponStatus
 import com.hhplus.ecommerce.domain.coupon.repository.UserCouponJpaRepository
 import org.springframework.http.HttpStatus
 import org.springframework.stereotype.Service
-import org.springframework.transaction.annotation.Propagation
 import org.springframework.transaction.annotation.Transactional
-import org.springframework.transaction.support.TransactionTemplate
 import org.springframework.web.server.ResponseStatusException
 import java.time.LocalDate
 import java.time.LocalDateTime
@@ -25,9 +22,7 @@ import kotlin.math.max
 @Service
 class CouponServiceImpl(
     private val couponRepository: CouponJpaRepository,
-    private val userCouponRepository: UserCouponJpaRepository,
-    private val redisDistributedLock: RedisDistributedLock,
-    private val transactionTemplate: TransactionTemplate
+    private val userCouponRepository: UserCouponJpaRepository
 ) : CouponService {
     private val DATETIME_FORMATTER = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss")
 
@@ -50,34 +45,19 @@ class CouponServiceImpl(
      *
      * 데이터 정합성 보장 (핵심):
      * - Redis 분산 락 안에서 트랜잭션 완전 커밋
-     * - TransactionTemplate으로 프로그래밍 방식 트랜잭션 관리
+     * - @DistributedLock 어노테이션으로 AOP 기반 락 관리
      * - 트랜잭션 커밋 후 Redis 락 해제 (순서 보장)
      * - 다음 요청이 최신 데이터를 읽도록 보장
      */
-    override fun issueCoupon(couponId: UUID, request: IssueCouponCommand): IssueCouponResult {
-        val lockKey = "coupon:issue:$couponId"
-
-        val lockValue = redisDistributedLock.tryLock(
-            lockKey = lockKey,
-            waitTimeMs = 3000,
-            leaseTimeMs = 10000
-        ) ?: throw LockAcquisitionFailedException("쿠폰 발급 요청이 많습니다. 잠시 후 다시 시도해주세요.")
-
-        try {
-            // 2~5. 트랜잭션 내에서 실행 + 커밋 후 락 해제
-            return issueCouponInternal(couponId, request, lockKey, lockValue)
-        } catch (e: Exception) {
-            // 예외 발생 시 즉시 락 해제
-            redisDistributedLock.unlock(lockKey, lockValue)
-            throw e
-        }
-    }
-
+    @DistributedLock(
+        key = "'coupon:issue:' + #couponId",
+        waitTimeMs = 3000,
+        leaseTimeMs = 10000,
+        errorMessage = "쿠폰 발급 요청이 많습니다. 잠시 후 다시 시도해주세요.",
+        unlockAfterCommit = true
+    )
     @Transactional
-    fun issueCouponInternal(couponId: UUID, request: IssueCouponCommand, lockKey: String, lockValue: String): IssueCouponResult {
-        // 트랜잭션 커밋 후 락 해제되도록 등록
-        redisDistributedLock.unlockAfterCommit(lockKey, lockValue)
-
+    override fun issueCoupon(couponId: UUID, request: IssueCouponCommand): IssueCouponResult {
         // 비관적 락으로 쿠폰 조회
         val coupon = couponRepository.findByIdWithLock(couponId)
             .orElseThrow { CouponNotFoundException(couponId) }
