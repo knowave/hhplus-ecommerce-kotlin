@@ -5,6 +5,7 @@ import com.hhplus.ecommerce.application.product.ProductService
 import com.hhplus.ecommerce.application.user.UserService
 import com.hhplus.ecommerce.application.user.dto.CreateUserCommand
 import com.hhplus.ecommerce.common.exception.InsufficientStockException
+import com.hhplus.ecommerce.common.lock.LockAcquisitionFailedException
 import com.hhplus.ecommerce.domain.coupon.entity.Coupon
 import com.hhplus.ecommerce.domain.coupon.repository.CouponJpaRepository
 import com.hhplus.ecommerce.domain.coupon.repository.CouponStatus
@@ -20,6 +21,7 @@ import io.kotest.matchers.shouldBe
 import io.kotest.matchers.shouldNotBe
 import org.springframework.boot.test.autoconfigure.orm.jpa.DataJpaTest
 import org.springframework.context.annotation.ComponentScan
+import org.springframework.context.annotation.Import
 import org.springframework.test.context.TestPropertySource
 import org.springframework.transaction.PlatformTransactionManager
 import org.springframework.transaction.TransactionDefinition
@@ -38,8 +40,14 @@ import java.util.concurrent.atomic.AtomicInteger
         "spring.jpa.hibernate.ddl-auto=create-drop",
         "spring.datasource.url=jdbc:h2:mem:testdb",
         "spring.datasource.driver-class-name=org.h2.Driver",
-        "spring.jpa.database-platform=org.hibernate.dialect.H2Dialect"
+        "spring.jpa.database-platform=org.hibernate.dialect.H2Dialect",
+        "spring.data.redis.host=localhost",
+        "spring.data.redis.port=6379"
     ]
+)
+@Import(
+    com.hhplus.ecommerce.config.EmbeddedRedisConfig::class,
+    com.hhplus.ecommerce.config.TestRedisConfig::class
 )
 class OrderServiceIntegrationTest(
     private val productService: ProductService,
@@ -298,7 +306,7 @@ class OrderServiceIntegrationTest(
                 }
             }
 
-            context("동시성 테스트 - 주문 생성") {
+            context("동시성 테스트 - 주문 생성 (Redis 분산락 + 비관적 락)") {
                 it("10개 재고를 20명이 동시에 1개씩 주문하면 정확히 10명만 성공한다") {
                     // given - 재고 10개인 상품 생성
                     val productId = executeInNewTransaction {
@@ -315,7 +323,7 @@ class OrderServiceIntegrationTest(
                         saved.id!!
                     }
 
-                    // given - 20명의 사용자 생성
+                    // given - 20명의 사용자 생성 (서로 다른 사용자)
                     val userCount = 20
                     val userIds = mutableListOf<UUID>()
 
@@ -328,12 +336,16 @@ class OrderServiceIntegrationTest(
                     }
 
                     // when - 20명이 동시에 1개씩 주문
+                    // Redis 분산락: 사용자별로 다른 락 키 사용 (order:create:{userId})
+                    // 비관적 락: 상품별로 동시성 제어
                     val threadCount = 20
                     val executorService = Executors.newFixedThreadPool(threadCount)
                     val latch = CountDownLatch(threadCount)
 
                     val successCount = AtomicInteger(0)
-                    val failCount = AtomicInteger(0)
+                    val stockFailCount = AtomicInteger(0)
+                    val lockFailCount = AtomicInteger(0)
+                    val otherFailCount = AtomicInteger(0)
 
                     for (i in 0 until threadCount) {
                         val userId = userIds[i]
@@ -354,13 +366,16 @@ class OrderServiceIntegrationTest(
 
                                 successCount.incrementAndGet()
                             } catch (e: InsufficientStockException) {
-                                // 재고 부족 예외는 정상 동작
-                                failCount.incrementAndGet()
+                                // 재고 부족 예외 (비관적 락으로 검증됨)
+                                stockFailCount.incrementAndGet()
+                            } catch (e: LockAcquisitionFailedException) {
+                                // Redis 분산락 획득 실패
+                                lockFailCount.incrementAndGet()
                             } catch (e: Exception) {
-                                // 그 외 예외는 실패로 처리
-                                println("Unexpected exception: ${e.message}")
+                                // 그 외 예외
+                                println("Unexpected exception: ${e::class.simpleName} - ${e.message}")
                                 e.printStackTrace()
-                                failCount.incrementAndGet()
+                                otherFailCount.incrementAndGet()
                             }
                         }
                     }
@@ -370,12 +385,18 @@ class OrderServiceIntegrationTest(
                         Thread.sleep(100)
                     }
 
+                    // 모든 트랜잭션 커밋 완료 대기
+                    Thread.sleep(500)
+
                     // then - 재고 검증 (별도 트랜잭션에서 조회)
                     executeInNewTransaction {
                         val updatedProduct = productService.findProductById(productId)
 
-                        // 동시성 테스트: 성공 + 실패 = 20명 확인
-                        (successCount.get() + failCount.get()) shouldBe 20
+                        // 동시성 테스트: 모든 요청이 처리됨
+                        val totalRequests = successCount.get() + stockFailCount.get() + lockFailCount.get() + otherFailCount.get()
+                        totalRequests shouldBe 20
+
+                        // 재고 정합성: 성공한 만큼만 차감됨
                         updatedProduct.stock shouldBe (10 - successCount.get())
                     }
                 }
@@ -396,7 +417,7 @@ class OrderServiceIntegrationTest(
                         saved.id!!
                     }
 
-                    // given - 10명의 사용자 생성
+                    // given - 10명의 사용자 생성 (서로 다른 사용자)
                     val userCount = 10
                     val userIds = mutableListOf<UUID>()
 
@@ -409,12 +430,15 @@ class OrderServiceIntegrationTest(
                     }
 
                     // when - 10명이 동시에 1개씩 주문
+                    // Redis 분산락: 사용자별로 다른 락 키 사용 (동시 처리 가능)
                     val threadCount = 10
                     val executorService = Executors.newFixedThreadPool(threadCount)
                     val latch = CountDownLatch(threadCount)
 
                     val successCount = AtomicInteger(0)
-                    val failCount = AtomicInteger(0)
+                    val stockFailCount = AtomicInteger(0)
+                    val lockFailCount = AtomicInteger(0)
+                    val otherFailCount = AtomicInteger(0)
 
                     for (i in 0 until threadCount) {
                         val userId = userIds[i]
@@ -435,11 +459,15 @@ class OrderServiceIntegrationTest(
 
                                 successCount.incrementAndGet()
                             } catch (e: InsufficientStockException) {
-                                failCount.incrementAndGet()
+                                // 재고 부족 예외
+                                stockFailCount.incrementAndGet()
+                            } catch (e: LockAcquisitionFailedException) {
+                                // Redis 분산락 획득 실패
+                                lockFailCount.incrementAndGet()
                             } catch (e: Exception) {
-                                println("Unexpected exception: ${e.message}")
+                                // 그 외 예외
                                 e.printStackTrace()
-                                failCount.incrementAndGet()
+                                otherFailCount.incrementAndGet()
                             }
                         }
                     }
@@ -449,13 +477,99 @@ class OrderServiceIntegrationTest(
                         Thread.sleep(100)
                     }
 
+                    // 모든 트랜잭션 커밋 완료 대기
+                    Thread.sleep(500)
+
                     // then - 재고 검증 (별도 트랜잭션에서 조회)
                     executeInNewTransaction {
                         val updatedProduct = productService.findProductById(productId)
 
-                        // 동시성 테스트: 성공 + 실패 = 10명 확인
-                        (successCount.get() + failCount.get()) shouldBe 10
+                        // 동시성 테스트: 모든 요청이 처리됨
+                        val totalRequests = successCount.get() + stockFailCount.get() + lockFailCount.get() + otherFailCount.get()
+                        totalRequests shouldBe 10
+
+                        // 재고 정합성: 성공한 만큼만 차감됨
                         updatedProduct.stock shouldBe (5 - successCount.get())
+                    }
+                }
+
+                it("같은 사용자가 동시에 여러 주문을 생성하면 Redis 분산락으로 순차 처리된다") {
+                    // given - 충분한 재고의 상품 생성
+                    val productId = executeInNewTransaction {
+                        val product = Product(
+                            name = "분산락 테스트 상품",
+                            description = "충분한 재고",
+                            price = 10000L,
+                            stock = 100,
+                            category = ProductCategory.ELECTRONICS,
+                            specifications = emptyMap(),
+                            salesCount = 0
+                        )
+                        val saved = productService.updateProduct(product)
+                        saved.id!!
+                    }
+
+                    // given - 1명의 사용자 생성
+                    val userId = executeInNewTransaction {
+                        val user = userService.createUser(CreateUserCommand(balance = 2000000L))
+                        user.id!!
+                    }
+
+                    // when - 같은 사용자가 10번 동시에 주문 시도
+                    // Redis 분산락: 같은 락 키 사용 (order:create:{userId})
+                    // 순차적으로 처리되거나 락 획득 실패 발생
+                    val threadCount = 10
+                    val executorService = Executors.newFixedThreadPool(threadCount)
+                    val latch = CountDownLatch(threadCount)
+
+                    val successCount = AtomicInteger(0)
+                    val lockFailCount = AtomicInteger(0)
+                    val otherFailCount = AtomicInteger(0)
+
+                    for (i in 0 until threadCount) {
+                        executorService.submit {
+                            try {
+                                latch.countDown()
+                                latch.await()
+
+                                // 각 스레드에서 새로운 트랜잭션으로 실행
+                                executeInNewTransaction {
+                                    val command = CreateOrderCommand(
+                                        userId = userId,
+                                        items = listOf(OrderItemCommand(productId, 1)),
+                                        couponId = null
+                                    )
+                                    orderService.createOrder(command)
+                                }
+
+                                successCount.incrementAndGet()
+                            } catch (e: LockAcquisitionFailedException) {
+                                // Redis 분산락 획득 실패 (대기 시간 초과)
+                                lockFailCount.incrementAndGet()
+                            } catch (e: Exception) {
+                                // 그 외 예외
+                                e.printStackTrace()
+                                otherFailCount.incrementAndGet()
+                            }
+                        }
+                    }
+
+                    executorService.shutdown()
+                    while (!executorService.isTerminated) {
+                        Thread.sleep(100)
+                    }
+
+                    // 모든 트랜잭션 커밋 완료 대기
+                    Thread.sleep(500)
+
+                    // then - 결과 검증
+                    val totalRequests = successCount.get() + lockFailCount.get() + otherFailCount.get()
+                    totalRequests shouldBe 10
+
+                    // then - 재고 검증: 성공한 만큼만 차감됨
+                    executeInNewTransaction {
+                        val updatedProduct = productService.findProductById(productId)
+                        updatedProduct.stock shouldBe (100 - successCount.get())
                     }
                 }
             }
