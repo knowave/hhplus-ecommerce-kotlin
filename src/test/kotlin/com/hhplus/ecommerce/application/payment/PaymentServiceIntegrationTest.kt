@@ -8,6 +8,7 @@ import com.hhplus.ecommerce.application.order.dto.CreateOrderCommand
 import com.hhplus.ecommerce.application.order.dto.OrderItemCommand
 import com.hhplus.ecommerce.application.payment.dto.ProcessPaymentCommand
 import com.hhplus.ecommerce.application.user.dto.CreateUserCommand
+import com.hhplus.ecommerce.common.lock.LockAcquisitionFailedException
 import com.hhplus.ecommerce.domain.product.entity.Product
 import com.hhplus.ecommerce.domain.product.entity.ProductCategory
 import io.kotest.assertions.throwables.shouldThrow
@@ -18,6 +19,7 @@ import io.kotest.matchers.shouldBe
 import io.kotest.matchers.shouldNotBe
 import org.springframework.boot.test.autoconfigure.orm.jpa.DataJpaTest
 import org.springframework.context.annotation.ComponentScan
+import org.springframework.context.annotation.Import
 import org.springframework.test.context.TestPropertySource
 import org.springframework.transaction.PlatformTransactionManager
 import org.springframework.transaction.TransactionDefinition
@@ -35,8 +37,14 @@ import java.util.concurrent.atomic.AtomicInteger
         "spring.jpa.hibernate.ddl-auto=create-drop",
         "spring.datasource.url=jdbc:h2:mem:testdb",
         "spring.datasource.driver-class-name=org.h2.Driver",
-        "spring.jpa.database-platform=org.hibernate.dialect.H2Dialect"
+        "spring.jpa.database-platform=org.hibernate.dialect.H2Dialect",
+        "spring.data.redis.host=localhost",
+        "spring.data.redis.port=6379"
     ]
+)
+@Import(
+    com.hhplus.ecommerce.config.EmbeddedRedisConfig::class,
+    com.hhplus.ecommerce.config.TestRedisConfig::class
 )
 class PaymentServiceIntegrationTest(
     private val orderService: OrderService,
@@ -331,8 +339,8 @@ class PaymentServiceIntegrationTest(
             }
         }
 
-        context("비관적 락 동시성 테스트 - 결제 처리") {
-            it("20명의 사용자가 각각 다른 상품을 주문 후 동시에 결제하면 모두 성공한다") {
+        context("분산락 동시성 테스트 - 결제 처리") {
+            it("20명의 사용자가 각각 다른 상품을 주문 후 동시에 결제하면 모두 성공한다 (락 경합 없음)") {
                 // given - 각 사용자별로 충분한 재고를 가진 상품 20개 생성
                 val testProducts = mutableListOf<UUID>()
                 repeat(20) { index ->
@@ -373,7 +381,7 @@ class PaymentServiceIntegrationTest(
                     userOrderPairs.add(Pair(user.id!!, order.orderId))
                 }
 
-                // when - 20명이 각자의 주문을 동시에 결제 시도 (비관적 락 테스트)
+                // when - 20명이 각자의 주문을 동시에 결제 시도
                 val threadCount = 20
                 val executorService = Executors.newFixedThreadPool(threadCount)
                 val latch = CountDownLatch(threadCount)
@@ -390,7 +398,7 @@ class PaymentServiceIntegrationTest(
                             latch.countDown()
                             latch.await() // 모든 스레드가 준비될 때까지 대기
 
-                            // 각 스레드에서 새로운 트랜잭션으로 실행 (비관적 락 테스트)
+                            // 각 스레드에서 새로운 트랜잭션으로 실행
                             executeInNewTransaction {
                                 val paymentCommand = ProcessPaymentCommand(userId = userId)
                                 paymentService.processPayment(orderId, paymentCommand)
@@ -416,57 +424,61 @@ class PaymentServiceIntegrationTest(
                 failCount.get() shouldBe 0  // 실패 없음
             }
 
-            it("비관적락으로 동시 주문 생성 제어 - 같은 상품, 제한된 재고(10개), 20명 동시 주문") {
-                // given - 재고 10개인 상품 생성
-                val testProduct = executeInNewTransaction {
-                    val product = Product(
-                        name = "Limited Stock Test Product",
-                        description = "Stock 10 - Only 10 users can create order",
-                        price = 50000L,
-                        stock = 10,
-                        category = ProductCategory.ELECTRONICS,
-                        specifications = emptyMap(),
-                        salesCount = 0
+            it("동일한 주문에 대해 동시에 5번 중복 결제 요청 시 1번만 성공해야 한다") {
+                // given - 테스트용 사용자 및 주문 생성
+                val testUser = executeInNewTransaction {
+                    userService.createUser(CreateUserCommand(balance = 2000000L))
+                }
+                
+                val order = executeInNewTransaction {
+                    val createOrderCommand = CreateOrderCommand(
+                        userId = testUser.id!!,
+                        items = listOf(OrderItemCommand(productId = product1Id, quantity = 1)),
+                        couponId = null
                     )
-                    val saved = productService.updateProduct(product)
-                    saved.id!!
+                    orderService.createOrder(createOrderCommand)
                 }
 
-                // when - 20명이 동시에 같은 상품의 주문 생성 시도 (비관적락 테스트)
-                // 각 스레드가 독립적인 트랜잭션에서 주문 생성을 시도
-                val userCount = 20
-                val executorService = Executors.newFixedThreadPool(userCount)
-                val latch = CountDownLatch(userCount)
+                // when - 5개 스레드에서 동시에 같은 주문 결제 시도
+                // Redis 분산락 키: payment:process:{orderId}
+                val threadCount = 5
+                val executorService = Executors.newFixedThreadPool(threadCount)
+                val latch = CountDownLatch(threadCount)
 
                 val successCount = AtomicInteger(0)
-                val insufficientStockCount = AtomicInteger(0)
+                val duplicatePaymentCount = AtomicInteger(0)  // AlreadyPaidException 또는 InvalidOrderStatusException
+                val lockFailCount = AtomicInteger(0)
                 val otherFailCount = AtomicInteger(0)
 
-                for (i in 0 until userCount) {
+                for (i in 0 until threadCount) {
                     executorService.submit {
                         try {
                             latch.countDown()
-                            latch.await() // 모든 스레드가 준비될 때까지 대기
+                            latch.await()
 
-                            // 각 스레드에서 새로운 트랜잭션으로 실행
+                            // 새로운 트랜잭션으로 실행 (Spring AOP 프록시 문제 해결)
                             executeInNewTransaction {
-                                val user = userService.createUser(CreateUserCommand(balance = 2000000L))
-                                val createOrderCommand = CreateOrderCommand(
-                                    userId = user.id!!,
-                                    items = listOf(OrderItemCommand(productId = testProduct, quantity = 1)),
-                                    couponId = null
-                                )
-                                orderService.createOrder(createOrderCommand)
+                                val paymentCommand = ProcessPaymentCommand(userId = testUser.id!!)
+                                paymentService.processPayment(order.orderId, paymentCommand)
                             }
-
                             successCount.incrementAndGet()
-                        } catch (e: InsufficientStockException) {
-                            // 비관적 락에 의해 재고 부족 예외 발생 (정상 동작)
-                            insufficientStockCount.incrementAndGet()
+                        } catch (e: AlreadyPaidException) {
+                            // 이미 결제 레코드가 존재하는 경우
+                            duplicatePaymentCount.incrementAndGet()
+                        } catch (e: InvalidOrderStatusException) {
+                            // 주문 상태가 PENDING이 아닌 경우 (이미 PAID로 변경됨)
+                            duplicatePaymentCount.incrementAndGet()
+                        } catch (e: LockAcquisitionFailedException) {
+                            // Redis 분산락 획득 실패 (대기 시간 초과)
+                            lockFailCount.incrementAndGet()
                         } catch (e: Exception) {
-                            println("Unexpected exception in thread $i: ${e::class.simpleName} - ${e.message}")
-                            e.printStackTrace()
-                            otherFailCount.incrementAndGet()
+                            // cause 확인
+                            if (e.cause is AlreadyPaidException || e.cause is InvalidOrderStatusException) {
+                                duplicatePaymentCount.incrementAndGet()
+                            } else {
+                                e.printStackTrace()
+                                otherFailCount.incrementAndGet()
+                            }
                         }
                     }
                 }
@@ -476,11 +488,16 @@ class PaymentServiceIntegrationTest(
                     Thread.sleep(100)
                 }
 
-                // then
-                (successCount.get() + insufficientStockCount.get() + otherFailCount.get()) shouldBe 20
-                successCount.get() shouldBe 10  // 재고 10개이므로 정확히 10명만 주문 생성 성공
-                insufficientStockCount.get() shouldBe 10  // 나머지 10명은 비관적 락에 의해 재고부족 예외
-                otherFailCount.get() shouldBe 0  // 예상치 못한 예외는 없음
+                // 모든 트랜잭션 커밋 완료 대기
+                Thread.sleep(500)
+
+                // then - 결과 검증
+                val total = successCount.get() + duplicatePaymentCount.get() + lockFailCount.get() + otherFailCount.get()
+                total shouldBe 5
+                successCount.get() shouldBe 1  // 오직 1개만 성공
+                // 나머지 4개는 중복 결제 예외 또는 락 획득 실패
+                (duplicatePaymentCount.get() + lockFailCount.get()) shouldBe 4
+                otherFailCount.get() shouldBe 0
             }
         }
     }

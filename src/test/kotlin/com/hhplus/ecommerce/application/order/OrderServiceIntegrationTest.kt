@@ -373,7 +373,6 @@ class OrderServiceIntegrationTest(
                                 lockFailCount.incrementAndGet()
                             } catch (e: Exception) {
                                 // 그 외 예외
-                                println("Unexpected exception: ${e::class.simpleName} - ${e.message}")
                                 e.printStackTrace()
                                 otherFailCount.incrementAndGet()
                             }
