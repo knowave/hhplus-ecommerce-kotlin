@@ -32,5 +32,11 @@ interface OrderService {
 
     fun getOrder(id: UUID): Order
 
+    /**
+     * 비관적 락을 사용하여 주문 조회
+     * 동시성 제어가 필요한 결제 처리 등에서 사용
+     */
+    fun getOrderWithLock(id: UUID): Order
+
     fun updateOrder(order: Order): Order
 }
