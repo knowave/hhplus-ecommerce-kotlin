@@ -359,6 +359,11 @@ class OrderServiceImpl(
             .orElseThrow { OrderNotFoundException(id) }
     }
 
+    override fun getOrderWithLock(id: UUID): Order {
+        return orderRepository.findByIdWithLock(id)
+            .orElseThrow { OrderNotFoundException(id) }
+    }
+
     override fun updateOrder(order: Order): Order {
         return orderRepository.save(order)
     }
