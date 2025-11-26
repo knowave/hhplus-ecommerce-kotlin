@@ -328,32 +328,32 @@ class SomeService(
 ```kotlin
 @Aspect
 @Component
-class DistributedLockAspect(...) {
-
+@Order(Ordered.HIGHEST_PRECEDENCE)  // 트랜잭션보다 먼저 실행
+class DistributedLockAspect(
+    private val redisDistributedLock: RedisDistributedLock
+) {
     @Around("@annotation(distributedLock)")
     fun around(joinPoint: ProceedingJoinPoint, distributedLock: DistributedLock): Any? {
+        // 1. SpEL 파싱하여 동적 락 키 생성
+        val lockKey = parseLockKey(distributedLock.key, joinPoint)
 
-        logger.debug("🔒 [BEFORE] 분산락 획득 시도")
-        logger.debug("   - 메서드: ${joinPoint.signature.name}")
-        logger.debug("   - 파라미터: ${joinPoint.args.joinToString()}")
-
-        val lockKey = parseLockKey(...)
-        logger.debug("   - 락 키: $lockKey")
-
-        val lockValue = redisDistributedLock.tryLock(...)
-        logger.debug("   - 락 획득 성공: $lockValue")
+        // 2. 락 획득 시도
+        val lockValue = redisDistributedLock.tryLock(lockKey, ...)
+        ?: throw LockAcquisitionFailedException(distributedLock.errorMessage)
 
         try {
-            logger.debug("🚀 [PROCEED] 실제 메서드 실행 시작")
+            // 3. 비즈니스 로직 실행
             val result = joinPoint.proceed()
-            logger.debug("✅ [AFTER] 메서드 실행 완료")
 
+            // 4. 트랜잭션 커밋 후 락 해제
+            if (distributedLock.unlockAfterCommit) {
+                redisDistributedLock.unlockAfterCommit(lockKey, lockValue)
+            }
             return result
         } catch (e: Exception) {
-            logger.debug("❌ [EXCEPTION] 예외 발생: ${e.message}")
+            // 5. 예외 시 즉시 락 해제
+            redisDistributedLock.unlock(lockKey, lockValue)
             throw e
-        } finally {
-            logger.debug("🔓 [FINALLY] 분산락 해제")
         }
     }
 }
