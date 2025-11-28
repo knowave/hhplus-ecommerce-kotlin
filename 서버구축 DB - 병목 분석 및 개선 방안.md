@@ -63,18 +63,20 @@
 6. 배송 생성
 ```
 
-#### 3. 쿠폰 발급 프로세스 (개선 후)
+#### 3. 쿠폰 발급 프로세스 (개선 후 - 어노테이션 기반)
 ```
-1. Redis 분산 락 획득 (멀티 서버 동시성 제어)
-2. 트랜잭션 시작
-3. 쿠폰 조회 (DB 비관적 락 - 이중 보호)
-4. 중복 발급 검증 (1인 1매 제한)
-5. 발급 기간 검증
-6. 재고 검증
-7. 발급 수량 증가 (Coupon 테이블 업데이트)
-8. 사용자 쿠폰 생성 (UserCoupon 테이블 삽입)
-9. 트랜잭션 커밋
-10. Redis 락 해제 (unlockAfterCommit)
+1. @DistributedLock 어노테이션 AOP 인터셉트
+2. Redis 분산 락 획득 (멀티 서버 동시성 제어)
+3. @Transactional 시작
+4. unlockAfterCommit 등록 (트랜잭션 커밋 후 락 해제)
+5. 쿠폰 조회 (DB 비관적 락 - 이중 보호)
+6. 중복 발급 검증 (1인 1매 제한)
+7. 발급 기간 검증
+8. 재고 검증
+9. 발급 수량 증가 (Coupon 테이블 업데이트)
+10. 사용자 쿠폰 생성 (UserCoupon 테이블 삽입)
+11. 트랜잭션 커밋
+12. Redis 락 해제 (unlockAfterCommit 콜백 실행)
 ```
 
 ---
@@ -599,9 +601,7 @@ override fun issueCoupon(couponId: UUID, request: IssueCouponCommand): IssueCoup
     }
 
     // 재고 검증
-    if (coupon.issuedQuantity >= coupon.totalQuantity) {
-        throw CouponSoldOutException(couponId)
-    }
+    coupon.validateIssuable(couponId)
 
     // 발급 수량 증가
     coupon.issuedQuantity++
@@ -668,9 +668,7 @@ fun issueCouponInternal(couponId: UUID, request: IssueCouponCommand, lockKey: St
     }
 
     // 재고 검증
-    if (coupon.issuedQuantity >= coupon.totalQuantity) {
-        throw CouponSoldOutException(couponId)
-    }
+    coupon.validateIssuable(couponId)
 
     // 발급 수량 증가
     coupon.issuedQuantity++

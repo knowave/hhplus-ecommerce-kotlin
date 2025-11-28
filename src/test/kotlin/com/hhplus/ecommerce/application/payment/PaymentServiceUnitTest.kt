@@ -102,7 +102,7 @@ class PaymentServiceUnitTest : DescribeSpec({
                 val command = ProcessPaymentCommand(userId = userId)
 
                 // Mock 설정
-                every { orderService.getOrder(orderId) } returns order
+                every { orderService.getOrderWithLock(orderId) } returns order
                 every { paymentRepository.findByOrderId(orderId) } returns null
                 every { userService.findByIdWithLock(userId) } returns user
                 every { userService.updateUser(any()) } returns user
@@ -157,7 +157,7 @@ class PaymentServiceUnitTest : DescribeSpec({
                 val orderId = UUID.randomUUID()
                 val command = ProcessPaymentCommand(userId = UUID.randomUUID())
 
-                every { orderService.getOrder(orderId) } throws OrderNotFoundException(orderId)
+                every { orderService.getOrderWithLock(orderId) } throws OrderNotFoundException(orderId)
 
                 // when & then
                 shouldThrow<OrderNotFoundException> {
@@ -185,7 +185,7 @@ class PaymentServiceUnitTest : DescribeSpec({
 
                 val command = ProcessPaymentCommand(userId = otherUserId)
 
-                every { orderService.getOrder(orderId) } returns order
+                every { orderService.getOrderWithLock(orderId) } returns order
 
                 // when & then
                 shouldThrow<OrderForbiddenException> {
@@ -193,7 +193,7 @@ class PaymentServiceUnitTest : DescribeSpec({
                 }
             }
 
-                it("PENDING이 아닌 주문에 대한 결제 시 InvalidOrderStatusException 발생") {
+            it("PENDING이 아닌 주문에 대한 결제 시 InvalidOrderStatusException 발생") {
                     // given
                     val orderId = UUID.randomUUID()
                     val userId = UUID.randomUUID()
@@ -210,13 +210,13 @@ class PaymentServiceUnitTest : DescribeSpec({
 
                     val command = ProcessPaymentCommand(userId = userId)
 
-                    every { orderService.getOrder(orderId) } returns order
+                every { orderService.getOrderWithLock(orderId) } returns order
 
-                    // when & then
-                    shouldThrow<InvalidOrderStatusException> {
-                        paymentService.processPayment(orderId, command)
-                    }
+                // when & then
+                shouldThrow<InvalidOrderStatusException> {
+                    paymentService.processPayment(orderId, command)
                 }
+            }
 
             it("이미 결제 레코드가 존재하는 경우 AlreadyPaidException 발생") {
                 // given
@@ -243,7 +243,7 @@ class PaymentServiceUnitTest : DescribeSpec({
 
                 val command = ProcessPaymentCommand(userId = userId)
 
-                every { orderService.getOrder(orderId) } returns order
+                every { orderService.getOrderWithLock(orderId) } returns order
                 every { paymentRepository.findByOrderId(orderId) } returns existingPayment
 
                 // when & then
@@ -277,7 +277,7 @@ class PaymentServiceUnitTest : DescribeSpec({
 
                 val command = ProcessPaymentCommand(userId = userId)
 
-                every { orderService.getOrder(orderId) } returns order
+                every { orderService.getOrderWithLock(orderId) } returns order
                 every { paymentRepository.findByOrderId(orderId) } returns null
                 every { userService.findByIdWithLock(userId) } returns user
                 
@@ -309,7 +309,7 @@ class PaymentServiceUnitTest : DescribeSpec({
 
                 val command = ProcessPaymentCommand(userId = userId)
 
-                every { orderService.getOrder(orderId) } returns order
+                every { orderService.getOrderWithLock(orderId) } returns order
                 every { paymentRepository.findByOrderId(orderId) } returns null
                 every { userService.findByIdWithLock(userId) } throws UserNotFoundException(userId)
 

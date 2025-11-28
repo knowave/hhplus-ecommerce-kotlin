@@ -7,6 +7,7 @@ import com.hhplus.ecommerce.application.order.dto.*
 import com.hhplus.ecommerce.application.product.ProductService
 import com.hhplus.ecommerce.application.user.UserService
 import com.hhplus.ecommerce.common.exception.*
+import com.hhplus.ecommerce.common.lock.DistributedLock
 import com.hhplus.ecommerce.domain.product.entity.Product
 import com.hhplus.ecommerce.domain.coupon.entity.*
 import com.hhplus.ecommerce.domain.order.entity.*
@@ -85,10 +86,24 @@ class OrderServiceImpl(
 
     /**
      * 주문 생성 트랜잭션
-     * 트랜잭션 범위를 최소화하여 락 보유 시간 단축
+     *
+     * 분산락 적용:
+     * - 다중 서버 환경에서 같은 사용자의 동시 주문 생성을 방지
+     * - 사용자별로 락을 획득하여 순차적으로 처리
+     * - 트랜잭션 커밋 후 락을 해제하여 데이터 정합성 보장
+     * @param request 주문 생성 요청
+     * @param userId 사용자 ID
+     * @return 주문 생성 데이터
      */
+    @DistributedLock(
+        key = "'order:create:' + #userId",
+        waitTimeMs = 5000,
+        leaseTimeMs = 15000,
+        errorMessage = "주문 처리 중입니다. 잠시 후 다시 시도해주세요.",
+        unlockAfterCommit = true
+    )
     @Transactional
-    private fun createOrderTransaction(request: CreateOrderCommand, userId: UUID): OrderCreationData {
+    internal fun createOrderTransaction(request: CreateOrderCommand, userId: UUID): OrderCreationData {
         val products = deductStock(request.items)
 
         val userCoupon = if (request.couponId != null) {
@@ -269,6 +284,24 @@ class OrderServiceImpl(
         )
     }
 
+    /**
+     * 주문 취소
+     *
+     * 분산락 적용:
+     * - 다중 서버 환경에서 같은 주문의 동시 취소를 방지
+     * - 주문 ID별로 락을 획득하여 중복 취소 방지
+     * - 트랜잭션 커밋 후 락을 해제하여 데이터 정합성 보장
+     * @param orderId 주문 ID
+     * @param request 주문 취소 요청
+     * @return 주문 취소 결과
+     */
+    @DistributedLock(
+        key = "'order:cancel:' + #orderId",
+        waitTimeMs = 5000,
+        leaseTimeMs = 15000,
+        errorMessage = "주문 취소 처리 중입니다. 잠시 후 다시 시도해주세요.",
+        unlockAfterCommit = true
+    )
     @Transactional
     override fun cancelOrder(orderId: UUID, request: CancelOrderCommand): CancelOrderResult {
         val order = orderRepository.findById(orderId)
@@ -323,6 +356,11 @@ class OrderServiceImpl(
 
     override fun getOrder(id: UUID): Order {
         return orderRepository.findById(id)
+            .orElseThrow { OrderNotFoundException(id) }
+    }
+
+    override fun getOrderWithLock(id: UUID): Order {
+        return orderRepository.findByIdWithLock(id)
             .orElseThrow { OrderNotFoundException(id) }
     }
 
