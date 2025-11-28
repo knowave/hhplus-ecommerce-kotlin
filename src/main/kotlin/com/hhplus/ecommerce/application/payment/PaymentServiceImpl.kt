@@ -7,6 +7,7 @@ import com.hhplus.ecommerce.application.product.ProductService
 import com.hhplus.ecommerce.application.shipping.ShippingService
 import com.hhplus.ecommerce.application.user.UserService
 import com.hhplus.ecommerce.common.exception.*
+import com.hhplus.ecommerce.common.lock.DistributedLock
 import com.hhplus.ecommerce.domain.coupon.repository.CouponStatus
 import com.hhplus.ecommerce.domain.order.entity.*
 import com.hhplus.ecommerce.domain.payment.entity.*
@@ -35,15 +36,30 @@ class PaymentServiceImpl(
     private val couponService: CouponService,
     private val shippingService: ShippingService
 ) : PaymentService {
+    private val DATE_FORMATTER: DateTimeFormatter = DateTimeFormatter.ISO_LOCAL_DATE_TIME
 
-    companion object {
-        private val DATE_FORMATTER: DateTimeFormatter = DateTimeFormatter.ISO_LOCAL_DATE_TIME
-    }
-
+    /**
+     * 결제 처리
+     *
+     * 동시성 제어:
+     * - 분산락: 다중 서버 환경에서 같은 주문에 대한 동시 결제 방지
+     * - 비관적 락: DB 레벨에서 주문 데이터의 원자성 보장
+     *
+     * 분산락 + 비관적 락을 함께 사용하는 이유:
+     * - 분산락: Redis 레벨에서 빠른 동시성 제어 (다중 서버 환경)
+     * - 비관적 락: DB 트랜잭션 내에서 데이터 정합성 보장
+     */
+    @DistributedLock(
+        key = "'payment:process:' + #orderId",
+        waitTimeMs = 5000,
+        leaseTimeMs = 15000,
+        errorMessage = "결제 처리 중입니다. 잠시 후 다시 시도해주세요.",
+        unlockAfterCommit = true
+    )
     @Transactional
     override fun processPayment(orderId: UUID, request: ProcessPaymentCommand): ProcessPaymentResult {
-        // 1. 주문 조회 및 검증
-        val order = orderService.getOrder(orderId)
+        // 1. 주문 조회 및 검증 (비관적 락으로 동시성 제어)
+        val order = orderService.getOrderWithLock(orderId)
 
         // 권한 확인
         order.validateOwner(request.userId)
@@ -236,6 +252,13 @@ class PaymentServiceImpl(
      *
      * 주문 상태 변경, 재고 복구, 쿠폰 복구는 OrderService의 책임입니다.
      */
+    @DistributedLock(
+        key = "'payment:cancel:' + #paymentId",
+        waitTimeMs = 5000,
+        leaseTimeMs = 15000,
+        errorMessage = "결제 취소 처리 중입니다. 잠시 후 다시 시도해주세요.",
+        unlockAfterCommit = true
+    )
     @Transactional
     override fun cancelPayment(paymentId: UUID, request: CancelPaymentCommand): CancelPaymentResult {
         // 1. 결제 조회 및 검증
