@@ -10,6 +10,7 @@ enum class ErrorCode(
     // Product related
     PRODUCT_NOT_FOUND("P001", "Product not found", HttpStatus.NOT_FOUND),
     INSUFFICIENT_STOCK("P002", "Insufficient stock", HttpStatus.BAD_REQUEST),
+    INVALID_PRODUCT_RANKING_PERIOD("P003", "Invalid ranking period", HttpStatus.BAD_REQUEST),
 
     // Cart related
     CART_ITEM_NOT_FOUND("CART001", "Cart item not found", HttpStatus.NOT_FOUND),
