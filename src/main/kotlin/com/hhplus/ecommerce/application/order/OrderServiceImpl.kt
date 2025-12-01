@@ -4,6 +4,7 @@ import com.hhplus.ecommerce.application.cart.CartService
 import com.hhplus.ecommerce.application.cart.dto.AddCartItemCommand
 import com.hhplus.ecommerce.application.coupon.CouponService
 import com.hhplus.ecommerce.application.order.dto.*
+import com.hhplus.ecommerce.application.product.ProductRankingService
 import com.hhplus.ecommerce.application.product.ProductService
 import com.hhplus.ecommerce.application.user.UserService
 import com.hhplus.ecommerce.common.exception.*
@@ -13,6 +14,7 @@ import com.hhplus.ecommerce.domain.coupon.entity.*
 import com.hhplus.ecommerce.domain.order.entity.*
 import com.hhplus.ecommerce.domain.order.event.OrderCreatedEvent
 import com.hhplus.ecommerce.domain.order.repository.OrderJpaRepository
+import com.hhplus.ecommerce.domain.product.entity.RankingPeriod
 import org.slf4j.LoggerFactory
 import org.springframework.context.ApplicationEventPublisher
 import org.springframework.data.domain.PageRequest
@@ -29,6 +31,7 @@ class OrderServiceImpl(
     private val couponService: CouponService,
     private val userService: UserService,
     private val cartService: CartService,
+    private val productRankingService: ProductRankingService,
     private val applicationEventPublisher: ApplicationEventPublisher
 ) : OrderService {
 
@@ -56,6 +59,9 @@ class OrderServiceImpl(
         val user = userService.getUser(request.userId)
 
         val orderData = createOrderTransaction(request, user.id!!)
+
+        // 트랜잭션 커밋 후 실시간 랭킹 업데이트
+        updateRankingRealtime(orderData.items)
 
         // - 카트 삭제가 실패해도 주문 생성은 이미 완료됨
         try {
@@ -528,5 +534,36 @@ class OrderServiceImpl(
         val dateStr = LocalDate.now().format(DateTimeFormatter.ofPattern("yyyyMMdd"))
         val uuid = UUID.randomUUID().toString().substring(0, 8).uppercase()
         return "ORD-$dateStr-$uuid"
+    }
+
+    private fun updateRankingRealtime(items: List<OrderItemResult>) {
+        try {
+            items.forEach { item ->
+                // 일간
+                productRankingService.incrementOrderCount(
+                    productId = item.productId,
+                    quantity = item.quantity,
+                    period = RankingPeriod.DAILY
+                )
+
+                // 주간
+                productRankingService.incrementOrderCount(
+                    productId = item.productId,
+                    quantity = item.quantity,
+                    period = RankingPeriod.WEEKLY
+                )
+
+                logger.debug(
+                    "Updated realtime ranking for product {} with quantity {}",
+                    item.productId,
+                    item.quantity
+                )
+
+                logger.info("Successfully updated realtime rankings for {} products", items.size)
+            }
+        } catch (e: Exception) {
+            // 랭킹 업데이트 실패는 주문 생성에 영향을 주지 않음
+            logger.error("Failed to update realtime ranking", e)
+        }
     }
 }
