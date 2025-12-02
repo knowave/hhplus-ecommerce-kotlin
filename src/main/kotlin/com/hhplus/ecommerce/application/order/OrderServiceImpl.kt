@@ -41,19 +41,20 @@ class OrderServiceImpl(
     }
 
     /**
-     * 주문 생성 (트랜잭션 범위 최적화)
-     *
-     * 트랜잭션 밖에서:
-     * - 요청 검증
-     * - 사용자 조회
-     * - 이벤트 발행
-     * - 응답 생성
+     * 주문 생성
      *
      * 트랜잭션 내에서:
+     * - 요청 검증
+     * - 사용자 조회
      * - 재고 차감
      * - 쿠폰 사용
      * - 주문 저장
+     *
+     * 트랜잭션 커밋 후:
+     * - 이벤트 발행 (비동기: 랭킹 업데이트, 카트 삭제)
+     * - 응답 생성
      */
+    @Transactional
     override fun createOrder(request: CreateOrderCommand): CreateOrderResult {
         validateOrderRequest(request)
         val user = userService.getUser(request.userId)
