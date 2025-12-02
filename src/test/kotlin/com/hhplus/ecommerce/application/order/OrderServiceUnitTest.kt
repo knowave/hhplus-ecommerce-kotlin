@@ -2,6 +2,7 @@ package com.hhplus.ecommerce.application.order
 
 import com.hhplus.ecommerce.application.cart.CartService
 import com.hhplus.ecommerce.application.coupon.CouponService
+import com.hhplus.ecommerce.application.product.ProductRankingService
 import com.hhplus.ecommerce.application.product.ProductService
 import com.hhplus.ecommerce.application.user.UserService
 import com.hhplus.ecommerce.common.exception.CouponNotFoundException
@@ -45,6 +46,7 @@ class OrderServiceUnitTest : DescribeSpec({
     lateinit var userService: UserService
     lateinit var orderService: OrderServiceImpl
     lateinit var cartService: CartService
+    lateinit var productRankingService: ProductRankingService
     lateinit var applicationEventPublisher: ApplicationEventPublisher
 
     beforeEach {
@@ -53,6 +55,7 @@ class OrderServiceUnitTest : DescribeSpec({
         couponService = mockk(relaxed = true)
         userService = mockk(relaxed = true)
         cartService = mockk(relaxed = true)
+        productRankingService = mockk(relaxed = true)
         applicationEventPublisher = mockk(relaxed = true)
 
         orderService = OrderServiceImpl(
@@ -61,6 +64,7 @@ class OrderServiceUnitTest : DescribeSpec({
             couponService = couponService,
             userService = userService,
             cartService = cartService,
+            productRankingService = productRankingService,
             applicationEventPublisher = applicationEventPublisher
         )
     }

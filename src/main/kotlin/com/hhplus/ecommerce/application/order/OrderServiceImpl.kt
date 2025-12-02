@@ -60,22 +60,18 @@ class OrderServiceImpl(
 
         val orderData = createOrderTransaction(request, user.id!!)
 
-        // 트랜잭션 커밋 후 실시간 랭킹 업데이트
-        updateRankingRealtime(orderData.items)
-
-        // - 카트 삭제가 실패해도 주문 생성은 이미 완료됨
-        try {
-            val productIds = request.items.map { it.productId }
-            cartService.deleteCarts(request.userId, productIds)
-        } catch (e: Exception) {
-            logger.warn("Failed to delete cart items for user ${request.userId} after order creation", e)
-        }
-
+        // 트랜잭션 커밋 후 비동기 작업 발행 (랭킹 업데이트, 카트 삭제)
         applicationEventPublisher.publishEvent(
             OrderCreatedEvent(
                 orderId = orderData.orderId,
                 userId = request.userId,
-                productIds = orderData.productIds
+                productIds = orderData.productIds,
+                items = orderData.items.map { item ->
+                    com.hhplus.ecommerce.domain.order.event.OrderItemInfo(
+                        productId = item.productId,
+                        quantity = item.quantity
+                    )
+                }
             )
         )
 
@@ -534,36 +530,5 @@ class OrderServiceImpl(
         val dateStr = LocalDate.now().format(DateTimeFormatter.ofPattern("yyyyMMdd"))
         val uuid = UUID.randomUUID().toString().substring(0, 8).uppercase()
         return "ORD-$dateStr-$uuid"
-    }
-
-    private fun updateRankingRealtime(items: List<OrderItemResult>) {
-        try {
-            items.forEach { item ->
-                // 일간
-                productRankingService.incrementOrderCount(
-                    productId = item.productId,
-                    quantity = item.quantity,
-                    period = RankingPeriod.DAILY
-                )
-
-                // 주간
-                productRankingService.incrementOrderCount(
-                    productId = item.productId,
-                    quantity = item.quantity,
-                    period = RankingPeriod.WEEKLY
-                )
-
-                logger.debug(
-                    "Updated realtime ranking for product {} with quantity {}",
-                    item.productId,
-                    item.quantity
-                )
-
-                logger.info("Successfully updated realtime rankings for {} products", items.size)
-            }
-        } catch (e: Exception) {
-            // 랭킹 업데이트 실패는 주문 생성에 영향을 주지 않음
-            logger.error("Failed to update realtime ranking", e)
-        }
     }
 }
