@@ -1,4 +1,4 @@
-package com.hhplus.ecommerce.domain.order.event
+package com.hhplus.ecommerce.common.event
 
 import java.time.LocalDateTime
 import java.util.UUID

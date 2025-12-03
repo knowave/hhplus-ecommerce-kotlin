@@ -15,14 +15,15 @@ class CouponController(
     private val couponService: CouponService
 ) {
 
-    @Operation(summary = "쿠폰 발급", description = "쿠폰 ID로 사용자에게 쿠폰을 발급합니다")
+    @Operation(summary = "쿠폰 발급", description = "쿠폰 ID로 사용자에게 쿠폰을 발급합니다 (비동기 요청)")
     @PostMapping("/{couponId}/issue")
     fun issueCoupon(
         @PathVariable couponId: UUID,
         @RequestBody request: IssueCouponRequest
     ): ResponseEntity<IssueCouponResponse> {
         val command = IssueCouponCommand.command(request)
-        val result = couponService.issueCoupon(couponId, command)
+        // 비동기 발급 요청 메서드 호출
+        val result = couponService.requestCouponIssuance(couponId, command)
 
         return ResponseEntity.ok(IssueCouponResponse.from(result))
     }
