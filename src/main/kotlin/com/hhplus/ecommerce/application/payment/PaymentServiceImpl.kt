@@ -6,6 +6,7 @@ import com.hhplus.ecommerce.application.payment.dto.*
 import com.hhplus.ecommerce.application.product.ProductService
 import com.hhplus.ecommerce.application.shipping.ShippingService
 import com.hhplus.ecommerce.application.user.UserService
+import com.hhplus.ecommerce.common.event.PaymentCompletedEvent
 import com.hhplus.ecommerce.common.exception.*
 import com.hhplus.ecommerce.common.lock.DistributedLock
 import com.hhplus.ecommerce.domain.coupon.repository.CouponStatus
@@ -13,6 +14,7 @@ import com.hhplus.ecommerce.domain.order.entity.*
 import com.hhplus.ecommerce.domain.payment.entity.*
 import com.hhplus.ecommerce.domain.payment.repository.DataTransmissionJpaRepository
 import com.hhplus.ecommerce.domain.payment.repository.PaymentJpaRepository
+import org.springframework.context.ApplicationEventPublisher
 import org.springframework.stereotype.Service
 import org.springframework.transaction.annotation.Transactional
 import java.time.LocalDateTime
@@ -23,7 +25,7 @@ import java.util.UUID
  * 결제 서비스 구현체
  *
  * 비즈니스 정책에 따른 결제 처리:
- * 1. 결제 성공: 잔액 차감 → 주문 상태 변경(PAID) → shipping 생성 (PENDING) → 데이터 전송 레코드 생성(PENDING)
+ * 1. 결제 성공: 잔액 차감 → 주문 상태 변경(PAID) → shipping 생성 (PENDING) → 결제 완료 이벤트 발행 (비동기 데이터 전송)
  * 2. 결제 실패: 재고 복원 → 쿠폰 복원 → 주문 취소(CANCELLED)
  */
 @Service
@@ -34,7 +36,8 @@ class PaymentServiceImpl(
     private val userService: UserService,
     private val productService: ProductService,
     private val couponService: CouponService,
-    private val shippingService: ShippingService
+    private val shippingService: ShippingService,
+    private val applicationEventPublisher: ApplicationEventPublisher
 ) : PaymentService {
     private val DATE_FORMATTER: DateTimeFormatter = DateTimeFormatter.ISO_LOCAL_DATE_TIME
 
@@ -92,11 +95,11 @@ class PaymentServiceImpl(
             throw e
         }
 
-        // 5. 주문 상태 변경 (PENDING → PAID) - 도메인 메서드 사용
+        // 3. 주문 상태 변경 (PENDING → PAID) - 도메인 메서드 사용
         order.markAsPaid()
         orderService.updateOrder(order)
 
-        // 6. 결제 레코드 생성
+        // 4. 결제 레코드 생성
         val now = LocalDateTime.now()
         val payment = Payment(
             orderId = orderId,
@@ -107,19 +110,20 @@ class PaymentServiceImpl(
         )
         val savedPayment = paymentRepository.save(payment)
 
-        // 7. 데이터 전송 레코드 생성 (Outbox Pattern)
-        val transmission = DataTransmission(
-            orderId = orderId,
-            status = TransmissionStatus.PENDING,
-            attempts = 0,
-            nextRetryAt = now.plusMinutes(1) // 1분 후 첫 전송 시도
-        )
-
-        val savedTransmission = transmissionRepository.save(transmission)
-
+        // 5. 배송 생성
         shippingService.createShipping(orderId, "CJ대한통운")
 
-        // 8. 응답 생성
+        // 6. 결제 완료 이벤트 발행 (비동기: 데이터 플랫폼 전송)
+        applicationEventPublisher.publishEvent(
+            PaymentCompletedEvent(
+                paymentId = savedPayment.id!!,
+                orderId = orderId,
+                userId = request.userId,
+                amount = paymentAmount
+            )
+        )
+
+        // 7. 응답 생성
         return ProcessPaymentResult(
             paymentId = savedPayment.id!!,
             orderId = order.id!!,
@@ -134,9 +138,9 @@ class PaymentServiceImpl(
                 remainingBalance = currentBalance
             ),
             dataTransmission = DataTransmissionInfoResult(
-                transmissionId = savedTransmission.id!!,
-                status = savedTransmission.status.name,
-                scheduledAt = savedTransmission.nextRetryAt!!.format(DATE_FORMATTER)
+                transmissionId = null,
+                status = "SCHEDULED",
+                scheduledAt = now.format(DATE_FORMATTER)
             ),
             paidAt = savedPayment.paidAt.format(DATE_FORMATTER)
         )
@@ -283,7 +287,7 @@ class PaymentServiceImpl(
         // 2. 주문 조회 (응답에만 사용)
         val order = orderService.getOrder(payment.orderId)
 
-        // 3. 잔액 환불 (비관적 락 사용)cancelPayment
+        // 3. 잔액 환불 (비관적 락 사용)
         val refundAmount = payment.amount
 
         // 비관적 락으로 사용자 조회

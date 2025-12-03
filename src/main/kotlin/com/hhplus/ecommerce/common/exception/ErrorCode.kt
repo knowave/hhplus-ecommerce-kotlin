@@ -47,6 +47,7 @@ enum class ErrorCode(
     INVALID_DISCOUNT_RATE("C007", "Invalid discount rate", HttpStatus.BAD_REQUEST),
     INVALID_COUPON_QUANTITY("C008", "Invalid coupon quantity", HttpStatus.BAD_REQUEST),
     INVALID_COUPON_DATE("C009", "Invalid coupon date", HttpStatus.BAD_REQUEST),
+    COUPON_OUT_OF_STOCK("C010", "Coupon out of stock, ignoring request", HttpStatus.BAD_REQUEST),
 
     // User Coupon related
     USER_COUPON_NOT_FOUND("UC001", "User coupon not found", HttpStatus.NOT_FOUND),

@@ -12,7 +12,8 @@ import com.hhplus.ecommerce.common.lock.DistributedLock
 import com.hhplus.ecommerce.domain.product.entity.Product
 import com.hhplus.ecommerce.domain.coupon.entity.*
 import com.hhplus.ecommerce.domain.order.entity.*
-import com.hhplus.ecommerce.domain.order.event.OrderCreatedEvent
+import com.hhplus.ecommerce.common.event.OrderCreatedEvent
+import com.hhplus.ecommerce.common.event.OrderItemInfo
 import com.hhplus.ecommerce.domain.order.repository.OrderJpaRepository
 import com.hhplus.ecommerce.domain.product.entity.RankingPeriod
 import org.slf4j.LoggerFactory
@@ -68,7 +69,7 @@ class OrderServiceImpl(
                 userId = request.userId,
                 productIds = orderData.productIds,
                 items = orderData.items.map { item ->
-                    com.hhplus.ecommerce.domain.order.event.OrderItemInfo(
+                    OrderItemInfo(
                         productId = item.productId,
                         quantity = item.quantity
                     )

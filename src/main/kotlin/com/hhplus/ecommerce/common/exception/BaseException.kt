@@ -202,6 +202,11 @@ class InvalidCouponDateException(message: String) : BaseException(
     message = message
 )
 
+class CouponOutOfStockException(message: String) : BaseException(
+    errorCode = ErrorCode.COUPON_OUT_OF_STOCK,
+    message = "Coupon out of stock, ignoring request. message"
+)
+
 // User related
 class UserNotFoundException(userId: UUID) : BaseException(
     errorCode = ErrorCode.USER_NOT_FOUND,
