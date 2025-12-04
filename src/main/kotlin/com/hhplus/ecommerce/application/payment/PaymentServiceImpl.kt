@@ -139,7 +139,7 @@ class PaymentServiceImpl(
             ),
             dataTransmission = DataTransmissionInfoResult(
                 transmissionId = null,
-                status = "SCHEDULED",
+                status = "PENDING_EVENT_PROCESSING",
                 scheduledAt = now.format(DATE_FORMATTER)
             ),
             paidAt = savedPayment.paidAt.format(DATE_FORMATTER)
