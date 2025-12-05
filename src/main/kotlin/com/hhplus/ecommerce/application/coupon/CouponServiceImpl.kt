@@ -30,8 +30,6 @@ class CouponServiceImpl(
 
     /**
      * 쿠폰 발급 (동기 - DB/Redis 분산락)
-     *
-     * ... (기존 주석 유지)
      */
     @DistributedLock(
         key = "'coupon:issue:' + #couponId",
