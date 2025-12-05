@@ -55,7 +55,7 @@ data class BalanceInfo(
 }
 
 data class DataTransmissionInfo(
-    val transmissionId: UUID,
+    val transmissionId: UUID?,
     val status: String,
     val scheduledAt: String
 ) {

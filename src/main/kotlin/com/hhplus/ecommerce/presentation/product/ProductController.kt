@@ -1,17 +1,24 @@
 package com.hhplus.ecommerce.presentation.product
 
+import com.hhplus.ecommerce.application.product.ProductRankingService
 import com.hhplus.ecommerce.application.product.ProductService
 import com.hhplus.ecommerce.application.product.dto.GetProductsCommand
+import com.hhplus.ecommerce.application.product.dto.ProductRankingListResult
+import com.hhplus.ecommerce.domain.product.entity.RankingPeriod
 import com.hhplus.ecommerce.presentation.product.dto.*
 import io.swagger.v3.oas.annotations.Operation
+import io.swagger.v3.oas.annotations.Parameter
 import org.springframework.http.ResponseEntity
 import org.springframework.web.bind.annotation.*
+import java.time.LocalDate
+import java.time.format.DateTimeFormatter
 import java.util.UUID
 
 @RestController
 @RequestMapping("/products")
 class ProductController(
-    private val productService: ProductService
+    private val productService: ProductService,
+    private val productRankingService: ProductRankingService
 ) {
 
     @Operation(summary = "상품 목록 조회", description = "카테고리 필터링, 정렬, 페이징을 지원하는 상품 목록을 조회합니다")
@@ -56,5 +63,49 @@ class ProductController(
     fun getProductStock(@PathVariable productId: UUID): ResponseEntity<ProductStockResponse> {
         val product = productService.findProductById(productId)
         return ResponseEntity.ok(ProductStockResponse.from(product))
+    }
+
+    @Operation(summary = "특정 날짜의 일간 랭킹 조회", description = "특정 날짜의 상품 랭킹을 조회합니다.")
+    @GetMapping("/rankings/daily/{date}")
+    fun getDailyRankingByDate(
+        @Parameter(description = "조회 날짜 (yyyy-MM-dd)", example = "2025-12-01")
+        @PathVariable date: String,
+        @Parameter(description = "조회할 랭킹 개수", example = "10")
+        @RequestParam(defaultValue = "10") limit: Int
+    ): ResponseEntity<ProductRankingListResult> {
+        val targetDate = try {
+            LocalDate.parse(date, DateTimeFormatter.ISO_LOCAL_DATE)
+        } catch (e: Exception) {
+            return ResponseEntity.badRequest().build()
+        }
+
+        val result = productRankingService.getRanking(
+            period = RankingPeriod.DAILY,
+            date = targetDate,
+            limit = limit.coerceIn(1, 100)
+        )
+        return ResponseEntity.ok(result)
+    }
+
+    @Operation(summary = "특정 주의 주간 랭킹 조회", description = "특정 주의 상품 랭킹을 조회합니다.")
+    @GetMapping("/rankings/weekly/{date}")
+    fun getWeeklyRankingByDate(
+        @Parameter(description = "해당 주의 날짜 (yyyy-MM-dd)", example = "2025-12-01")
+        @PathVariable date: String,
+        @Parameter(description = "조회할 랭킹 개수", example = "10")
+        @RequestParam(defaultValue = "10") limit: Int
+    ): ResponseEntity<ProductRankingListResult> {
+        val targetDate = try {
+            LocalDate.parse(date, DateTimeFormatter.ISO_LOCAL_DATE)
+        } catch (e: Exception) {
+            return ResponseEntity.badRequest().build()
+        }
+
+        val result = productRankingService.getRanking(
+            period = RankingPeriod.WEEKLY,
+            date = targetDate,
+            limit = limit.coerceIn(1, 100)
+        )
+        return ResponseEntity.ok(result)
     }
 }

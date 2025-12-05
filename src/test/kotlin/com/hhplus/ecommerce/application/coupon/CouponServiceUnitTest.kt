@@ -18,6 +18,7 @@ import io.mockk.every
 import io.mockk.mockk
 import io.mockk.spyk
 import io.mockk.verify
+import org.springframework.data.redis.core.RedisTemplate
 import java.time.LocalDate
 import java.time.LocalDateTime
 import java.time.format.DateTimeFormatter
@@ -38,7 +39,8 @@ class CouponServiceUnitTest : DescribeSpec({
     beforeEach {
         couponRepository = mockk()
         userCouponRepository = mockk()
-        couponService = CouponServiceImpl(couponRepository, userCouponRepository)
+        val redisTemplate = mockk<RedisTemplate<String, String>>(relaxed = true)
+        couponService = CouponServiceImpl(couponRepository, userCouponRepository, redisTemplate)
     }
 
     describe("CouponService 단위 테스트 - issueCoupon") {

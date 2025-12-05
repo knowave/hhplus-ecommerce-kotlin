@@ -32,6 +32,9 @@ dependencies {
     implementation("org.springframework.boot:spring-boot-starter-data-jpa")
     implementation("io.github.cdimascio:dotenv-kotlin:6.5.1")
 
+    // AOP
+    implementation("org.springframework.boot:spring-boot-starter-aop")
+
     // Redis & Cache
     implementation("org.springframework.boot:spring-boot-starter-data-redis")
     implementation("org.springframework.boot:spring-boot-starter-cache")

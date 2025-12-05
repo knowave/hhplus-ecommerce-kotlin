@@ -10,6 +10,7 @@ enum class ErrorCode(
     // Product related
     PRODUCT_NOT_FOUND("P001", "Product not found", HttpStatus.NOT_FOUND),
     INSUFFICIENT_STOCK("P002", "Insufficient stock", HttpStatus.BAD_REQUEST),
+    INVALID_PRODUCT_RANKING_PERIOD("P003", "Invalid ranking period", HttpStatus.BAD_REQUEST),
 
     // Cart related
     CART_ITEM_NOT_FOUND("CART001", "Cart item not found", HttpStatus.NOT_FOUND),
@@ -46,6 +47,7 @@ enum class ErrorCode(
     INVALID_DISCOUNT_RATE("C007", "Invalid discount rate", HttpStatus.BAD_REQUEST),
     INVALID_COUPON_QUANTITY("C008", "Invalid coupon quantity", HttpStatus.BAD_REQUEST),
     INVALID_COUPON_DATE("C009", "Invalid coupon date", HttpStatus.BAD_REQUEST),
+    COUPON_OUT_OF_STOCK("C010", "Coupon out of stock, ignoring request", HttpStatus.BAD_REQUEST),
 
     // User Coupon related
     USER_COUPON_NOT_FOUND("UC001", "User coupon not found", HttpStatus.NOT_FOUND),

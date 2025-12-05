@@ -40,9 +40,18 @@ class DistributedLockAspect(
 
     /**
      * @DistributedLock 어노테이션이 적용된 메서드에 Around Advice 적용
+     *
+     * 주의: 어노테이션 바인딩 방식(@annotation(param))은 Spring AOP 버전에 따라
+     * 바인딩 오류가 발생할 수 있어, joinPoint에서 직접 어노테이션을 추출하는 방식 사용
      */
-    @Around("@annotation(distributedLock)")
-    fun around(joinPoint: ProceedingJoinPoint, distributedLock: DistributedLock): Any? {
+    @Around("@annotation(DistributedLock)")
+    fun around(joinPoint: ProceedingJoinPoint): Any? {
+        // 메서드에서 @DistributedLock 어노테이션 추출
+        val signature = joinPoint.signature as MethodSignature
+        val method = signature.method
+        val distributedLock = method.getAnnotation(DistributedLock::class.java)
+            ?: throw IllegalStateException("@DistributedLock annotation not found")
+
         // 1. SpEL 파싱하여 동적 락 키 생성
         val lockKey = parseLockKey(
             keyExpression = distributedLock.key,

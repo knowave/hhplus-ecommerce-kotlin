@@ -7,6 +7,7 @@ import com.hhplus.ecommerce.domain.coupon.entity.*
 import com.hhplus.ecommerce.domain.coupon.repository.CouponJpaRepository
 import com.hhplus.ecommerce.domain.coupon.repository.CouponStatus
 import com.hhplus.ecommerce.domain.coupon.repository.UserCouponJpaRepository
+import org.springframework.data.redis.core.RedisTemplate
 import org.springframework.http.HttpStatus
 import org.springframework.stereotype.Service
 import org.springframework.transaction.annotation.Transactional
@@ -22,32 +23,13 @@ import kotlin.math.max
 @Service
 class CouponServiceImpl(
     private val couponRepository: CouponJpaRepository,
-    private val userCouponRepository: UserCouponJpaRepository
+    private val userCouponRepository: UserCouponJpaRepository,
+    private val redisTemplate: RedisTemplate<String, String>
 ) : CouponService {
     private val DATETIME_FORMATTER = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss")
 
     /**
-     * 쿠폰 발급
-     *
-     * 선착순 쿠폰 발급을 위한 Redis 분산 락 기반 동시성 제어:
-     *
-     * Redis 분산 락의 역할:
-     *   - 멀티 서버 환경에서 동시성 제어
-     *   - 대량 요청을 Redis 레벨에서 제어하여 DB 부하 최소화
-     *   - 락 획득 실패 시 즉시 예외 반환 (빠른 실패)
-     *   - 빠른 락 획득/해제로 높은 처리량 확보
-     *
-     * 왜 Redis 분산 락을 선택했는가?
-     * - 선착순 이벤트는 대량의 동시 요청 발생
-     * - DB 비관적 락만 사용 시 커넥션 풀 고갈 위험
-     * - Redis는 메모리 기반으로 빠른 락 처리 가능
-     * - 트랜잭션 범위를 최소화하여 DB 부하 감소
-     *
-     * 데이터 정합성 보장 (핵심):
-     * - Redis 분산 락 안에서 트랜잭션 완전 커밋
-     * - @DistributedLock 어노테이션으로 AOP 기반 락 관리
-     * - 트랜잭션 커밋 후 Redis 락 해제 (순서 보장)
-     * - 다음 요청이 최신 데이터를 읽도록 보장
+     * 쿠폰 발급 (동기 - DB/Redis 분산락)
      */
     @DistributedLock(
         key = "'coupon:issue:' + #couponId",
@@ -116,6 +98,60 @@ class CouponServiceImpl(
         )
     }
 
+    /**
+     * 쿠폰 발급 요청 (비동기 - Redis Queue)
+     *
+     * 중복 요청 검증 (Redis Set)
+     * 재고 검증 (Redis Count)
+     * 대기열 적재 (Redis List)
+     */
+    override fun requestCouponIssuance(couponId: UUID, request: IssueCouponCommand): IssueCouponResult {
+        val key = "coupon:$couponId"
+        val queueKey = "coupon:issue:queue"
+
+        // 중복 발급 검증 (Redis Set)
+        val isMember = redisTemplate.opsForSet().isMember("$key:users", request.userId.toString())
+        if (isMember == true) {
+            throw CouponAlreadyIssuedException(request.userId, couponId)
+        }
+
+        // 쿠폰 정보 조회 (재고 확인용)
+        // 실제로는 캐싱된 정보를 사용해야 성능 이점이 있으나, 여기서는 DB 조회 사용
+        val coupon = findCouponById(couponId)
+        
+        // 발급 기간 검증
+        val today = LocalDate.now()
+        if (today.isBefore(coupon.startDate.toLocalDate()) || today.isAfter(coupon.endDate.toLocalDate())) {
+             throw InvalidCouponDateException("Coupon is not in issuance period")
+        }
+
+        // 재고 검증 (Redis Count)
+        val count = redisTemplate.opsForValue().increment("$key:count") ?: 0
+        if (count > coupon.totalQuantity) {
+            // 증가시킨 값 롤백 (정확하지 않을 수 있으나, 초과 방지가 목적)
+            redisTemplate.opsForValue().decrement("$key:count")
+            throw CouponOutOfStockException("Sold out")
+        }
+
+        // Queue 적재 및 중복 방지 Set 등록
+        redisTemplate.opsForSet().add("$key:users", request.userId.toString())
+        redisTemplate.opsForList().rightPush(queueKey, "$couponId:${request.userId}")
+
+        // 가상의 응답 생성 (비동기 처리이므로 ID 등은 임시 값이나 null)
+        return IssueCouponResult(
+            userCouponId = UUID.randomUUID(), // 실제 ID는 나중에 생성됨
+            userId = request.userId,
+            couponId = couponId,
+            couponName = coupon.name,
+            discountRate = coupon.discountRate,
+            status = "QUEUED", // 상태 표시
+            issuedAt = LocalDateTime.now().toString(),
+            expiresAt = LocalDateTime.now().plusDays(coupon.validityDays.toLong()).toString(),
+            remainingQuantity = coupon.totalQuantity - count.toInt(),
+            totalQuantity = coupon.totalQuantity
+        )
+    }
+
     override fun getAvailableCoupons(): AvailableCouponItemResult {
         val availableCoupons = couponRepository.findAvailableCoupons(LocalDateTime.now())
 
@@ -139,8 +175,7 @@ class CouponServiceImpl(
     }
 
     override fun getCouponDetail(couponId: UUID): CouponDetailResult {
-        val coupon = couponRepository.findById(couponId)
-            .orElseThrow { CouponNotFoundException(couponId) }
+        val coupon = findCouponById(couponId)
 
         // 발급 가능 여부 판단
         val today = LocalDate.now()
@@ -244,8 +279,7 @@ class CouponServiceImpl(
     override fun getUserCoupon(userId: UUID, userCouponId: UUID): UserCouponResult {
         val userCoupon = userCouponRepository.findByIdAndUserId(id = userCouponId, userId)
             ?: throw UserCouponNotFoundException(userId, userCouponId)
-        val coupon = couponRepository.findById(userCoupon.couponId)
-            .orElseThrow{ CouponNotFoundException(couponId = userCoupon.couponId) }
+        val coupon = findCouponById(userCoupon.couponId)
 
         val couponName = coupon?.name
         val description = coupon?.description ?: ""

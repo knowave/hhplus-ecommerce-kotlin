@@ -4,6 +4,7 @@ import com.hhplus.ecommerce.application.cart.CartService
 import com.hhplus.ecommerce.application.cart.dto.AddCartItemCommand
 import com.hhplus.ecommerce.application.coupon.CouponService
 import com.hhplus.ecommerce.application.order.dto.*
+import com.hhplus.ecommerce.application.product.ProductRankingService
 import com.hhplus.ecommerce.application.product.ProductService
 import com.hhplus.ecommerce.application.user.UserService
 import com.hhplus.ecommerce.common.exception.*
@@ -11,8 +12,10 @@ import com.hhplus.ecommerce.common.lock.DistributedLock
 import com.hhplus.ecommerce.domain.product.entity.Product
 import com.hhplus.ecommerce.domain.coupon.entity.*
 import com.hhplus.ecommerce.domain.order.entity.*
-import com.hhplus.ecommerce.domain.order.event.OrderCreatedEvent
+import com.hhplus.ecommerce.common.event.OrderCreatedEvent
+import com.hhplus.ecommerce.common.event.OrderItemInfo
 import com.hhplus.ecommerce.domain.order.repository.OrderJpaRepository
+import com.hhplus.ecommerce.domain.product.entity.RankingPeriod
 import org.slf4j.LoggerFactory
 import org.springframework.context.ApplicationEventPublisher
 import org.springframework.data.domain.PageRequest
@@ -29,6 +32,7 @@ class OrderServiceImpl(
     private val couponService: CouponService,
     private val userService: UserService,
     private val cartService: CartService,
+    private val productRankingService: ProductRankingService,
     private val applicationEventPublisher: ApplicationEventPublisher
 ) : OrderService {
 
@@ -38,18 +42,18 @@ class OrderServiceImpl(
     }
 
     /**
-     * 주문 생성 (트랜잭션 범위 최적화)
+     * 주문 생성
      *
-     * 트랜잭션 밖에서:
+     * createOrderTransaction 내부 트랜잭션에서:
      * - 요청 검증
      * - 사용자 조회
-     * - 이벤트 발행
-     * - 응답 생성
-     *
-     * 트랜잭션 내에서:
      * - 재고 차감
      * - 쿠폰 사용
      * - 주문 저장
+     *
+     * 트랜잭션 커밋 후:
+     * - 이벤트 발행 (비동기: 랭킹 업데이트, 카트 삭제)
+     * - 응답 생성
      */
     override fun createOrder(request: CreateOrderCommand): CreateOrderResult {
         validateOrderRequest(request)
@@ -57,19 +61,18 @@ class OrderServiceImpl(
 
         val orderData = createOrderTransaction(request, user.id!!)
 
-        // - 카트 삭제가 실패해도 주문 생성은 이미 완료됨
-        try {
-            val productIds = request.items.map { it.productId }
-            cartService.deleteCarts(request.userId, productIds)
-        } catch (e: Exception) {
-            logger.warn("Failed to delete cart items for user ${request.userId} after order creation", e)
-        }
-
+        // 트랜잭션 커밋 후 비동기 작업 발행 (랭킹 업데이트, 카트 삭제)
         applicationEventPublisher.publishEvent(
             OrderCreatedEvent(
                 orderId = orderData.orderId,
                 userId = request.userId,
-                productIds = orderData.productIds
+                productIds = orderData.productIds,
+                items = orderData.items.map { item ->
+                    OrderItemInfo(
+                        productId = item.productId,
+                        quantity = item.quantity
+                    )
+                }
             )
         )
 

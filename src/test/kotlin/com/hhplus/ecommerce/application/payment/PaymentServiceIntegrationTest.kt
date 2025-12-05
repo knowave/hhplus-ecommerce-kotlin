@@ -9,8 +9,12 @@ import com.hhplus.ecommerce.application.order.dto.OrderItemCommand
 import com.hhplus.ecommerce.application.payment.dto.ProcessPaymentCommand
 import com.hhplus.ecommerce.application.user.dto.CreateUserCommand
 import com.hhplus.ecommerce.common.lock.LockAcquisitionFailedException
+import com.hhplus.ecommerce.domain.payment.entity.DataTransmission
+import com.hhplus.ecommerce.domain.payment.entity.TransmissionStatus
+import com.hhplus.ecommerce.domain.payment.repository.DataTransmissionJpaRepository
 import com.hhplus.ecommerce.domain.product.entity.Product
 import com.hhplus.ecommerce.domain.product.entity.ProductCategory
+import java.time.LocalDateTime
 import io.kotest.assertions.throwables.shouldThrow
 import io.kotest.core.extensions.Extension
 import io.kotest.core.spec.style.DescribeSpec
@@ -51,6 +55,7 @@ class PaymentServiceIntegrationTest(
     private val userService: UserService,
     private val productService: ProductService,
     private val paymentService: PaymentService,
+    private val transmissionRepository: DataTransmissionJpaRepository,
     private val entityManager: EntityManager,
     private val transactionManager: PlatformTransactionManager
 ) : DescribeSpec() {
@@ -142,7 +147,7 @@ class PaymentServiceIntegrationTest(
                 result.balance.previousBalance shouldBe 2000000L
                 result.balance.paidAmount shouldBe order.pricing.finalAmount
                 result.balance.remainingBalance shouldBe (2000000L - order.pricing.finalAmount)
-                result.dataTransmission.status shouldBe "PENDING"
+                result.dataTransmission.status shouldBe "PENDING_EVENT_PROCESSING"
                 result.paidAt shouldNotBe null
             }
 
@@ -216,14 +221,9 @@ class PaymentServiceIntegrationTest(
 
                 // then - 데이터 전송 정보 확인
                 result.dataTransmission shouldNotBe null
-                result.dataTransmission.transmissionId shouldNotBe null
-                result.dataTransmission.status shouldBe "PENDING"
+                // 비동기 처리로 변경되어 transmissionId가 null일 수 있음
+                result.dataTransmission.status shouldBe "PENDING_EVENT_PROCESSING"
                 result.dataTransmission.scheduledAt shouldNotBe null
-
-                // 전송 상세 정보 조회 가능한지 확인
-                val transmissionDetail = paymentService.getTransmissionDetail(result.dataTransmission.transmissionId)
-                transmissionDetail.transmissionId shouldBe result.dataTransmission.transmissionId
-                transmissionDetail.status shouldBe "PENDING"
             }
         }
 
@@ -315,14 +315,26 @@ class PaymentServiceIntegrationTest(
                 val order = orderService.createOrder(createOrderCommand)
 
                 val paymentCommand = ProcessPaymentCommand(userId = testUserId)
-                val payment = paymentService.processPayment(order.orderId, paymentCommand)
-                val transmissionId = payment.dataTransmission.transmissionId
-
+                paymentService.processPayment(order.orderId, paymentCommand)
+                
+                // @DataJpaTest에서는 @Async 이벤트 리스너가 작동하지 않으므로
+                // 직접 DataTransmission 레코드를 생성하여 getTransmissionDetail 메서드 테스트
+                val transmission = DataTransmission(
+                    orderId = order.orderId,
+                    status = TransmissionStatus.PENDING,
+                    errorMessage = null,
+                    attempts = 0,
+                    maxAttempts = 3,
+                    sentAt = null,
+                    nextRetryAt = LocalDateTime.now().plusMinutes(5)
+                )
+                val savedTransmission = transmissionRepository.save(transmission)
+                
                 // when - 전송 상세 정보 조회
-                val transmissionDetail = paymentService.getTransmissionDetail(transmissionId)
+                val transmissionDetail = paymentService.getTransmissionDetail(savedTransmission.id!!)
 
                 // then
-                transmissionDetail.transmissionId shouldBe transmissionId
+                transmissionDetail.transmissionId shouldBe savedTransmission.id
                 transmissionDetail.orderId shouldBe order.orderId
                 transmissionDetail.status shouldBe "PENDING"
                 transmissionDetail.createdAt shouldNotBe null
