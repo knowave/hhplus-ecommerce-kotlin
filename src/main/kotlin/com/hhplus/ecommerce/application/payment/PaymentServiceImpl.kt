@@ -61,7 +61,7 @@ class PaymentServiceImpl(
     )
     @Transactional
     override fun processPayment(orderId: UUID, request: ProcessPaymentCommand): ProcessPaymentResult {
-        // 1. 주문 조회 및 검증 (비관적 락으로 동시성 제어)
+        // 주문 조회 및 검증 (비관적 락으로 동시성 제어)
         val order = orderService.getOrderWithLock(orderId)
 
         // 권한 확인
@@ -76,7 +76,7 @@ class PaymentServiceImpl(
             throw AlreadyPaidException(orderId)
         }
 
-        // 2. 잔액 차감 (비관적 락 사용)
+        // 잔액 차감 (비관적 락 사용)
         val paymentAmount = order.finalAmount
         val (previousBalance, currentBalance) = try {
             // 비관적 락으로 사용자 조회
@@ -95,11 +95,11 @@ class PaymentServiceImpl(
             throw e
         }
 
-        // 3. 주문 상태 변경 (PENDING → PAID) - 도메인 메서드 사용
+        // 주문 상태 변경 (PENDING → PAID) - 도메인 메서드 사용
         order.markAsPaid()
         orderService.updateOrder(order)
 
-        // 4. 결제 레코드 생성
+        // 결제 레코드 생성
         val now = LocalDateTime.now()
         val payment = Payment(
             orderId = orderId,
@@ -265,7 +265,7 @@ class PaymentServiceImpl(
     )
     @Transactional
     override fun cancelPayment(paymentId: UUID, request: CancelPaymentCommand): CancelPaymentResult {
-        // 1. 결제 조회 및 검증
+        // 결제 조회 및 검증
         val payment = paymentRepository.findById(paymentId)
             .orElseThrow { PaymentNotFoundException(paymentId) }
 
@@ -284,10 +284,10 @@ class PaymentServiceImpl(
             throw InvalidPaymentStatusException(paymentId, payment.status.name)
         }
 
-        // 2. 주문 조회 (응답에만 사용)
+        // 주문 조회 (응답에만 사용)
         val order = orderService.getOrder(payment.orderId)
 
-        // 3. 잔액 환불 (비관적 락 사용)
+        // 잔액 환불 (비관적 락 사용)
         val refundAmount = payment.amount
 
         // 비관적 락으로 사용자 조회
@@ -299,12 +299,12 @@ class PaymentServiceImpl(
 
         val currentBalance = user.balance
 
-        // 4. 결제 상태 변경 (SUCCESS → CANCELLED)
+        // 결제 상태 변경 (SUCCESS → CANCELLED)
         val now = LocalDateTime.now()
         payment.status = PaymentStatus.CANCELLED
         paymentRepository.save(payment)
 
-        // 5. 응답 생성 (주문 상태는 변경하지 않음)
+        // 응답 생성 (주문 상태는 변경하지 않음)
         return CancelPaymentResult(
             paymentId = payment.id!!,
             orderId = order.id!!,
@@ -330,7 +330,7 @@ class PaymentServiceImpl(
      * 각 도메인 엔티티의 비즈니스 로직 메서드를 사용합니다.
      */
     private fun handlePaymentFailure(order: Order) {
-        // 1. 재고 복원 (비관적 락 사용, 도메인 메서드 사용)
+        // 재고 복원 (비관적 락 사용, 도메인 메서드 사용)
         val productIds = order.items.map { it.productId }.distinct().sorted()
         val lockedProducts = productService.findAllByIdWithLock(productIds)
 
@@ -342,7 +342,7 @@ class PaymentServiceImpl(
             productService.updateProduct(product)
         }
 
-        // 2. 쿠폰 복원 (비관적 락 사용, 도메인 메서드 사용)
+        // 쿠폰 복원 (비관적 락 사용, 도메인 메서드 사용)
         if (order.appliedCouponId != null) {
             val userCoupon = couponService.findUserCoupon(order.userId, order.appliedCouponId!!)
             if (userCoupon.status == CouponStatus.USED) {
