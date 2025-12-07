@@ -24,6 +24,7 @@ import io.kotest.core.spec.style.DescribeSpec
 import io.kotest.matchers.shouldBe
 import io.kotest.matchers.shouldNotBe
 import io.mockk.*
+import org.springframework.context.ApplicationEventPublisher
 import org.springframework.test.util.ReflectionTestUtils
 import java.time.LocalDateTime
 import java.util.Optional
@@ -48,6 +49,7 @@ class PaymentServiceUnitTest : DescribeSpec({
         productService = mockk(relaxed = true)
         couponService = mockk(relaxed = true)
         shippingService = mockk(relaxed = true)
+        val applicationEventPublisher = mockk<ApplicationEventPublisher>(relaxed = true)
 
         paymentService = PaymentServiceImpl(
             paymentRepository,
@@ -57,6 +59,7 @@ class PaymentServiceUnitTest : DescribeSpec({
             productService,
             couponService,
             shippingService,
+            applicationEventPublisher
         )
     }
 
@@ -146,7 +149,7 @@ class PaymentServiceUnitTest : DescribeSpec({
                 result.balance.previousBalance shouldBe 100000L
                 result.balance.paidAmount shouldBe amount
                 result.balance.remainingBalance shouldBe 50000L
-                result.dataTransmission.status shouldBe "PENDING"
+                result.dataTransmission.status shouldBe "PENDING_EVENT_PROCESSING"
                 result.paidAt shouldNotBe null
             }
         }

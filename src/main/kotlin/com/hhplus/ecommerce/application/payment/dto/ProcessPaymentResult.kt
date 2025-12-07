@@ -22,7 +22,7 @@ data class BalanceInfoResult(
 )
 
 data class DataTransmissionInfoResult(
-    val transmissionId: UUID,
+    val transmissionId: UUID?,
     val status: String,
     val scheduledAt: String
 )

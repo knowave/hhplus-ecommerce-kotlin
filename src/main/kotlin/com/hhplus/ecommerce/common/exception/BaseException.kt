@@ -1,7 +1,6 @@
 package com.hhplus.ecommerce.common.exception
 
 import com.hhplus.ecommerce.domain.order.entity.OrderStatus
-import java.math.BigDecimal
 import java.util.*
 
 open class BaseException(
@@ -28,6 +27,11 @@ class InsufficientStockException(
         "requested" to requested,
         "available" to available
     )
+)
+
+class InvalidProductRankingPeriodException(value: String) : BaseException(
+    errorCode = ErrorCode.INVALID_PRODUCT_RANKING_PERIOD,
+    message = "Invalid ranking period $value"
 )
 
 // Cart related
@@ -196,6 +200,11 @@ class InvalidCouponQuantityException(message: String) : BaseException(
 class InvalidCouponDateException(message: String) : BaseException(
     errorCode = ErrorCode.INVALID_COUPON_DATE,
     message = message
+)
+
+class CouponOutOfStockException(message: String) : BaseException(
+    errorCode = ErrorCode.COUPON_OUT_OF_STOCK,
+    message = "Coupon out of stock, ignoring request. message"
 )
 
 // User related
