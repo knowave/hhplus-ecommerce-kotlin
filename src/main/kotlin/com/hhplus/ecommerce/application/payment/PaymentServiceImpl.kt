@@ -6,6 +6,7 @@ import com.hhplus.ecommerce.application.payment.dto.*
 import com.hhplus.ecommerce.application.product.ProductService
 import com.hhplus.ecommerce.application.shipping.ShippingService
 import com.hhplus.ecommerce.application.user.UserService
+import com.hhplus.ecommerce.common.event.PaymentCompletedEvent
 import com.hhplus.ecommerce.common.exception.*
 import com.hhplus.ecommerce.common.lock.DistributedLock
 import com.hhplus.ecommerce.domain.coupon.repository.CouponStatus
@@ -13,6 +14,7 @@ import com.hhplus.ecommerce.domain.order.entity.*
 import com.hhplus.ecommerce.domain.payment.entity.*
 import com.hhplus.ecommerce.domain.payment.repository.DataTransmissionJpaRepository
 import com.hhplus.ecommerce.domain.payment.repository.PaymentJpaRepository
+import org.springframework.context.ApplicationEventPublisher
 import org.springframework.stereotype.Service
 import org.springframework.transaction.annotation.Transactional
 import java.time.LocalDateTime
@@ -23,7 +25,7 @@ import java.util.UUID
  * 결제 서비스 구현체
  *
  * 비즈니스 정책에 따른 결제 처리:
- * 1. 결제 성공: 잔액 차감 → 주문 상태 변경(PAID) → shipping 생성 (PENDING) → 데이터 전송 레코드 생성(PENDING)
+ * 1. 결제 성공: 잔액 차감 → 주문 상태 변경(PAID) → shipping 생성 (PENDING) → 결제 완료 이벤트 발행 (비동기 데이터 전송)
  * 2. 결제 실패: 재고 복원 → 쿠폰 복원 → 주문 취소(CANCELLED)
  */
 @Service
@@ -34,7 +36,8 @@ class PaymentServiceImpl(
     private val userService: UserService,
     private val productService: ProductService,
     private val couponService: CouponService,
-    private val shippingService: ShippingService
+    private val shippingService: ShippingService,
+    private val applicationEventPublisher: ApplicationEventPublisher
 ) : PaymentService {
     private val DATE_FORMATTER: DateTimeFormatter = DateTimeFormatter.ISO_LOCAL_DATE_TIME
 
@@ -58,7 +61,7 @@ class PaymentServiceImpl(
     )
     @Transactional
     override fun processPayment(orderId: UUID, request: ProcessPaymentCommand): ProcessPaymentResult {
-        // 1. 주문 조회 및 검증 (비관적 락으로 동시성 제어)
+        // 주문 조회 및 검증 (비관적 락으로 동시성 제어)
         val order = orderService.getOrderWithLock(orderId)
 
         // 권한 확인
@@ -73,7 +76,7 @@ class PaymentServiceImpl(
             throw AlreadyPaidException(orderId)
         }
 
-        // 2. 잔액 차감 (비관적 락 사용)
+        // 잔액 차감 (비관적 락 사용)
         val paymentAmount = order.finalAmount
         val (previousBalance, currentBalance) = try {
             // 비관적 락으로 사용자 조회
@@ -92,11 +95,11 @@ class PaymentServiceImpl(
             throw e
         }
 
-        // 5. 주문 상태 변경 (PENDING → PAID) - 도메인 메서드 사용
+        // 주문 상태 변경 (PENDING → PAID) - 도메인 메서드 사용
         order.markAsPaid()
         orderService.updateOrder(order)
 
-        // 6. 결제 레코드 생성
+        // 결제 레코드 생성
         val now = LocalDateTime.now()
         val payment = Payment(
             orderId = orderId,
@@ -107,19 +110,20 @@ class PaymentServiceImpl(
         )
         val savedPayment = paymentRepository.save(payment)
 
-        // 7. 데이터 전송 레코드 생성 (Outbox Pattern)
-        val transmission = DataTransmission(
-            orderId = orderId,
-            status = TransmissionStatus.PENDING,
-            attempts = 0,
-            nextRetryAt = now.plusMinutes(1) // 1분 후 첫 전송 시도
-        )
-
-        val savedTransmission = transmissionRepository.save(transmission)
-
+        // 5. 배송 생성
         shippingService.createShipping(orderId, "CJ대한통운")
 
-        // 8. 응답 생성
+        // 6. 결제 완료 이벤트 발행 (비동기: 데이터 플랫폼 전송)
+        applicationEventPublisher.publishEvent(
+            PaymentCompletedEvent(
+                paymentId = savedPayment.id!!,
+                orderId = orderId,
+                userId = request.userId,
+                amount = paymentAmount
+            )
+        )
+
+        // 7. 응답 생성
         return ProcessPaymentResult(
             paymentId = savedPayment.id!!,
             orderId = order.id!!,
@@ -134,9 +138,9 @@ class PaymentServiceImpl(
                 remainingBalance = currentBalance
             ),
             dataTransmission = DataTransmissionInfoResult(
-                transmissionId = savedTransmission.id!!,
-                status = savedTransmission.status.name,
-                scheduledAt = savedTransmission.nextRetryAt!!.format(DATE_FORMATTER)
+                transmissionId = null,
+                status = "PENDING_EVENT_PROCESSING",
+                scheduledAt = now.format(DATE_FORMATTER)
             ),
             paidAt = savedPayment.paidAt.format(DATE_FORMATTER)
         )
@@ -261,7 +265,7 @@ class PaymentServiceImpl(
     )
     @Transactional
     override fun cancelPayment(paymentId: UUID, request: CancelPaymentCommand): CancelPaymentResult {
-        // 1. 결제 조회 및 검증
+        // 결제 조회 및 검증
         val payment = paymentRepository.findById(paymentId)
             .orElseThrow { PaymentNotFoundException(paymentId) }
 
@@ -280,10 +284,10 @@ class PaymentServiceImpl(
             throw InvalidPaymentStatusException(paymentId, payment.status.name)
         }
 
-        // 2. 주문 조회 (응답에만 사용)
+        // 주문 조회 (응답에만 사용)
         val order = orderService.getOrder(payment.orderId)
 
-        // 3. 잔액 환불 (비관적 락 사용)cancelPayment
+        // 잔액 환불 (비관적 락 사용)
         val refundAmount = payment.amount
 
         // 비관적 락으로 사용자 조회
@@ -295,12 +299,12 @@ class PaymentServiceImpl(
 
         val currentBalance = user.balance
 
-        // 4. 결제 상태 변경 (SUCCESS → CANCELLED)
+        // 결제 상태 변경 (SUCCESS → CANCELLED)
         val now = LocalDateTime.now()
         payment.status = PaymentStatus.CANCELLED
         paymentRepository.save(payment)
 
-        // 5. 응답 생성 (주문 상태는 변경하지 않음)
+        // 응답 생성 (주문 상태는 변경하지 않음)
         return CancelPaymentResult(
             paymentId = payment.id!!,
             orderId = order.id!!,
@@ -326,7 +330,7 @@ class PaymentServiceImpl(
      * 각 도메인 엔티티의 비즈니스 로직 메서드를 사용합니다.
      */
     private fun handlePaymentFailure(order: Order) {
-        // 1. 재고 복원 (비관적 락 사용, 도메인 메서드 사용)
+        // 재고 복원 (비관적 락 사용, 도메인 메서드 사용)
         val productIds = order.items.map { it.productId }.distinct().sorted()
         val lockedProducts = productService.findAllByIdWithLock(productIds)
 
@@ -338,7 +342,7 @@ class PaymentServiceImpl(
             productService.updateProduct(product)
         }
 
-        // 2. 쿠폰 복원 (비관적 락 사용, 도메인 메서드 사용)
+        // 쿠폰 복원 (비관적 락 사용, 도메인 메서드 사용)
         if (order.appliedCouponId != null) {
             val userCoupon = couponService.findUserCoupon(order.userId, order.appliedCouponId!!)
             if (userCoupon.status == CouponStatus.USED) {

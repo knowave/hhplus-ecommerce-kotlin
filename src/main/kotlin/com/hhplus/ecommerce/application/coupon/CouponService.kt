@@ -9,6 +9,8 @@ import java.util.UUID
 interface CouponService {
     fun issueCoupon(couponId: UUID, request: IssueCouponCommand): IssueCouponResult
 
+    fun requestCouponIssuance(couponId: UUID, request: IssueCouponCommand): IssueCouponResult
+
     fun getAvailableCoupons(): AvailableCouponItemResult
 
     fun getCouponDetail(couponId: UUID): CouponDetailResult
@@ -24,11 +26,7 @@ interface CouponService {
     fun updateUserCoupon(userCoupon: UserCoupon): UserCoupon
 
     /**
-     * 비관적 락을 사용하여 쿠폰을 조회합니다.
-     *
-     * 동시성 제어가 필요한 경우 사용:
-     * - 쿠폰 발급 시 issuedQuantity 증가
-     * - 쿠폰 복원 시
+     * 비관적 락을 사용하여 쿠폰을 조회
      */
     fun findByIdWithLock(id: UUID): Coupon
 }
