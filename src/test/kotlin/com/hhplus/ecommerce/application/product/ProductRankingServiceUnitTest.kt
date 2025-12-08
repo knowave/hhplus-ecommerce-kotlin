@@ -332,15 +332,20 @@ class ProductRankingServiceUnitTest : DescribeSpec({
                 // given
                 val beforeDate = LocalDate.of(2025, 11, 1)
 
-                every { redisTemplate.delete(any<String>()) } returns true
+                every { redisTemplate.unlink(any<Collection<String>>()) } returns 42L
 
                 // when
                 productRankingService.cleanupExpiredRankings(beforeDate)
 
                 // then
-                // 30일간의 일간 랭킹 + 12주간의 주간 랭킹 삭제 시도
-                verify(atLeast = 30) { redisTemplate.delete(match<String> { it.contains("daily") }) }
-                verify(atLeast = 12) { redisTemplate.delete(match<String> { it.contains("weekly") }) }
+                // unlink 메서드가 한 번 호출되고, 30일간의 일간 랭킹 + 12주간의 주간 랭킹 키 목록을 전달받는지 확인
+                verify(exactly = 1) {
+                    redisTemplate.unlink(match<Collection<String>> { keys ->
+                        val dailyKeys = keys.filter { it.contains("daily") }
+                        val weeklyKeys = keys.filter { it.contains("weekly") }
+                        dailyKeys.size == 30 && weeklyKeys.size == 12
+                    })
+                }
             }
         }
     }
