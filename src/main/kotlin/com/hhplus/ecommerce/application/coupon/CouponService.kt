@@ -29,4 +29,10 @@ interface CouponService {
      * 비관적 락을 사용하여 쿠폰을 조회
      */
     fun findByIdWithLock(id: UUID): Coupon
+
+    /**
+     * 배치로 쿠폰 발급 (스케줄러 전용)
+     * 분산락 없이 DB 제약조건으로 중복 방지
+     */
+    fun issueCouponBatch(requests: List<Pair<UUID, UUID>>): Int
 }
