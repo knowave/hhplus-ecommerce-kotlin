@@ -121,23 +121,30 @@ class ProductRankingServiceImpl(
 
     override fun cleanupExpiredRankings(beforeDate: LocalDate) {
         try {
-            var deletedCount = 0
-            var currentDate = beforeDate
+            // 삭제할 키 리스트를 미리 생성
+            val keysToDelete = mutableListOf<String>()
 
+            // Daily 랭킹 키 수집
+            var currentDate = beforeDate
             repeat(DAILY_RETENTION_DAYS) {
                 val key = generateRankingKey(RankingPeriod.DAILY, currentDate)
-                if (redisTemplate.delete(key)) deletedCount++
+                keysToDelete.add(key)
                 currentDate = currentDate.minusDays(1)
             }
 
+            // Weekly 랭킹 키 수집
             currentDate = beforeDate
             repeat(WEEKLY_RETENTION_WEEKS) {
                 val key = generateRankingKey(RankingPeriod.WEEKLY, currentDate)
-                if (redisTemplate.delete(key)) deletedCount++
+                keysToDelete.add(key)
                 currentDate = currentDate.minusWeeks(1)
             }
 
-            logger.info("Cleaned up {} expired ranking keys before {}", deletedCount, beforeDate)
+            // unlink를 사용하여 한 번에 비동기 삭제 (메모리 해제는 백그라운드에서 처리)
+            val deletedCount = redisTemplate.unlink(keysToDelete)
+
+            logger.info("Cleaned up {} expired ranking keys before {} (attempted: {})",
+                deletedCount, beforeDate, keysToDelete.size)
         } catch (e: Exception) {
             logger.error("Failed to cleanup expired rankings", e)
         }

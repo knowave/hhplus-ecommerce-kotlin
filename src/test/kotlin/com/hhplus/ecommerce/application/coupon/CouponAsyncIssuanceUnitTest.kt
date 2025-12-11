@@ -75,11 +75,10 @@ class CouponAsyncIssuanceUnitTest : DescribeSpec({
 
                 val command = IssueCouponCommand(userId = userId)
 
-                // Mock 설정
-                every { setOperations.isMember("coupon:$couponId:users", userId.toString()) } returns false
+                // Mock 설정 - SADD 반환값 1L은 새로 추가됨을 의미
+                every { setOperations.add("coupon:$couponId:users", userId.toString()) } returns 1L
                 every { couponRepository.findById(couponId) } returns Optional.of(coupon)
                 every { valueOperations.increment("coupon:$couponId:count") } returns 1L
-                every { setOperations.add("coupon:$couponId:users", userId.toString()) } returns 1L
                 every { listOperations.rightPush("coupon:issue:queue", "$couponId:$userId") } returns 1L
 
                 // when
@@ -94,9 +93,8 @@ class CouponAsyncIssuanceUnitTest : DescribeSpec({
                 result.remainingQuantity shouldBe 99 // 100 - 1
                 result.totalQuantity shouldBe 100
 
-                verify(exactly = 1) { setOperations.isMember("coupon:$couponId:users", userId.toString()) }
-                verify(exactly = 1) { valueOperations.increment("coupon:$couponId:count") }
                 verify(exactly = 1) { setOperations.add("coupon:$couponId:users", userId.toString()) }
+                verify(exactly = 1) { valueOperations.increment("coupon:$couponId:count") }
                 verify(exactly = 1) { listOperations.rightPush("coupon:issue:queue", "$couponId:$userId") }
             }
         }
@@ -108,15 +106,15 @@ class CouponAsyncIssuanceUnitTest : DescribeSpec({
                 val userId = UUID.randomUUID()
                 val command = IssueCouponCommand(userId = userId)
 
-                // Redis Set에 이미 존재
-                every { setOperations.isMember("coupon:$couponId:users", userId.toString()) } returns true
+                // Redis Set에 이미 존재 - SADD 반환값 0L은 이미 존재함을 의미
+                every { setOperations.add("coupon:$couponId:users", userId.toString()) } returns 0L
 
                 // when & then
                 shouldThrow<CouponAlreadyIssuedException> {
                     couponService.requestCouponIssuance(couponId, command)
                 }
 
-                verify(exactly = 1) { setOperations.isMember("coupon:$couponId:users", userId.toString()) }
+                verify(exactly = 1) { setOperations.add("coupon:$couponId:users", userId.toString()) }
                 verify(exactly = 0) { valueOperations.increment(any()) }
             }
         }
@@ -143,18 +141,21 @@ class CouponAsyncIssuanceUnitTest : DescribeSpec({
                 val command = IssueCouponCommand(userId = userId)
 
                 // Mock 설정 - 재고 초과 (101 > 100)
-                every { setOperations.isMember("coupon:$couponId:users", userId.toString()) } returns false
+                every { setOperations.add("coupon:$couponId:users", userId.toString()) } returns 1L
                 every { couponRepository.findById(couponId) } returns Optional.of(coupon)
                 every { valueOperations.increment("coupon:$couponId:count") } returns 101L
                 every { valueOperations.decrement("coupon:$couponId:count") } returns 100L
+                every { setOperations.remove("coupon:$couponId:users", userId.toString()) } returns 1L
 
                 // when & then
                 shouldThrow<CouponOutOfStockException> {
                     couponService.requestCouponIssuance(couponId, command)
                 }
 
+                verify(exactly = 1) { setOperations.add("coupon:$couponId:users", userId.toString()) }
                 verify(exactly = 1) { valueOperations.increment("coupon:$couponId:count") }
                 verify(exactly = 1) { valueOperations.decrement("coupon:$couponId:count") }
+                verify(exactly = 1) { setOperations.remove("coupon:$couponId:users", userId.toString()) }
             }
         }
 
@@ -180,14 +181,17 @@ class CouponAsyncIssuanceUnitTest : DescribeSpec({
                 val command = IssueCouponCommand(userId = userId)
 
                 // Mock 설정
-                every { setOperations.isMember("coupon:$couponId:users", userId.toString()) } returns false
+                every { setOperations.add("coupon:$couponId:users", userId.toString()) } returns 1L
                 every { couponRepository.findById(couponId) } returns Optional.of(coupon)
+                every { setOperations.remove("coupon:$couponId:users", userId.toString()) } returns 1L
 
                 // when & then
                 shouldThrow<InvalidCouponDateException> {
                     couponService.requestCouponIssuance(couponId, command)
                 }
 
+                verify(exactly = 1) { setOperations.add("coupon:$couponId:users", userId.toString()) }
+                verify(exactly = 1) { setOperations.remove("coupon:$couponId:users", userId.toString()) }
                 verify(exactly = 0) { valueOperations.increment(any()) }
             }
         }
@@ -200,13 +204,15 @@ class CouponAsyncIssuanceUnitTest : DescribeSpec({
                 val command = IssueCouponCommand(userId = userId)
 
                 // Mock 설정
-                every { setOperations.isMember("coupon:$couponId:users", userId.toString()) } returns false
+                every { setOperations.add("coupon:$couponId:users", userId.toString()) } returns 1L
                 every { couponRepository.findById(couponId) } returns Optional.empty()
 
                 // when & then
                 shouldThrow<CouponNotFoundException> {
                     couponService.requestCouponIssuance(couponId, command)
                 }
+
+                verify(exactly = 1) { setOperations.add("coupon:$couponId:users", userId.toString()) }
             }
         }
     }

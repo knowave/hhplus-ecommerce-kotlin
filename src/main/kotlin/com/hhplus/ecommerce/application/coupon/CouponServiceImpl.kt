@@ -109,20 +109,23 @@ class CouponServiceImpl(
         val key = "coupon:$couponId"
         val queueKey = "coupon:issue:queue"
 
-        // 중복 발급 검증 (Redis Set)
-        val isMember = redisTemplate.opsForSet().isMember("$key:users", request.userId.toString())
-        if (isMember == true) {
+        // 중복 발급 검증 (Redis Set - SADD 결과로 판단)
+        // SADD는 추가된 멤버 수를 반환: 0이면 이미 존재(중복), 1이면 새로 추가됨
+        val addedCount = redisTemplate.opsForSet().add("$key:users", request.userId.toString()) ?: 0
+        if (addedCount == 0L) {
             throw CouponAlreadyIssuedException(request.userId, couponId)
         }
 
         // 쿠폰 정보 조회 (재고 확인용)
         // 실제로는 캐싱된 정보를 사용해야 성능 이점이 있으나, 여기서는 DB 조회 사용
         val coupon = findCouponById(couponId)
-        
+
         // 발급 기간 검증
         val today = LocalDate.now()
         if (today.isBefore(coupon.startDate.toLocalDate()) || today.isAfter(coupon.endDate.toLocalDate())) {
-             throw InvalidCouponDateException("Coupon is not in issuance period")
+            // 중복 방지 Set에서 롤백
+            redisTemplate.opsForSet().remove("$key:users", request.userId.toString())
+            throw InvalidCouponDateException("Coupon is not in issuance period")
         }
 
         // 재고 검증 (Redis Count)
@@ -130,11 +133,12 @@ class CouponServiceImpl(
         if (count > coupon.totalQuantity) {
             // 증가시킨 값 롤백 (정확하지 않을 수 있으나, 초과 방지가 목적)
             redisTemplate.opsForValue().decrement("$key:count")
+            // 중복 방지 Set에서도 롤백
+            redisTemplate.opsForSet().remove("$key:users", request.userId.toString())
             throw CouponOutOfStockException("Sold out")
         }
 
-        // Queue 적재 및 중복 방지 Set 등록
-        redisTemplate.opsForSet().add("$key:users", request.userId.toString())
+        // Queue 적재
         redisTemplate.opsForList().rightPush(queueKey, "$couponId:${request.userId}")
 
         // 가상의 응답 생성 (비동기 처리이므로 ID 등은 임시 값이나 null)
@@ -329,6 +333,91 @@ class CouponServiceImpl(
     override fun findByIdWithLock(id: UUID): Coupon {
         return couponRepository.findByIdWithLock(id)
             .orElseThrow { CouponNotFoundException(id) }
+    }
+
+    /**
+     * 배치로 쿠폰 발급 (스케줄러 전용)
+     */
+    @Transactional
+    override fun issueCouponBatch(requests: List<Pair<UUID, UUID>>): Int {
+        if (requests.isEmpty()) return 0
+
+        // couponId별로 그룹화
+        val groupedByCoupon = requests.groupBy { it.first }
+
+        var successCount = 0
+        val now = LocalDateTime.now()
+
+        // 각 쿠폰별로 배치 처리
+        for ((couponId, userRequests) in groupedByCoupon) {
+            try {
+                // 쿠폰 조회 (비관적 락)
+                val coupon = couponRepository.findByIdWithLock(couponId)
+                    .orElseThrow { CouponNotFoundException(couponId) }
+
+                // 발급할 수량 계산
+                val issueCount = userRequests.size
+
+                // 재고 검증
+                if (coupon.issuedQuantity + issueCount > coupon.totalQuantity) {
+                    // 재고 부족 시 발급 가능한 만큼만 처리
+                    val availableCount = coupon.totalQuantity - coupon.issuedQuantity
+                    if (availableCount <= 0) {
+                        continue // 다음 쿠폰으로
+                    }
+                    // 가능한 만큼만 처리
+                    val validRequests = userRequests.take(availableCount)
+
+                    // UserCoupon 엔티티 생성
+                    val userCoupons = validRequests.map { (_, userId) ->
+                        UserCoupon(
+                            userId = userId,
+                            couponId = couponId,
+                            status = CouponStatus.AVAILABLE,
+                            issuedAt = now,
+                            expiresAt = now.plusDays(coupon.validityDays.toLong()),
+                            usedAt = null
+                        )
+                    }
+
+                    // 배치 저장
+                    userCouponRepository.saveAll(userCoupons)
+
+                    // 재고 업데이트
+                    coupon.issuedQuantity += availableCount
+                    couponRepository.save(coupon)
+
+                    successCount += availableCount
+                } else {
+                    // 전체 발급 가능
+                    val userCoupons = userRequests.map { (_, userId) ->
+                        UserCoupon(
+                            userId = userId,
+                            couponId = couponId,
+                            status = CouponStatus.AVAILABLE,
+                            issuedAt = now,
+                            expiresAt = now.plusDays(coupon.validityDays.toLong()),
+                            usedAt = null
+                        )
+                    }
+
+                    // 배치 저장
+                    userCouponRepository.saveAll(userCoupons)
+
+                    // 재고 업데이트
+                    coupon.issuedQuantity += issueCount
+                    couponRepository.save(coupon)
+
+                    successCount += issueCount
+                }
+            } catch (e: Exception) {
+                // 해당 쿠폰 그룹은 실패하지만 다른 쿠폰은 계속 처리
+                // 로깅은 스케줄러에서 처리
+                throw e // 또는 무시하고 계속
+            }
+        }
+
+        return successCount
     }
 
     private fun parseDateTimeFlexible(dateTimeStr: String): LocalDateTime {
