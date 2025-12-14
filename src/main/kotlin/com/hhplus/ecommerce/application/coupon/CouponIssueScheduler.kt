@@ -20,62 +20,103 @@ class CouponIssueScheduler(
 
     /**
      * 쿠폰 발급 대기열 처리 (Consumer)
-     * 
-     * 주기적으로 Redis Queue에서 요청을 꺼내 실제 발급 처리를 수행합니다.
-     * 동기 메서드인 issueCoupon을 재사용하여 트랜잭션 및 락 처리를 위임합니다.
+     *
+     * 주기적으로 Redis Queue에서 요청을 배치로 꺼내 실제 발급 처리를 수행합니다.
+     * 배치 처리를 통해 DB 호출을 최소화하고 성능을 향상시킵니다.
      */
-    @Scheduled(fixedDelay = 500) // 0.5초마다 실행
+    @Scheduled(fixedDelay = 2000) // 2초마다 실행 (스케줄러 밀림 방지)
     fun processCouponIssueQueue() {
         val queueKey = "coupon:issue:queue"
         val dlqKey = "coupon:issue:dlq"
-        
-        // 한 번 실행 시 최대 처리 개수
-        val batchSize = 50 
-        
+
+        // 한 번 실행 시 최대 처리 개수 (배치 크기 축소)
+        val batchSize = 20
+
+        // Redis에서 메시지를 배치로 가져오기
+        val messages = mutableListOf<String>()
+        val invalidMessages = mutableListOf<String>()
+        val validRequests = mutableListOf<Pair<UUID, UUID>>() // couponId, userId
+
         for (i in 0 until batchSize) {
-            // 큐에서 하나씩 꺼냄 (LPOP)
             val message = redisTemplate.opsForList().leftPop(queueKey) ?: break
-            
+            messages.add(message)
+
+            // 메시지 파싱
             try {
                 val parts = message.split(":")
                 if (parts.size != 2) {
                     logger.error("Invalid message format: $message")
-                    // 형식이 잘못된 메시지는 DLQ로 보내거나 버림 (여기서는 DLQ로)
-                    redisTemplate.opsForList().rightPush(dlqKey, message)
+                    invalidMessages.add(message)
                     continue
                 }
-                
+
                 val couponId = UUID.fromString(parts[0])
                 val userId = UUID.fromString(parts[1])
-                
-                logger.info("Processing coupon issue request - couponId: $couponId, userId: $userId")
-                
-                // 실제 발급 처리 (이미 분산락/트랜잭션 적용됨)
-                couponService.issueCoupon(couponId, IssueCouponCommand(userId))
-                
-                logger.info("Successfully issued coupon (Async) - couponId: $couponId, userId: $userId")
-                
+                validRequests.add(Pair(couponId, userId))
             } catch (e: Exception) {
-                logger.error("Failed to process coupon issue request - message: $message, error: ${e.message}", e)
-                
+                logger.error("Failed to parse message: $message", e)
+                invalidMessages.add(message)
+            }
+        }
+
+        // 잘못된 메시지는 DLQ로 이동
+        if (invalidMessages.isNotEmpty()) {
+            try {
+                invalidMessages.forEach { msg ->
+                    redisTemplate.opsForList().rightPush(dlqKey, msg)
+                }
+                logger.warn("Moved ${invalidMessages.size} invalid messages to DLQ")
+            } catch (e: Exception) {
+                logger.error("Failed to move invalid messages to DLQ", e)
+            }
+        }
+
+        // 유효한 요청을 배치로 처리
+        if (validRequests.isNotEmpty()) {
+            try {
+                logger.info("Processing ${validRequests.size} coupon issue requests in batch")
+
+                val successCount = couponService.issueCouponBatch(validRequests)
+
+                logger.info("Successfully issued $successCount coupons out of ${validRequests.size} requests")
+
+            } catch (e: Exception) {
+                logger.error("Failed to process coupon batch", e)
+
+                // 배치 처리 실패 시, 개별 처리로 폴백
+                logger.info("Falling back to individual processing")
+                fallbackToIndividualProcessing(validRequests, dlqKey)
+            }
+        }
+    }
+
+    /**
+     * 배치 처리 실패 시 개별 처리로 폴백
+     */
+    private fun fallbackToIndividualProcessing(requests: List<Pair<UUID, UUID>>, dlqKey: String) {
+        requests.forEach { (couponId, userId) ->
+            try {
+                couponService.issueCoupon(couponId, IssueCouponCommand(userId))
+                logger.info("Successfully issued coupon - couponId: $couponId, userId: $userId")
+            } catch (e: Exception) {
+                logger.error("Failed to issue coupon - couponId: $couponId, userId: $userId, error: ${e.message}", e)
+
                 // 예외 유형에 따른 처리
                 when (e) {
                     is CouponAlreadyIssuedException -> {
-                        // 이미 발급된 경우: 로그만 남기고 무시 (재시도 불필요)
-                        logger.warn("Coupon already issued, ignoring request. message: $message")
+                        logger.warn("Coupon already issued, ignoring request. couponId: $couponId, userId: $userId")
                     }
                     is CouponOutOfStockException -> {
-                        val exceptionMessage = "Coupon out of stock, ignoring request. message: $message"
-                        logger.warn(exceptionMessage)
+                        logger.warn("Coupon out of stock, ignoring request. couponId: $couponId")
                     }
                     else -> {
-                        // 그 외의 시스템 오류(DB 연결 실패, 락 획득 실패 등)는 DLQ로 이동하여 추후 재시도
-                        logger.info("Moving failed request to DLQ. message: $message")
+                        // 시스템 오류는 DLQ로 이동
+                        val message = "$couponId:$userId"
                         try {
                             redisTemplate.opsForList().rightPush(dlqKey, message)
+                            logger.info("Moved failed request to DLQ: $message")
                         } catch (dlqEx: Exception) {
                             logger.error("Failed to push to DLQ! message: $message", dlqEx)
-                            // 최악의 경우: 로그에 남겨서 수동 처리 유도
                         }
                     }
                 }
