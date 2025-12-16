@@ -4,7 +4,6 @@ import com.hhplus.ecommerce.application.cart.CartService
 import com.hhplus.ecommerce.application.cart.dto.AddCartItemCommand
 import com.hhplus.ecommerce.application.coupon.CouponService
 import com.hhplus.ecommerce.application.order.dto.*
-import com.hhplus.ecommerce.application.product.ProductRankingService
 import com.hhplus.ecommerce.application.product.ProductService
 import com.hhplus.ecommerce.application.user.UserService
 import com.hhplus.ecommerce.common.exception.*
@@ -15,9 +14,8 @@ import com.hhplus.ecommerce.domain.order.entity.*
 import com.hhplus.ecommerce.common.event.OrderCreatedEvent
 import com.hhplus.ecommerce.common.event.OrderItemInfo
 import com.hhplus.ecommerce.domain.order.repository.OrderJpaRepository
-import com.hhplus.ecommerce.domain.product.entity.RankingPeriod
+import com.hhplus.ecommerce.infrastructure.kafka.OrderEventProducer
 import org.slf4j.LoggerFactory
-import org.springframework.context.ApplicationEventPublisher
 import org.springframework.data.domain.PageRequest
 import org.springframework.stereotype.Service
 import org.springframework.transaction.annotation.Transactional
@@ -32,8 +30,7 @@ class OrderServiceImpl(
     private val couponService: CouponService,
     private val userService: UserService,
     private val cartService: CartService,
-    private val productRankingService: ProductRankingService,
-    private val applicationEventPublisher: ApplicationEventPublisher
+    private val orderEventProducer: OrderEventProducer
 ) : OrderService {
 
     companion object {
@@ -61,20 +58,26 @@ class OrderServiceImpl(
 
         val orderData = createOrderTransaction(request, user.id!!)
 
-        // 트랜잭션 커밋 후 비동기 작업 발행 (랭킹 업데이트, 카트 삭제)
-        applicationEventPublisher.publishEvent(
-            OrderCreatedEvent(
-                orderId = orderData.orderId,
-                userId = request.userId,
-                productIds = orderData.productIds,
-                items = orderData.items.map { item ->
-                    OrderItemInfo(
-                        productId = item.productId,
-                        quantity = item.quantity
-                    )
-                }
+        // 트랜잭션 커밋 후 Kafka로 이벤트 발행 (랭킹 업데이트, 카트 삭제)
+        try {
+            orderEventProducer.sendOrderCreatedEvent(
+                OrderCreatedEvent(
+                    orderId = orderData.orderId,
+                    userId = request.userId,
+                    productIds = orderData.productIds,
+                    items = orderData.items.map { item ->
+                        OrderItemInfo(
+                            productId = item.productId,
+                            quantity = item.quantity
+                        )
+                    }
+                )
             )
-        )
+            logger.info("주문 생성 이벤트 Kafka 발행 완료 - orderId: {}", orderData.orderId)
+        } catch (e: Exception) {
+            // Kafka 발행 실패는 로그만 기록 주문 생성 성공 여부에 영향을 끼치지 않는다.
+            logger.error("주문 생성 이벤트 Kafka 발행 실패 - orderId: ${orderData.orderId}", e)
+        }
 
         return CreateOrderResult(
             orderId = orderData.orderId,

@@ -48,6 +48,11 @@ class KafkaConfig {
     /**
      * Producer Factory 설정
      * 메시지를 JSON 형식으로 직렬화하여 Kafka로 전송합니다.
+     *
+     * 순서 보장 설정:
+     * - ACKS_CONFIG: "all" - 모든 레플리카가 메시지를 받았는지 확인
+     * - ENABLE_IDEMPOTENCE_CONFIG: true - 멱등성 보장 (중복 메시지 방지)
+     * - MAX_IN_FLIGHT_REQUESTS_PER_CONNECTION: 1 - 순서 보장을 위해 한 번에 하나의 요청만 처리
      */
     @Bean
     fun producerFactory(): ProducerFactory<String, Any> {
@@ -57,7 +62,8 @@ class KafkaConfig {
             ProducerConfig.VALUE_SERIALIZER_CLASS_CONFIG to JsonSerializer::class.java,
             ProducerConfig.ACKS_CONFIG to "all",  // 모든 레플리카 확인
             ProducerConfig.RETRIES_CONFIG to 3,  // 재시도 횟수
-            ProducerConfig.ENABLE_IDEMPOTENCE_CONFIG to true  // 멱등성 보장
+            ProducerConfig.ENABLE_IDEMPOTENCE_CONFIG to true,  // 멱등성 보장
+            ProducerConfig.MAX_IN_FLIGHT_REQUESTS_PER_CONNECTION to 1  // 순서 보장 (동일 파티션 내)
         )
         return DefaultKafkaProducerFactory(configProps, StringSerializer(), JsonSerializer(kafkaObjectMapper()))
     }
