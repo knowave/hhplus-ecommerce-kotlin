@@ -4,6 +4,7 @@ import com.fasterxml.jackson.databind.ObjectMapper
 import com.hhplus.ecommerce.application.payment.DataPlatformService
 import com.hhplus.ecommerce.common.event.PaymentCompletedEvent
 import org.slf4j.LoggerFactory
+import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty
 import org.springframework.kafka.annotation.KafkaListener
 import org.springframework.kafka.support.Acknowledgment
 import org.springframework.kafka.support.KafkaHeaders
@@ -18,6 +19,11 @@ import org.springframework.stereotype.Component
  * 데이터 플랫폼으로 전송하는 비동기 작업을 처리.
  */
 @Component
+@ConditionalOnProperty(
+    name = ["spring.kafka.enabled"],
+    havingValue = "true",
+    matchIfMissing = true
+)
 class PaymentEventConsumer(
     private val dataPlatformService: DataPlatformService,
     private val objectMapper: ObjectMapper

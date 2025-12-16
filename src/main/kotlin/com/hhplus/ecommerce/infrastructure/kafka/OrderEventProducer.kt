@@ -5,6 +5,7 @@ import org.slf4j.LoggerFactory
 import org.springframework.kafka.core.KafkaTemplate
 import org.springframework.kafka.support.SendResult
 import org.springframework.stereotype.Component
+import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty
 import java.util.concurrent.CompletableFuture
 
 /**
@@ -15,6 +16,11 @@ import java.util.concurrent.CompletableFuture
  * - 카트 삭제
  */
 @Component
+@ConditionalOnProperty(
+    name = ["spring.kafka.enabled"],
+    havingValue = "true",
+    matchIfMissing = true
+)
 class OrderEventProducer(
     private val kafkaTemplate: KafkaTemplate<String, Any>
 ) {

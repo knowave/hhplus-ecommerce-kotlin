@@ -30,7 +30,7 @@ class OrderServiceImpl(
     private val couponService: CouponService,
     private val userService: UserService,
     private val cartService: CartService,
-    private val orderEventProducer: OrderEventProducer
+    private val orderEventProducer: OrderEventProducer? = null
 ) : OrderService {
 
     companion object {
@@ -59,24 +59,26 @@ class OrderServiceImpl(
         val orderData = createOrderTransaction(request, user.id!!)
 
         // 트랜잭션 커밋 후 Kafka로 이벤트 발행 (랭킹 업데이트, 카트 삭제)
-        try {
-            orderEventProducer.sendOrderCreatedEvent(
-                OrderCreatedEvent(
-                    orderId = orderData.orderId,
-                    userId = request.userId,
-                    productIds = orderData.productIds,
-                    items = orderData.items.map { item ->
-                        OrderItemInfo(
-                            productId = item.productId,
-                            quantity = item.quantity
-                        )
-                    }
+        orderEventProducer?.let {
+            try {
+                it.sendOrderCreatedEvent(
+                    OrderCreatedEvent(
+                        orderId = orderData.orderId,
+                        userId = request.userId,
+                        productIds = orderData.productIds,
+                        items = orderData.items.map { item ->
+                            OrderItemInfo(
+                                productId = item.productId,
+                                quantity = item.quantity
+                            )
+                        }
+                    )
                 )
-            )
-            logger.info("주문 생성 이벤트 Kafka 발행 완료 - orderId: {}", orderData.orderId)
-        } catch (e: Exception) {
-            // Kafka 발행 실패는 로그만 기록 주문 생성 성공 여부에 영향을 끼치지 않는다.
-            logger.error("주문 생성 이벤트 Kafka 발행 실패 - orderId: ${orderData.orderId}", e)
+                logger.info("주문 생성 이벤트 Kafka 발행 완료 - orderId: {}", orderData.orderId)
+            } catch (e: Exception) {
+                // Kafka 발행 실패는 로그만 기록 주문 생성 성공 여부에 영향을 끼치지 않는다.
+                logger.error("주문 생성 이벤트 Kafka 발행 실패 - orderId: ${orderData.orderId}", e)
+            }
         }
 
         return CreateOrderResult(

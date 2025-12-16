@@ -17,6 +17,7 @@ import org.springframework.kafka.core.*
 import org.springframework.kafka.listener.ContainerProperties
 import org.springframework.kafka.support.serializer.JsonDeserializer
 import org.springframework.kafka.support.serializer.JsonSerializer
+import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty
 
 /**
  * Producer와 Consumer의 Factory를 정의.
@@ -24,6 +25,11 @@ import org.springframework.kafka.support.serializer.JsonSerializer
  */
 @Configuration
 @EnableKafka
+@ConditionalOnProperty(
+    name = ["spring.kafka.enabled"],
+    havingValue = "true",
+    matchIfMissing = true
+)
 class KafkaConfig {
 
     @Value("\${spring.kafka.bootstrap-servers}")
@@ -89,8 +95,7 @@ class KafkaConfig {
             ConsumerConfig.KEY_DESERIALIZER_CLASS_CONFIG to StringDeserializer::class.java,
             ConsumerConfig.VALUE_DESERIALIZER_CLASS_CONFIG to JsonDeserializer::class.java,
             ConsumerConfig.AUTO_OFFSET_RESET_CONFIG to "earliest",  // 가장 오래된 메시지부터
-            ConsumerConfig.ENABLE_AUTO_COMMIT_CONFIG to false,  // 수동 커밋
-            JsonDeserializer.TRUSTED_PACKAGES to "*"  // 모든 패키지 신뢰
+            ConsumerConfig.ENABLE_AUTO_COMMIT_CONFIG to false  // 수동 커밋
         )
 
         val deserializer = JsonDeserializer(Any::class.java, kafkaObjectMapper())

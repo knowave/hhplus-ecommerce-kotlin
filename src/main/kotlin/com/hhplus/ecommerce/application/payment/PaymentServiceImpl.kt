@@ -37,7 +37,7 @@ class PaymentServiceImpl(
     private val productService: ProductService,
     private val couponService: CouponService,
     private val shippingService: ShippingService,
-    private val paymentEventProducer: PaymentEventProducer
+    private val paymentEventProducer: PaymentEventProducer? = null
 ) : PaymentService {
     private val DATE_FORMATTER: DateTimeFormatter = DateTimeFormatter.ISO_LOCAL_DATE_TIME
 
@@ -114,18 +114,20 @@ class PaymentServiceImpl(
         shippingService.createShipping(orderId, "CJ대한통운")
 
         // 6. 결제 완료 이벤트 Kafka로 발행 (비동기: 데이터 플랫폼 전송)
-        try {
-            paymentEventProducer.sendPaymentCompletedEvent(
-                PaymentCompletedEvent(
-                    paymentId = savedPayment.id!!,
-                    orderId = orderId,
-                    userId = request.userId,
-                    amount = paymentAmount
+        paymentEventProducer?.let {
+            try {
+                it.sendPaymentCompletedEvent(
+                    PaymentCompletedEvent(
+                        paymentId = savedPayment.id!!,
+                        orderId = orderId,
+                        userId = request.userId,
+                        amount = paymentAmount
+                    )
                 )
-            )
-        } catch (e: Exception) {
-            // Kafka 발행 실패는 로그만 기록, 결제 성공 여부에 영향을 끼치지 않는다.
-            // 결제는 이미 성공했으므로 예외를 던지지 않음
+            } catch (e: Exception) {
+                // Kafka 발행 실패는 로그만 기록, 결제 성공 여부에 영향을 끼치지 않는다.
+                // 결제는 이미 성공했으므로 예외를 던지지 않음
+            }
         }
 
         // 7. 응답 생성

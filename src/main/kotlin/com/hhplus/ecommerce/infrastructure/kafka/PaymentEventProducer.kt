@@ -2,6 +2,7 @@ package com.hhplus.ecommerce.infrastructure.kafka
 
 import com.hhplus.ecommerce.common.event.PaymentCompletedEvent
 import org.slf4j.LoggerFactory
+import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty
 import org.springframework.kafka.core.KafkaTemplate
 import org.springframework.kafka.support.SendResult
 import org.springframework.stereotype.Component
@@ -12,6 +13,11 @@ import java.util.concurrent.CompletableFuture
  * PaymentCompletedEvent를 Kafka 토픽으로 전송하여 Consumer가 비동기적으로 처리.
  */
 @Component
+@ConditionalOnProperty(
+    name = ["spring.kafka.enabled"],
+    havingValue = "true",
+    matchIfMissing = true
+)
 class PaymentEventProducer(
     private val kafkaTemplate: KafkaTemplate<String, Any>
 ) {
