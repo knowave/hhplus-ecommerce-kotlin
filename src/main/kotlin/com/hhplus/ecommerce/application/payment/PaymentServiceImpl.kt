@@ -14,7 +14,7 @@ import com.hhplus.ecommerce.domain.order.entity.*
 import com.hhplus.ecommerce.domain.payment.entity.*
 import com.hhplus.ecommerce.domain.payment.repository.DataTransmissionJpaRepository
 import com.hhplus.ecommerce.domain.payment.repository.PaymentJpaRepository
-import org.springframework.context.ApplicationEventPublisher
+import com.hhplus.ecommerce.infrastructure.kafka.PaymentEventProducer
 import org.springframework.stereotype.Service
 import org.springframework.transaction.annotation.Transactional
 import java.time.LocalDateTime
@@ -37,7 +37,7 @@ class PaymentServiceImpl(
     private val productService: ProductService,
     private val couponService: CouponService,
     private val shippingService: ShippingService,
-    private val applicationEventPublisher: ApplicationEventPublisher
+    private val paymentEventProducer: PaymentEventProducer
 ) : PaymentService {
     private val DATE_FORMATTER: DateTimeFormatter = DateTimeFormatter.ISO_LOCAL_DATE_TIME
 
@@ -113,15 +113,20 @@ class PaymentServiceImpl(
         // 5. 배송 생성
         shippingService.createShipping(orderId, "CJ대한통운")
 
-        // 6. 결제 완료 이벤트 발행 (비동기: 데이터 플랫폼 전송)
-        applicationEventPublisher.publishEvent(
-            PaymentCompletedEvent(
-                paymentId = savedPayment.id!!,
-                orderId = orderId,
-                userId = request.userId,
-                amount = paymentAmount
+        // 6. 결제 완료 이벤트 Kafka로 발행 (비동기: 데이터 플랫폼 전송)
+        try {
+            paymentEventProducer.sendPaymentCompletedEvent(
+                PaymentCompletedEvent(
+                    paymentId = savedPayment.id!!,
+                    orderId = orderId,
+                    userId = request.userId,
+                    amount = paymentAmount
+                )
             )
-        )
+        } catch (e: Exception) {
+            // Kafka 발행 실패는 로그만 기록, 결제 성공 여부에 영향을 끼치지 않는다.
+            // 결제는 이미 성공했으므로 예외를 던지지 않음
+        }
 
         // 7. 응답 생성
         return ProcessPaymentResult(
