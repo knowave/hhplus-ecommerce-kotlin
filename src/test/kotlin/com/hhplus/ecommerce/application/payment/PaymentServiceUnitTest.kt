@@ -19,12 +19,12 @@ import com.hhplus.ecommerce.domain.payment.repository.DataTransmissionJpaReposit
 import com.hhplus.ecommerce.domain.payment.repository.PaymentJpaRepository
 import com.hhplus.ecommerce.domain.shipping.entity.Shipping
 import com.hhplus.ecommerce.domain.shipping.entity.ShippingStatus
+import com.hhplus.ecommerce.infrastructure.kafka.PaymentEventProducer
 import io.kotest.assertions.throwables.shouldThrow
 import io.kotest.core.spec.style.DescribeSpec
 import io.kotest.matchers.shouldBe
 import io.kotest.matchers.shouldNotBe
 import io.mockk.*
-import org.springframework.context.ApplicationEventPublisher
 import org.springframework.test.util.ReflectionTestUtils
 import java.time.LocalDateTime
 import java.util.Optional
@@ -39,6 +39,7 @@ class PaymentServiceUnitTest : DescribeSpec({
     lateinit var couponService: CouponService
     lateinit var paymentService: PaymentService
     lateinit var shippingService: ShippingService
+    lateinit var paymentEventProducer: PaymentEventProducer
 
     beforeEach {
         // 모든 의존성을 Mock으로 생성
@@ -49,7 +50,7 @@ class PaymentServiceUnitTest : DescribeSpec({
         productService = mockk(relaxed = true)
         couponService = mockk(relaxed = true)
         shippingService = mockk(relaxed = true)
-        val applicationEventPublisher = mockk<ApplicationEventPublisher>(relaxed = true)
+        paymentEventProducer = mockk(relaxed = true)
 
         paymentService = PaymentServiceImpl(
             paymentRepository,
@@ -59,7 +60,7 @@ class PaymentServiceUnitTest : DescribeSpec({
             productService,
             couponService,
             shippingService,
-            applicationEventPublisher
+            paymentEventProducer
         )
     }
 

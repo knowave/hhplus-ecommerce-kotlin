@@ -2,7 +2,6 @@ package com.hhplus.ecommerce.application.order
 
 import com.hhplus.ecommerce.application.cart.CartService
 import com.hhplus.ecommerce.application.coupon.CouponService
-import com.hhplus.ecommerce.application.product.ProductRankingService
 import com.hhplus.ecommerce.application.product.ProductService
 import com.hhplus.ecommerce.application.user.UserService
 import com.hhplus.ecommerce.common.exception.CouponNotFoundException
@@ -25,6 +24,7 @@ import com.hhplus.ecommerce.domain.order.entity.OrderStatus
 import com.hhplus.ecommerce.domain.product.entity.Product
 import com.hhplus.ecommerce.domain.user.entity.User
 import com.hhplus.ecommerce.application.order.dto.*
+import com.hhplus.ecommerce.infrastructure.kafka.OrderEventProducer
 import io.kotest.assertions.throwables.shouldThrow
 import io.kotest.core.spec.style.DescribeSpec
 import io.kotest.matchers.shouldBe
@@ -33,7 +33,6 @@ import io.mockk.every
 import io.mockk.mockk
 import io.mockk.slot
 import io.mockk.verify
-import org.springframework.context.ApplicationEventPublisher
 import java.time.LocalDateTime
 import java.util.Optional
 import java.util.UUID
@@ -46,8 +45,7 @@ class OrderServiceUnitTest : DescribeSpec({
     lateinit var userService: UserService
     lateinit var orderService: OrderServiceImpl
     lateinit var cartService: CartService
-    lateinit var productRankingService: ProductRankingService
-    lateinit var applicationEventPublisher: ApplicationEventPublisher
+    lateinit var orderEventProducer: OrderEventProducer
 
     beforeEach {
         orderRepository = mockk(relaxed = true)
@@ -55,8 +53,7 @@ class OrderServiceUnitTest : DescribeSpec({
         couponService = mockk(relaxed = true)
         userService = mockk(relaxed = true)
         cartService = mockk(relaxed = true)
-        productRankingService = mockk(relaxed = true)
-        applicationEventPublisher = mockk(relaxed = true)
+        orderEventProducer = mockk(relaxed = true)
 
         orderService = OrderServiceImpl(
             orderRepository = orderRepository,
@@ -64,8 +61,7 @@ class OrderServiceUnitTest : DescribeSpec({
             couponService = couponService,
             userService = userService,
             cartService = cartService,
-            productRankingService = productRankingService,
-            applicationEventPublisher = applicationEventPublisher
+            orderEventProducer = orderEventProducer
         )
     }
 
