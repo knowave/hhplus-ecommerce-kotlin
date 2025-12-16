@@ -29,6 +29,7 @@ sequenceDiagram
 ```
 
 **핵심 로직**:
+
 - 카테고리 필터링 (선택사항)
 - 재고 0인 상품도 표시 (품절 표시)
 
@@ -64,40 +65,65 @@ sequenceDiagram
 ```
 
 **핵심 로직**:
+
 - 실시간 재고 조회
 - 재고 상태 판단 (available/soldout)
 
 ---
 
-### 1.3 인기 상품 조회 (최근 3일, Top 5)
+### 1.3 인기 상품 조회 (Redis 캐시 기반)
 
 ```mermaid
 sequenceDiagram
     actor User as 사용자
     participant Controller as ProductController
-    participant Service as ProductService
-    participant Repository as ProductRepository
+    participant Service as ProductRankingService
+    participant Redis as Redis
+    participant ProductRepo as ProductRepository
     participant DB as Database
 
     User->>Controller: GET /api/products/top
     Controller->>Service: getTopProducts()
-    Service->>Service: fromDate = now() - 3 days
-    Service->>Repository: findTopProductsByRecentSales(fromDate)
 
-    Repository->>DB: SELECT p.id, p.name,<br/>SUM(oi.quantity) as sales_count,<br/>SUM(oi.subtotal) as revenue<br/>FROM order_items oi<br/>JOIN products p ON oi.product_id = p.id<br/>JOIN orders o ON oi.order_id = o.id<br/>WHERE o.created_at >= ?<br/>AND o.status = 'PAID'<br/>GROUP BY p.id, p.name<br/>ORDER BY sales_count DESC<br/>LIMIT 5
+    Note over Service: 1. Redis에서 랭킹 조회
+    Service->>Redis: ZREVRANGE product:ranking:daily 0 4 WITHSCORES
 
-    DB-->>Repository: List<TopProductInfo>
-    Repository-->>Service: List<TopProductInfo>
-    Service->>Service: rank 추가 (1~5)
-    Service-->>Controller: TopProductsResponseDto
-    Controller-->>User: 200 OK + 인기 상품 Top 5
+    alt 캐시 Hit
+        Redis-->>Service: [(productId1, score1), (productId2, score2), ...]
+
+        Note over Service: 2. 상품 상세 정보 조회
+        Service->>ProductRepo: findAllById(productIds)
+        ProductRepo->>DB: SELECT * FROM products WHERE id IN (?, ?, ...)
+        DB-->>ProductRepo: List<Product>
+        ProductRepo-->>Service: List<Product>
+
+        Service->>Service: 랭킹 순서대로 정렬<br/>rank 추가 (1~5)
+        Service-->>Controller: TopProductsResponseDto
+        Controller-->>User: 200 OK + 인기 상품 Top 5
+
+    else 캐시 Miss (Redis 데이터 없음)
+        Redis-->>Service: Empty
+
+        Note over Service: 3. DB Fallback 조회
+        Service->>ProductRepo: findTopProductsByRecentSales(3일)
+        ProductRepo->>DB: SELECT p.id, p.name,<br/>SUM(oi.quantity) as sales_count<br/>FROM order_items oi<br/>JOIN products p ON oi.product_id = p.id<br/>JOIN orders o ON oi.order_id = o.id<br/>WHERE o.created_at >= NOW() - INTERVAL 3 DAY<br/>AND o.status = 'PAID'<br/>GROUP BY p.id<br/>ORDER BY sales_count DESC<br/>LIMIT 5
+        DB-->>ProductRepo: List<TopProductInfo>
+        ProductRepo-->>Service: List<TopProductInfo>
+
+        Service-->>Controller: TopProductsResponseDto
+        Controller-->>User: 200 OK + 인기 상품 Top 5
+    end
 ```
 
 **핵심 로직**:
-- 최근 3일 데이터만 집계
-- PAID 상태 주문만 포함
-- 판매량 기준 정렬
-- Top 5 제한
+
+- **Redis ZSET 기반 실시간 랭킹**
+  - 주문 생성 시 Kafka Consumer가 `ZINCRBY`로 점수 증가
+  - `ZREVRANGE`로 상위 N개 조회 (O(log N) 성능)
+- **캐시 Miss 시 DB Fallback**
+  - 최근 3일 데이터 기반 집계
+  - PAID 상태 주문만 포함
+- **Top 5 제한**
 
 ---
 
@@ -150,6 +176,7 @@ sequenceDiagram
 ```
 
 **핵심 로직**:
+
 - 충전 금액 유효성 검증 (1,000원 ~ 1,000,000원)
 - 최대 잔액 한도 체크 (10,000,000원)
 - 트랜잭션 내에서 잔액 업데이트
@@ -233,6 +260,7 @@ sequenceDiagram
 ```
 
 **핵심 로직**:
+
 - 장바구니가 없으면 자동 생성
 - 동일 상품 추가 시 수량 합산
 - 재고 확인 및 최대 수량 제한 (100개)
@@ -273,6 +301,7 @@ sequenceDiagram
 ```
 
 **핵심 로직**:
+
 - 장바구니와 아이템을 한 번의 쿼리로 조회 (JOIN)
 - 각 아이템의 현재 재고 상태 확인
 - 품절 여부를 isAvailable로 표시
@@ -281,7 +310,7 @@ sequenceDiagram
 
 ## 4. 주문/결제 시스템
 
-### 2.1 주문 생성 (정상 흐름)
+### 4.1 주문 생성 (정상 흐름) - Kafka 이벤트 기반
 
 ```mermaid
 sequenceDiagram
@@ -293,6 +322,11 @@ sequenceDiagram
     participant CouponRepo as UserCouponRepository
     participant OrderRepo as OrderRepository
     participant DB as Database
+    participant Kafka as Kafka Broker
+    participant Consumer as OrderEventConsumer
+    participant CartService as CartService
+    participant RankingService as ProductRankingService
+    participant Redis as Redis
 
     User->>Controller: POST /api/orders<br/>{userId, items, couponId}
     Controller->>Service: createOrder(request)
@@ -303,10 +337,10 @@ sequenceDiagram
     DB-->>UserRepo: User
     UserRepo-->>Service: User
 
-    Note over Service: 2. 상품 검증 및 재고 차감
+    Note over Service: 2. 상품 검증 및 재고 차감 (비관적 락)
     loop 각 주문 아이템
-        Service->>ProductRepo: findById(productId)
-        ProductRepo->>DB: SELECT * FROM products WHERE id = ?
+        Service->>ProductRepo: findByIdWithLock(productId)
+        ProductRepo->>DB: SELECT * FROM products<br/>WHERE id = ? FOR UPDATE
         DB-->>ProductRepo: Product
         ProductRepo-->>Service: Product
 
@@ -344,22 +378,49 @@ sequenceDiagram
     OrderRepo->>DB: INSERT INTO order_items ...
     OrderRepo-->>Service: Saved Order
 
+    Note over Service: ✅ 트랜잭션 커밋 완료
+
+    Note over Service,Kafka: 6. Kafka 이벤트 발행 (비동기)
+    Service->>Kafka: send(order-created, key=orderId)<br/>OrderCreatedEvent
+    Note over Kafka: 파티션 키: orderId<br/>순서 보장
+
     Service-->>Controller: CreateOrderResponseDto
     Controller-->>User: 201 Created + 주문 정보
 
     Note over User,DB: 주문 상태: PENDING<br/>재고: 차감 완료<br/>쿠폰: USED<br/>잔액: 아직 차감 안됨
+
+    rect rgb(240, 248, 255)
+        Note over Kafka,Redis: 비동기 이벤트 처리 (Consumer)
+        Kafka->>Consumer: consume(OrderCreatedEvent)
+
+        Note over Consumer: 7. 상품 랭킹 업데이트
+        Consumer->>RankingService: incrementOrderCount(productIds, quantities)
+        RankingService->>Redis: ZINCRBY product:ranking:daily {score} {productId}
+        Redis-->>RankingService: OK
+
+        Note over Consumer: 8. 장바구니 삭제
+        Consumer->>CartService: deleteCartByUserId(userId)
+        CartService->>DB: DELETE FROM cart_items<br/>WHERE cart_id IN (SELECT id FROM carts WHERE user_id = ?)
+        DB-->>CartService: Success
+
+        Consumer->>Kafka: ACK (수동 커밋)
+    end
 ```
 
 **핵심 단계**:
+
 1. 사용자 조회
-2. 상품 검증 및 재고 차감 (즉시)
+2. 상품 검증 및 재고 차감 (비관적 락으로 동시성 제어)
 3. 쿠폰 적용 및 사용 처리
 4. 최종 금액 계산 및 잔액 검증
 5. 주문 생성 (PENDING 상태)
+6. **Kafka 이벤트 발행** (OrderCreatedEvent)
+7. **비동기: 상품 랭킹 업데이트** (Redis ZINCRBY)
+8. **비동기: 장바구니 삭제** (Consumer가 처리)
 
 ---
 
-### 2.2 주문 생성 (재고 부족 예외)
+### 4.2 주문 생성 (재고 부족 예외)
 
 ```mermaid
 sequenceDiagram
@@ -386,12 +447,13 @@ sequenceDiagram
 ```
 
 **에러 처리**:
+
 - 재고 부족 시 주문 생성 거부
 - 명확한 에러 메시지 (요청 수량 vs 가능 수량)
 
 ---
 
-### 2.3 주문 생성 (잔액 부족 예외)
+### 4.3 주문 생성 (잔액 부족 예외)
 
 ```mermaid
 sequenceDiagram
@@ -427,70 +489,111 @@ sequenceDiagram
 ```
 
 **에러 처리**:
+
 - 잔액 부족 시 트랜잭션 롤백
 - 재고 및 쿠폰 자동 복원
 
 ---
 
-### 4.1 결제 처리 (성공)
+### 4.4 결제 처리 (성공) - Kafka 이벤트 기반
 
 ```mermaid
 sequenceDiagram
     actor User as 사용자
-    participant Controller as OrderController
+    participant Controller as PaymentController
     participant Service as PaymentService
     participant OrderRepo as OrderRepository
     participant UserRepo as UserRepository
-    participant TransRepo as DataTransmissionRepository
+    participant ShippingService as ShippingService
+    participant PaymentRepo as PaymentRepository
     participant DB as Database
+    participant Kafka as Kafka Broker
+    participant Consumer as PaymentEventConsumer
+    participant DataPlatform as DataPlatformService
+    participant ExternalAPI as 외부 데이터 플랫폼
 
-    User->>Controller: POST /api/orders/{orderId}/payment<br/>{userId}
+    User->>Controller: POST /api/payments<br/>{orderId, userId}
     Controller->>Service: processPayment(orderId, userId)
 
-    Note over Service: 1. 주문 및 사용자 조회
-    Service->>OrderRepo: findById(orderId)
-    OrderRepo->>DB: SELECT * FROM orders WHERE id = ?
+    Note over Service: 1. 주문 조회 (비관적 락)
+    Service->>OrderRepo: findByIdWithLock(orderId)
+    OrderRepo->>DB: SELECT * FROM orders<br/>WHERE id = ? FOR UPDATE
     DB-->>OrderRepo: Order (status = PENDING)
     OrderRepo-->>Service: Order
 
-    Service->>UserRepo: findById(userId)
-    UserRepo->>DB: SELECT * FROM users WHERE id = ?
+    Note over Service: 2. 사용자 조회 (비관적 락)
+    Service->>UserRepo: findByIdWithLock(userId)
+    UserRepo->>DB: SELECT * FROM users<br/>WHERE id = ? FOR UPDATE
     DB-->>UserRepo: User
     UserRepo-->>Service: User
 
-    Note over Service: 2. 잔액 차감
-    Service->>Service: user.deductBalance(order.finalAmount)
+    Note over Service: 3. 잔액 차감
+    Service->>Service: user.deduct(order.finalAmount)
     Service->>UserRepo: save(user)
     UserRepo->>DB: UPDATE users<br/>SET balance = balance - ?<br/>WHERE id = ?
     DB-->>UserRepo: Success
 
-    Note over Service: 3. 주문 상태 변경
+    Note over Service: 4. 주문 상태 변경
     Service->>Service: order.markAsPaid()
     Service->>OrderRepo: save(order)
     OrderRepo->>DB: UPDATE orders<br/>SET status = 'PAID', paid_at = NOW()<br/>WHERE id = ?
     DB-->>OrderRepo: Success
 
-    Note over Service: 4. 데이터 전송 레코드 생성 (Outbox)
-    Service->>Service: DataTransmission 생성<br/>(status = PENDING)
-    Service->>TransRepo: save(dataTransmission)
-    TransRepo->>DB: INSERT INTO data_transmissions<br/>(order_id, payload, status, attempts)<br/>VALUES (?, ?, 'PENDING', 0)
-    DB-->>TransRepo: Success
+    Note over Service: 5. 결제 레코드 생성
+    Service->>Service: Payment 생성<br/>(status = SUCCESS)
+    Service->>PaymentRepo: save(payment)
+    PaymentRepo->>DB: INSERT INTO payments<br/>(order_id, user_id, amount, status)<br/>VALUES (?, ?, ?, 'SUCCESS')
+    DB-->>PaymentRepo: Success
 
-    Service-->>Controller: PaymentResponseDto
-    Controller-->>User: 200 OK<br/>{orderId, paidAmount,<br/>remainingBalance, status: "SUCCESS"}
+    Note over Service: 6. 배송 정보 생성
+    Service->>ShippingService: createShipping(orderId)
+    ShippingService->>DB: INSERT INTO shippings<br/>(order_id, status)<br/>VALUES (?, 'PENDING')
+    DB-->>ShippingService: Success
 
-    Note over User,DB: 주문 상태: PAID<br/>잔액: 차감 완료<br/>데이터 전송: 대기 중 (PENDING)
+    Note over Service: ✅ 트랜잭션 커밋 완료
+
+    Note over Service,Kafka: 7. Kafka 이벤트 발행 (비동기)
+    Service->>Kafka: send(payment-completed, key=orderId)<br/>PaymentCompletedEvent
+    Note over Kafka: 파티션 키: orderId<br/>순서 보장
+
+    Service-->>Controller: ProcessPaymentResult
+    Controller-->>User: 200 OK<br/>{paymentId, orderId, paidAmount,<br/>remainingBalance, status: "SUCCESS"}
+
+    Note over User,DB: 주문 상태: PAID<br/>잔액: 차감 완료<br/>배송: PENDING
+
+    rect rgb(255, 248, 240)
+        Note over Kafka,ExternalAPI: 비동기 이벤트 처리 (Consumer)
+        Kafka->>Consumer: consume(PaymentCompletedEvent)
+
+        Note over Consumer: 8. 외부 데이터 플랫폼 전송
+        Consumer->>DataPlatform: sendPaymentData(event)
+        DataPlatform->>ExternalAPI: POST /api/payments<br/>{orderId, userId, amount, paidAt}
+
+        alt 전송 성공
+            ExternalAPI-->>DataPlatform: 200 OK
+            DataPlatform-->>Consumer: 전송 완료
+            Consumer->>Kafka: ACK (수동 커밋)
+        else 전송 실패
+            ExternalAPI-->>DataPlatform: 500 Error
+            DataPlatform-->>Consumer: 전송 실패
+            Note over Consumer: ACK 하지 않음<br/>→ Consumer 재시작 시 재처리
+        end
+    end
 ```
 
 **핵심 단계**:
-1. 주문 및 사용자 조회
+
+1. 주문 및 사용자 조회 (비관적 락으로 동시성 제어)
 2. 잔액 차감
 3. 주문 상태 변경 (PENDING → PAID)
-4. 데이터 전송 레코드 생성 (Outbox Pattern)
+4. 결제 레코드 생성
+5. 배송 정보 생성
+6. **Kafka 이벤트 발행** (PaymentCompletedEvent)
+7. **비동기: 외부 데이터 플랫폼 전송** (Consumer가 처리)
 
 ---
 
-### 4.2 결제 실패 및 보상 트랜잭션
+### 4.5 결제 실패 및 보상 트랜잭션
 
 ```mermaid
 sequenceDiagram
@@ -565,18 +668,20 @@ sequenceDiagram
 ```
 
 **보상 트랜잭션 핵심 로직**:
+
 1. **재고 복원** - 주문 시 차감했던 모든 상품의 재고를 원래대로 복원
 2. **쿠폰 복원** - 사용한 쿠폰을 AVAILABLE 상태로 복원 (만료되지 않은 경우만)
 3. **주문 취소** - 주문 상태를 CANCELLED로 변경
 
 **보상 처리 시나리오**:
+
 - 결제 실패 (잔액 부족)
 - 외부 시스템 연동 실패 (치명적 오류)
 - 기타 시스템 오류
 
 ---
 
-### 4.3 주문 취소 (PENDING 상태)
+### 4.6 주문 취소 (PENDING 상태)
 
 ```mermaid
 sequenceDiagram
@@ -653,19 +758,21 @@ sequenceDiagram
 ```
 
 **주문 취소 핵심 로직**:
+
 1. **취소 가능 여부 확인** - PENDING 상태만 취소 가능
 2. **재고 복원** - 차감했던 재고 원복
 3. **쿠폰 복원** - 사용한 쿠폰 AVAILABLE로 복원 (만료 안된 경우)
 4. **주문 상태 변경** - CANCELLED로 변경
 
 **제한 사항**:
+
 - PAID 상태 주문은 취소 불가 (별도 환불 프로세스 필요)
 - 본인의 주문만 취소 가능
 - 취소 사유는 선택사항
 
 ---
 
-### 4.4 주문 조회
+### 4.7 주문 조회
 
 ```mermaid
 sequenceDiagram
@@ -695,7 +802,7 @@ sequenceDiagram
 
 ---
 
-### 4.5 사용자별 주문 목록 조회
+### 4.8 사용자별 주문 목록 조회
 
 ```mermaid
 sequenceDiagram
@@ -803,6 +910,7 @@ sequenceDiagram
 ```
 
 **핵심 로직**:
+
 - 비관적 락으로 동시성 제어 (`FOR UPDATE`)
 - `issued_quantity < total_quantity` 조건 체크
 - 중복 발급 방지 (`user_id`, `coupon_id` 조합)
@@ -889,6 +997,7 @@ sequenceDiagram
 ```
 
 **핵심 로직**:
+
 - 주문 결제 완료 시 자동으로 배송 정보 생성
 - 초기 상태는 PENDING
 - 택배사 및 송장번호는 추후 입력
@@ -935,6 +1044,7 @@ sequenceDiagram
 ```
 
 **핵심 로직**:
+
 - PENDING 상태의 배송만 시작 가능
 - 택배사, 송장번호, 도착 예정일 입력
 - 배송 시작일 자동 기록
@@ -982,6 +1092,7 @@ sequenceDiagram
 ```
 
 **핵심 로직**:
+
 - IN_TRANSIT 상태의 배송만 완료 처리 가능
 - 실제 도착일 자동 기록
 - 상태를 DELIVERED로 변경
@@ -1020,6 +1131,7 @@ sequenceDiagram
 ```
 
 **핵심 로직**:
+
 - 주문 ID로 배송 정보 조회
 - 배송 상태에 따라 다른 정보 제공
   - PENDING: 배송 준비 중
@@ -1028,102 +1140,155 @@ sequenceDiagram
 
 ---
 
-## 7. 데이터 연동
+## 7. 데이터 연동 (Kafka 기반)
 
-### 7.1 데이터 전송 (Outbox Pattern)
+### 7.1 결제 완료 이벤트 처리 (Kafka Consumer)
 
 ```mermaid
 sequenceDiagram
-    participant Scheduler as 배치 스케줄러
-    participant Service as DataTransmissionService
-    participant Repository as DataTransmissionRepository
-    participant ExternalAPI as 외부 시스템
-    participant DB as Database
+    participant Kafka as Kafka Broker
+    participant Consumer as PaymentEventConsumer
+    participant Service as DataPlatformService
+    participant ExternalAPI as 외부 데이터 플랫폼
 
-    Note over Scheduler: 주기적 실행 (예: 1분마다)
+    Note over Kafka: payment-completed 토픽
 
-    Scheduler->>Service: processPendingTransmissions()
+    Kafka->>Consumer: consume(PaymentCompletedEvent)<br/>partition=0, offset=123
 
-    Note over Service: 1. 전송 대상 조회
-    Service->>Repository: findByStatusIn([PENDING, FAILED])<br/>AND attempts < 3
-    Repository->>DB: SELECT * FROM data_transmissions<br/>WHERE status IN ('PENDING', 'FAILED')<br/>AND attempts < 3<br/>ORDER BY created_at ASC
-    DB-->>Repository: List<DataTransmission>
-    Repository-->>Service: List<DataTransmission>
+    Note over Consumer: 메시지 수신
+    Consumer->>Consumer: JSON 역직렬화<br/>PaymentCompletedEvent
 
-    loop 각 전송 레코드
-        Note over Service: 2. 외부 시스템 전송 시도
-        Service->>Service: attempts++
-        Service->>ExternalAPI: POST /api/orders<br/>{payload}
+    Consumer->>Service: sendPaymentData(event)
 
-        alt 전송 성공
-            ExternalAPI-->>Service: 200 OK
-            Service->>Service: transmission.markAsSuccess()
-            Service->>Repository: save(transmission)
-            Repository->>DB: UPDATE data_transmissions<br/>SET status = 'SUCCESS',<br/>sent_at = NOW()<br/>WHERE id = ?
-            DB-->>Repository: Success
+    Note over Service: 외부 시스템 전송
+    Service->>ExternalAPI: POST /api/payments<br/>{orderId, userId, amount, items, paidAt}
 
-        else 전송 실패
-            ExternalAPI-->>Service: 500 Error or Timeout
-            Service->>Service: transmission.markAsFailed()
-            Service->>Repository: save(transmission)
-            Repository->>DB: UPDATE data_transmissions<br/>SET status = 'FAILED',<br/>attempts = attempts + 1<br/>WHERE id = ?
-            DB-->>Repository: Success
-
-            alt attempts >= 3
-                Note over Service: 최대 재시도 횟수 초과
-                Service->>Service: sendAlert(관리자)
-                Note over Service: 알림 발송<br/>(이메일, 슬랙 등)
-            else attempts < 3
-                Note over Service: 다음 스케줄에서 재시도<br/>재시도 간격:<br/>1차: 1분 후<br/>2차: 5분 후<br/>3차: 15분 후
-            end
-        end
+    alt 전송 성공
+        ExternalAPI-->>Service: 200 OK
+        Service-->>Consumer: 전송 완료
+        Consumer->>Kafka: ACK (수동 커밋)
+        Note over Kafka: offset 123 커밋 완료<br/>다음 메시지 처리 가능
+    else 전송 실패 (일시적 오류)
+        ExternalAPI-->>Service: 500 Error / Timeout
+        Service-->>Consumer: 전송 실패
+        Note over Consumer: ACK 하지 않음
+        Note over Kafka: offset 123 미커밋<br/>Consumer 재시작 시 재처리
+    else 전송 실패 (비치명적)
+        ExternalAPI-->>Service: 4xx Error
+        Service-->>Consumer: 로그 기록 후 계속 진행
+        Consumer->>Kafka: ACK (수동 커밋)
+        Note over Consumer: 메인 비즈니스에 영향 없음<br/>모니터링으로 추후 확인
     end
-
-    Service-->>Scheduler: 처리 완료
 ```
 
 **핵심 로직**:
-- Outbox Pattern으로 트랜잭션과 분리
-- 최대 3회 재시도
-- 지수 백오프 (1분, 5분, 15분)
-- 실패 시 알림 발송
+
+- Kafka Consumer가 결제 완료 이벤트 처리
+- 수동 ACK 모드로 메시지 처리 보장
+- 실패 시 ACK 하지 않아 자동 재처리
+- Consumer Lag 모니터링으로 처리 지연 감지
 
 ---
 
-### 7.2 데이터 전송 재시도 로직
+### 7.2 주문 생성 이벤트 처리 (Kafka Consumer)
+
+```mermaid
+sequenceDiagram
+    participant Kafka as Kafka Broker
+    participant Consumer as OrderEventConsumer
+    participant RankingService as ProductRankingService
+    participant CartService as CartService
+    participant Redis as Redis
+    participant DB as Database
+
+    Note over Kafka: order-created 토픽
+
+    Kafka->>Consumer: consume(OrderCreatedEvent)<br/>partition=1, offset=456
+
+    Note over Consumer: 메시지 수신
+    Consumer->>Consumer: JSON 역직렬화<br/>OrderCreatedEvent
+
+    Note over Consumer: 1. 상품 랭킹 업데이트
+    Consumer->>RankingService: incrementOrderCount(items)
+
+    loop 각 주문 아이템
+        RankingService->>Redis: ZINCRBY product:ranking:daily<br/>{quantity} {productId}
+        Redis-->>RankingService: OK
+    end
+    RankingService-->>Consumer: 랭킹 업데이트 완료
+
+    Note over Consumer: 2. 장바구니 삭제
+    Consumer->>CartService: deleteCartByUserId(userId)
+    CartService->>DB: DELETE FROM cart_items<br/>WHERE cart_id IN<br/>(SELECT id FROM carts WHERE user_id = ?)
+    DB-->>CartService: Success
+    CartService-->>Consumer: 삭제 완료
+
+    Consumer->>Kafka: ACK (수동 커밋)
+    Note over Kafka: offset 456 커밋 완료
+```
+
+**핵심 로직**:
+
+- 주문 생성 이벤트 → 랭킹 업데이트 + 카트 삭제
+- Redis ZINCRBY로 실시간 랭킹 집계
+- 비동기 처리로 주문 응답 시간에 영향 없음
+
+---
+
+### 7.3 Kafka 이벤트 흐름 개요
 
 ```mermaid
 flowchart TD
-    A[배치 스케줄러 실행] --> B[전송 대상 조회<br/>status IN PENDING, FAILED<br/>AND attempts < 3]
-    B --> C{레코드 존재?}
-    C -->|NO| D[종료]
-    C -->|YES| E[외부 시스템 전송]
+    subgraph 동기 처리
+        A[주문 생성 API] --> B[재고 차감]
+        B --> C[쿠폰 사용]
+        C --> D[주문 저장]
+        D --> E[트랜잭션 커밋]
+    end
 
-    E --> F{전송 성공?}
-    F -->|YES| G[status = SUCCESS<br/>sent_at = NOW]
-    F -->|NO| H[status = FAILED<br/>attempts++]
+    E --> F[Kafka: order-created]
 
-    H --> I{attempts >= 3?}
-    I -->|YES| J[관리자 알림 발송]
-    I -->|NO| K[다음 스케줄에서 재시도]
+    subgraph 비동기 처리
+        F --> G[OrderEventConsumer]
+        G --> H[상품 랭킹 업데이트<br/>Redis ZINCRBY]
+        G --> I[장바구니 삭제]
+    end
 
-    G --> L[다음 레코드]
-    J --> L
-    K --> L
-    L --> C
+    subgraph 동기 처리
+        J[결제 처리 API] --> K[잔액 차감]
+        K --> L[주문 상태 변경]
+        L --> M[배송 생성]
+        M --> N[트랜잭션 커밋]
+    end
 
-    style G fill:#51cf66
-    style J fill:#ff6b6b
-    style K fill:#ffd43b
+    N --> O[Kafka: payment-completed]
+
+    subgraph 비동기 처리
+        O --> P[PaymentEventConsumer]
+        P --> Q[외부 데이터 플랫폼 전송]
+    end
+
+    style E fill:#51cf66
+    style N fill:#51cf66
+    style F fill:#339af0
+    style O fill:#339af0
+    style H fill:#ffd43b
+    style I fill:#ffd43b
+    style Q fill:#ffd43b
 ```
 
-**재시도 간격**:
-| 시도 | 실패 후 대기 시간 | 설명 |
-|------|------------------|------|
-| 1차 | 1분 | 일시적 장애 대응 |
-| 2차 | 5분 | 시스템 복구 대기 |
-| 3차 | 15분 | 최종 재시도 |
-| 실패 | - | 관리자 개입 필요 |
+**Kafka 토픽 구조**:
+| 토픽 이름 | Producer | Consumer | 처리 내용 |
+|----------|----------|----------|----------|
+| `order-created` | OrderService | OrderEventConsumer | 랭킹 업데이트, 카트 삭제 |
+| `payment-completed` | PaymentService | PaymentEventConsumer | 외부 플랫폼 데이터 전송 |
+
+**메시지 보장**:
+
+- `acks=all`: 모든 레플리카 확인
+- `enable.idempotence=true`: 멱등성 보장
+- `max.in.flight.requests.per.connection=1`: 순서 보장
+- 수동 ACK: 처리 완료 후에만 커밋
 
 ---
 
