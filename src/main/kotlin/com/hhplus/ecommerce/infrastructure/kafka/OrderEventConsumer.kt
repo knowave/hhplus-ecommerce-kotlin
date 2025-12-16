@@ -6,6 +6,7 @@ import com.hhplus.ecommerce.application.product.ProductRankingService
 import com.hhplus.ecommerce.common.event.OrderCreatedEvent
 import com.hhplus.ecommerce.domain.product.entity.RankingPeriod
 import org.slf4j.LoggerFactory
+import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty
 import org.springframework.kafka.annotation.KafkaListener
 import org.springframework.kafka.support.Acknowledgment
 import org.springframework.kafka.support.KafkaHeaders
@@ -23,6 +24,11 @@ import org.springframework.stereotype.Component
  * 기존 OrderEventListener의 로직을 Kafka 기반으로 전환한 버전입니다.
  */
 @Component
+@ConditionalOnProperty(
+    name = ["spring.kafka.enabled"],
+    havingValue = "true",
+    matchIfMissing = true
+)
 class OrderEventConsumer(
     private val cartService: CartService,
     private val productRankingService: ProductRankingService,
