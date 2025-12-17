@@ -15,9 +15,12 @@ import org.springframework.kafka.annotation.EnableKafka
 import org.springframework.kafka.config.ConcurrentKafkaListenerContainerFactory
 import org.springframework.kafka.core.*
 import org.springframework.kafka.listener.ContainerProperties
+import org.springframework.kafka.listener.DefaultErrorHandler
+import org.springframework.kafka.listener.DeadLetterPublishingRecoverer
 import org.springframework.kafka.support.serializer.JsonDeserializer
 import org.springframework.kafka.support.serializer.JsonSerializer
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty
+import org.springframework.util.backoff.FixedBackOff
 
 /**
  * Producer와 Consumer의 Factory를 정의.
@@ -37,6 +40,12 @@ class KafkaConfig {
 
     @Value("\${spring.kafka.consumer.group-id}")
     private lateinit var groupId: String
+
+    /**
+     * Dead Letter Queue (DLQ) 토픽 네이밍 규칙
+     * 원본 토픽 이름에 .DLQ suffix 추가
+     */
+    private val DLQ_SUFFIX = ".DLQ"
 
     /**
      * Jackson ObjectMapper 설정
@@ -109,15 +118,71 @@ class KafkaConfig {
     }
 
     /**
+     * Default Error Handler 설정
+     * Consumer에서 예외 발생 시 재시도 로직 및 DLQ 전송 처리
+     *
+     * - 재시도 3회 (FixedBackOff: 3초 간격)
+     * - 재시도 실패 시 DeadLetterPublishingRecoverer를 통해 DLQ 토픽으로 전송
+     * - DLQ 토픽 이름: {원본토픽}.DLQ (예: order-created.DLQ)
+     */
+    @Bean
+    fun defaultErrorHandler(): DefaultErrorHandler {
+        val recoverer = DeadLetterPublishingRecoverer(kafkaTemplate()) { record, _ ->
+            // DLQ 토픽 이름 생성: 원본 토픽 + .DLQ
+            org.apache.kafka.common.TopicPartition(record.topic() + DLQ_SUFFIX, record.partition())
+        }
+
+        // FixedBackOff: 3초 간격으로 3회 재시도 (총 4회 시도)
+        return DefaultErrorHandler(recoverer, FixedBackOff(3000L, 3L))
+    }
+
+    /**
      * Kafka Listener Container Factory
      * Consumer를 위한 컨테이너 팩토리 설정
-     * 수동 ACK 모드를 사용하여 메시지 처리 성공 시에만 offset을 커밋.
+     *
+     * DefaultErrorHandler가 자동으로 offset 커밋 및 예외 처리를 수행:
+     * - 메시지 처리 성공 시: 자동으로 offset 커밋
+     * - 메시지 처리 실패 시: 재시도 3회 수행
+     * - 재시도 모두 실패 시: DLQ 토픽으로 전송
      */
     @Bean
     fun kafkaListenerContainerFactory(): ConcurrentKafkaListenerContainerFactory<String, Any> {
         val factory = ConcurrentKafkaListenerContainerFactory<String, Any>()
         factory.consumerFactory = consumerFactory()
-        factory.containerProperties.ackMode = ContainerProperties.AckMode.MANUAL  // 수동 ACK
+        factory.setCommonErrorHandler(defaultErrorHandler())  // Error Handler 설정
+        return factory
+    }
+
+    /**
+     * DLQ 전용 Consumer Factory 설정
+     * DLQ 메시지를 String으로 역직렬화하여 DB에 저장
+     */
+    @Bean
+    fun dlqConsumerFactory(): ConsumerFactory<String, String> {
+        val props = mapOf(
+            ConsumerConfig.BOOTSTRAP_SERVERS_CONFIG to bootstrapServers,
+            ConsumerConfig.GROUP_ID_CONFIG to "$groupId-dlq",
+            ConsumerConfig.KEY_DESERIALIZER_CLASS_CONFIG to StringDeserializer::class.java,
+            ConsumerConfig.VALUE_DESERIALIZER_CLASS_CONFIG to StringDeserializer::class.java,
+            ConsumerConfig.AUTO_OFFSET_RESET_CONFIG to "earliest",
+            ConsumerConfig.ENABLE_AUTO_COMMIT_CONFIG to false
+        )
+
+        return DefaultKafkaConsumerFactory(
+            props,
+            StringDeserializer(),
+            StringDeserializer()
+        )
+    }
+
+    /**
+     * DLQ 전용 Kafka Listener Container Factory
+     * String으로 역직렬화된 메시지를 처리
+     */
+    @Bean
+    fun dlqKafkaListenerContainerFactory(): ConcurrentKafkaListenerContainerFactory<String, String> {
+        val factory = ConcurrentKafkaListenerContainerFactory<String, String>()
+        factory.consumerFactory = dlqConsumerFactory()
         return factory
     }
 }
