@@ -837,9 +837,196 @@ sequenceDiagram
 
 ---
 
-## 5. 쿠폰 시스템
+## 5. Kafka 이벤트 처리 실패 및 DLQ 처리
 
-### 5.1 쿠폰 발급 (선착순)
+### 5.1 주문 이벤트 처리 실패 → DLQ 저장 흐름
+
+```mermaid
+sequenceDiagram
+    participant OrderService
+    participant OrderEventProducer
+    participant Kafka
+    participant OrderEventConsumer
+    participant ErrorHandler
+    participant DLQTopic
+    participant DLQConsumer
+    participant FailedMessagesDB
+
+    OrderService->>OrderEventProducer: sendOrderCreatedEvent()
+    OrderEventProducer->>Kafka: send(order-created)
+    Note over Kafka: 메시지 저장 완료
+
+    Kafka->>OrderEventConsumer: consume(OrderCreatedEvent)
+
+    OrderEventConsumer->>OrderEventConsumer: processEvent()
+    Note over OrderEventConsumer: ❌ 예외 발생!<br/>(예: DB 연결 오류)
+
+    OrderEventConsumer-->>ErrorHandler: Exception
+
+    Note over ErrorHandler: 재시도 1회 시작<br/>(3초 대기)
+    ErrorHandler->>OrderEventConsumer: retry (1/3)
+    OrderEventConsumer->>OrderEventConsumer: processEvent()
+    Note over OrderEventConsumer: ❌ 실패
+    OrderEventConsumer-->>ErrorHandler: Exception
+
+    Note over ErrorHandler: 재시도 2회 시작<br/>(3초 대기)
+    ErrorHandler->>OrderEventConsumer: retry (2/3)
+    OrderEventConsumer->>OrderEventConsumer: processEvent()
+    Note over OrderEventConsumer: ❌ 실패
+    OrderEventConsumer-->>ErrorHandler: Exception
+
+    Note over ErrorHandler: 재시도 3회 시작<br/>(3초 대기)
+    ErrorHandler->>OrderEventConsumer: retry (3/3)
+    OrderEventConsumer->>OrderEventConsumer: processEvent()
+    Note over OrderEventConsumer: ❌ 실패
+    OrderEventConsumer-->>ErrorHandler: Exception
+
+    Note over ErrorHandler: 모든 재시도 실패<br/>DLQ로 전송
+
+    ErrorHandler->>DLQTopic: send(order-created.DLQ)
+    Note over DLQTopic: DLQ 토픽에 메시지 저장<br/>(원본 payload + 에러 정보)
+
+    ErrorHandler->>Kafka: offset 커밋
+    Note over Kafka: 다음 메시지 처리 가능
+
+    Note over DLQTopic,DLQConsumer: 별도 Consumer가 DLQ 처리
+
+    DLQTopic->>DLQConsumer: consume(DLQ Message)
+    DLQConsumer->>FailedMessagesDB: save(FailedMessage)
+
+    Note over FailedMessagesDB: 저장 내용:<br/>- 원본 토픽: order-created<br/>- partition, offset<br/>- 메시지 payload<br/>- 에러 메시지<br/>- 스택 트레이스<br/>- 재시도 횟수: 3<br/>- 상태: PENDING
+
+    Note over FailedMessagesDB: 관리자가 수동으로<br/>확인 및 재처리
+```
+
+**핵심 로직**:
+
+- **재시도 메커니즘**: DefaultErrorHandler가 3초 간격으로 3회 재시도
+- **DLQ 전송**: 재시도 모두 실패 시 자동으로 DLQ 토픽으로 전송
+- **Offset 커밋**: DLQ 전송 후 원본 토픽의 offset 커밋 (다음 메시지 처리)
+- **DB 저장**: DLQ Consumer가 실패 메시지를 영구 저장
+- **수동 처리**: 관리자가 실패 원인 분석 후 재처리 또는 무시
+
+---
+
+### 5.2 DLQ 메시지 수동 재처리 흐름
+
+```mermaid
+sequenceDiagram
+    participant Admin
+    participant AdminAPI
+    participant FailedMessagesDB
+    participant FailedMessage
+    participant OriginalService
+
+    Admin->>AdminAPI: GET /admin/failed-messages?status=PENDING
+    AdminAPI->>FailedMessagesDB: findByStatus(PENDING)
+    FailedMessagesDB-->>AdminAPI: List<FailedMessage>
+    AdminAPI-->>Admin: 실패 메시지 목록
+
+    Note over Admin: 실패 원인 분석<br/>- error_message 확인<br/>- stack_trace 분석<br/>- payload 내용 확인
+
+    Admin->>Admin: 문제 원인 해결<br/>(예: DB 연결 복구)
+
+    Admin->>AdminAPI: POST /admin/failed-messages/{id}/reprocess
+    AdminAPI->>FailedMessagesDB: findById(id)
+    FailedMessagesDB-->>AdminAPI: FailedMessage
+
+    AdminAPI->>OriginalService: 원본 메시지 재처리<br/>(payload 이용)
+    OriginalService-->>AdminAPI: 처리 성공
+
+    AdminAPI->>FailedMessage: markAsReprocessed("재처리 완료")
+    Note over FailedMessage: status = REPROCESSED<br/>reprocessed_at = now()
+
+    AdminAPI->>FailedMessagesDB: save(FailedMessage)
+    AdminAPI-->>Admin: 200 OK (재처리 완료)
+
+    alt 재처리 불필요한 경우
+        Admin->>AdminAPI: POST /admin/failed-messages/{id}/ignore
+        AdminAPI->>FailedMessage: markAsIgnored("데이터 오류")
+        Note over FailedMessage: status = IGNORED
+        AdminAPI->>FailedMessagesDB: save(FailedMessage)
+        AdminAPI-->>Admin: 200 OK (무시 처리)
+    end
+```
+
+**수동 재처리 프로세스**:
+
+1. **실패 메시지 조회**: 상태가 PENDING인 메시지 목록 확인
+2. **실패 원인 분석**: 에러 메시지와 스택 트레이스를 통해 원인 파악
+3. **문제 해결**: DB 복구, 외부 API 재연결 등
+4. **재처리 실행**: 원본 payload를 이용하여 비즈니스 로직 재실행
+5. **상태 업데이트**: REPROCESSED 또는 IGNORED로 변경
+
+---
+
+### 5.3 결제 이벤트 처리 실패 및 DLQ 저장
+
+```mermaid
+sequenceDiagram
+    participant PaymentService
+    participant Kafka
+    participant PaymentEventConsumer
+    participant ErrorHandler
+    participant DataPlatform
+    participant ExternalAPI
+    participant DLQTopic
+    participant DLQConsumer
+    participant DB
+
+    PaymentService->>Kafka: send(payment-completed)
+    Kafka->>PaymentEventConsumer: consume(PaymentCompletedEvent)
+
+    PaymentEventConsumer->>DataPlatform: sendPaymentData()
+    DataPlatform->>ExternalAPI: POST /api/payments
+
+    alt 외부 API 타임아웃
+        ExternalAPI--xDataPlatform: Timeout
+        DataPlatform-->>PaymentEventConsumer: Exception
+
+        Note over ErrorHandler: 재시도 1회 (3초 대기)
+        ErrorHandler->>PaymentEventConsumer: retry (1/3)
+        PaymentEventConsumer->>ExternalAPI: POST /api/payments
+        ExternalAPI--xPaymentEventConsumer: Timeout
+
+        Note over ErrorHandler: 재시도 2회 (3초 대기)
+        ErrorHandler->>PaymentEventConsumer: retry (2/3)
+        PaymentEventConsumer->>ExternalAPI: POST /api/payments
+        ExternalAPI--xPaymentEventConsumer: Timeout
+
+        Note over ErrorHandler: 재시도 3회 (3초 대기)
+        ErrorHandler->>PaymentEventConsumer: retry (3/3)
+        PaymentEventConsumer->>ExternalAPI: POST /api/payments
+        ExternalAPI--xPaymentEventConsumer: Timeout
+
+        ErrorHandler->>DLQTopic: send(payment-completed.DLQ)
+        ErrorHandler->>Kafka: offset 커밋
+
+        DLQTopic->>DLQConsumer: consume(DLQ Message)
+        DLQConsumer->>DB: save(FailedMessage)
+
+        Note over DB: 실패 메시지 저장<br/>나중에 외부 API 복구 후<br/>관리자가 재처리
+    end
+```
+
+**결제 이벤트 실패 시나리오**:
+
+- **외부 API 타임아웃**: 데이터 플랫폼 연동 실패
+- **네트워크 오류**: 일시적 연결 문제
+- **서버 오류**: 외부 시스템 장애
+
+**DLQ 처리 이점**:
+
+- 메인 트랜잭션(결제)은 이미 완료된 상태 유지
+- 실패한 이벤트는 DLQ에 안전하게 보관
+- 외부 시스템 복구 후 재처리 가능
+- 정상 메시지 처리 흐름에 영향 없음
+
+---
+
+## 6. 쿠폰 시스템
+
+### 6.1 쿠폰 발급 (선착순)
 
 ```mermaid
 sequenceDiagram
@@ -918,7 +1105,7 @@ sequenceDiagram
 
 ---
 
-### 5.2 보유 쿠폰 조회
+### 6.2 보유 쿠폰 조회
 
 ```mermaid
 sequenceDiagram
@@ -943,7 +1130,7 @@ sequenceDiagram
 
 ---
 
-### 5.3 쿠폰 목록 조회
+### 6.3 쿠폰 목록 조회
 
 ```mermaid
 sequenceDiagram
@@ -969,9 +1156,9 @@ sequenceDiagram
 
 ---
 
-## 6. 배송 관리
+## 7. 배송 관리
 
-### 6.1 배송 정보 생성 (주문 완료 시 자동 생성)
+### 7.1 배송 정보 생성 (주문 완료 시 자동 생성)
 
 ```mermaid
 sequenceDiagram
@@ -1004,7 +1191,7 @@ sequenceDiagram
 
 ---
 
-### 6.2 배송 시작 처리
+### 7.2 배송 시작 처리
 
 ```mermaid
 sequenceDiagram
@@ -1052,7 +1239,7 @@ sequenceDiagram
 
 ---
 
-### 6.3 배송 완료 처리
+### 7.3 배송 완료 처리
 
 ```mermaid
 sequenceDiagram
@@ -1099,7 +1286,7 @@ sequenceDiagram
 
 ---
 
-### 6.4 배송 조회
+### 7.4 배송 조회
 
 ```mermaid
 sequenceDiagram
@@ -1140,9 +1327,9 @@ sequenceDiagram
 
 ---
 
-## 7. 데이터 연동 (Kafka 기반)
+## 8. 데이터 연동 (Kafka 기반)
 
-### 7.1 결제 완료 이벤트 처리 (Kafka Consumer)
+### 8.1 결제 완료 이벤트 처리 (Kafka Consumer)
 
 ```mermaid
 sequenceDiagram
@@ -1190,7 +1377,7 @@ sequenceDiagram
 
 ---
 
-### 7.2 주문 생성 이벤트 처리 (Kafka Consumer)
+### 8.2 주문 생성 이벤트 처리 (Kafka Consumer)
 
 ```mermaid
 sequenceDiagram
@@ -1235,7 +1422,7 @@ sequenceDiagram
 
 ---
 
-### 7.3 Kafka 이벤트 흐름 개요
+### 8.3 Kafka 이벤트 흐름 개요
 
 ```mermaid
 flowchart TD
@@ -1292,9 +1479,9 @@ flowchart TD
 
 ---
 
-## 8. 주요 예외 처리 시나리오
+## 9. 주요 예외 처리 시나리오
 
-### 8.1 동시성 충돌 (쿠폰 발급)
+### 9.1 동시성 충돌 (쿠폰 발급)
 
 ```mermaid
 sequenceDiagram

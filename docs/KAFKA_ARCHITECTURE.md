@@ -201,10 +201,12 @@ sequenceDiagram
 
 ### 토픽 구조
 
-| 토픽 이름           | 파티션 수 | 복제 계수            | 용도             | 파티션 키 |
-| ------------------- | --------- | -------------------- | ---------------- | --------- |
-| `order-created`     | 3         | 1 (개발: 1, 운영: 3) | 주문 생성 이벤트 | orderId   |
-| `payment-completed` | 3         | 1 (개발: 1, 운영: 3) | 결제 완료 이벤트 | orderId   |
+| 토픽 이름                  | 파티션 수 | 복제 계수            | 용도                        | 파티션 키 |
+| -------------------------- | --------- | -------------------- | --------------------------- | --------- |
+| `order-created`            | 3         | 1 (개발: 1, 운영: 3) | 주문 생성 이벤트            | orderId   |
+| `payment-completed`        | 3         | 1 (개발: 1, 운영: 3) | 결제 완료 이벤트            | orderId   |
+| `order-created.DLQ`        | 1         | 1 (개발: 1, 운영: 3) | 주문 이벤트 처리 실패 메시지 | orderId   |
+| `payment-completed.DLQ`    | 1         | 1 (개발: 1, 운영: 3) | 결제 이벤트 처리 실패 메시지 | orderId   |
 
 ### Producer 설정
 
@@ -250,9 +252,32 @@ spring:
 
 **주요 설정**:
 
-- `enable-auto-commit: false` - 수동 커밋으로 메시지 처리 성공 보장
-- `ack-mode: manual` - 메시지 처리 완료 후 명시적 ACK
+- `enable-auto-commit: false` - ErrorHandler가 offset 커밋을 제어
 - `auto-offset-reset: earliest` - Consumer 그룹 최초 실행 시 가장 오래된 메시지부터 소비
+
+**ErrorHandler 설정**:
+
+```kotlin
+@Bean
+fun defaultErrorHandler(): DefaultErrorHandler {
+    val recoverer = DeadLetterPublishingRecoverer(kafkaTemplate()) { record, _ ->
+        // DLQ 토픽 이름 생성: 원본 토픽 + .DLQ
+        org.apache.kafka.common.TopicPartition(record.topic() + ".DLQ", record.partition())
+    }
+
+    // FixedBackOff: 3초 간격으로 3회 재시도 (총 4회 시도)
+    return DefaultErrorHandler(recoverer, FixedBackOff(3000L, 3L))
+}
+```
+
+**재시도 및 DLQ 처리 흐름**:
+
+1. Consumer에서 예외 발생
+2. 3초 대기 후 1차 재시도
+3. 3초 대기 후 2차 재시도
+4. 3초 대기 후 3차 재시도
+5. 모두 실패 시 DLQ 토픽으로 전송
+6. 원본 토픽의 offset 커밋 (다음 메시지 처리)
 
 ### Producer/Consumer 코드
 
@@ -312,25 +337,63 @@ class OrderEventConsumer(
     fun consumeOrderCreatedEvent(
         @Payload message: String,
         @Header(KafkaHeaders.RECEIVED_PARTITION) partition: Int,
-        @Header(KafkaHeaders.OFFSET) offset: Long,
-        acknowledgment: Acknowledgment?
+        @Header(KafkaHeaders.OFFSET) offset: Long
     ) {
-        try {
-            val event = objectMapper.readValue(message, OrderCreatedEvent::class.java)
+        val event = objectMapper.readValue(message, OrderCreatedEvent::class.java)
 
-            // 1. 상품 랭킹 업데이트 (Redis ZINCRBY)
-            updateProductRanking(event)
+        // 1. 상품 랭킹 업데이트 (Redis ZINCRBY)
+        updateProductRanking(event)
 
-            // 2. 카트 삭제
-            deleteUserCart(event)
+        // 2. 카트 삭제
+        deleteUserCart(event)
 
-            // 처리 성공 시 수동 ACK
-            acknowledgment?.acknowledge()
+        // ErrorHandler가 자동으로 offset 커밋 및 예외 발생 시 재시도/DLQ 처리
+    }
+}
+```
 
-        } catch (e: Exception) {
-            logger.error("메시지 처리 실패: partition={}, offset={}", partition, offset, e)
-            // ACK하지 않으면 Consumer 재시작 시 재처리
-        }
+#### DLQConsumer
+
+```kotlin
+@Component
+@ConditionalOnProperty(
+    name = ["spring.kafka.enabled"],
+    havingValue = "true",
+    matchIfMissing = true
+)
+class DLQConsumer(
+    private val failedMessageRepository: FailedMessageJpaRepository
+) {
+    @KafkaListener(
+        topics = ["order-created.DLQ"],
+        groupId = "\${spring.kafka.consumer.group-id}-dlq",
+        containerFactory = "dlqKafkaListenerContainerFactory"
+    )
+    fun consumeOrderCreatedDLQ(
+        record: ConsumerRecord<String, String>,
+        @Header(KafkaHeaders.RECEIVED_PARTITION) partition: Int,
+        @Header(KafkaHeaders.OFFSET) offset: Long,
+        @Header(value = KafkaHeaders.EXCEPTION_MESSAGE, required = false) errorMessage: String?,
+        @Header(value = KafkaHeaders.EXCEPTION_STACKTRACE, required = false) stackTrace: String?
+    ) {
+        val originalTopic = record.topic().removeSuffix(".DLQ")
+
+        val failedMessage = FailedMessage(
+            topic = originalTopic,
+            partition = partition,
+            offset = offset,
+            messageKey = record.key(),
+            payload = record.value(),
+            errorMessage = errorMessage ?: "Unknown error",
+            stackTrace = stackTrace,
+            failedAt = LocalDateTime.now(),
+            retryCount = 3,
+            status = FailedMessageStatus.PENDING
+        )
+
+        failedMessageRepository.save(failedMessage)
+
+        logger.info("DLQ Consumer - 실패 메시지 저장 완료: failedMessageId={}", failedMessage.id)
     }
 }
 ```
@@ -525,29 +588,80 @@ try {
 - Kafka 복구 후 누락된 이벤트 수동 재발행
 - 또는 주문 테이블을 스캔하여 누락된 이벤트 찾아 재발행
 
-### 2. Kafka Consumer 장애
+### 2. Kafka Consumer 장애 및 DLQ 처리
 
 **시나리오**: Consumer 처리 중 예외 발생
 
-**처리**:
+**처리 흐름**:
 
-```kotlin
-@KafkaListener(...)
-fun consumeOrderCreatedEvent(..., acknowledgment: Acknowledgment?) {
-    try {
-        processEvent(event)
-        acknowledgment?.acknowledge()  // 성공 시 ACK
-    } catch (e: Exception) {
-        logger.error("처리 실패", e)
-        // ACK하지 않음 → Consumer 재시작 시 재처리
-    }
-}
 ```
+1. 메시지 처리 시도 → 실패
+   ↓
+2. 3초 대기 → 재시도 1회 → 실패
+   ↓
+3. 3초 대기 → 재시도 2회 → 실패
+   ↓
+4. 3초 대기 → 재시도 3회 → 실패
+   ↓
+5. DLQ 토픽으로 전송 (예: order-created.DLQ)
+   ↓
+6. 원본 토픽 offset 커밋 → 다음 메시지 처리
+   ↓
+7. DLQ Consumer가 실패 메시지를 DB에 저장
+   ↓
+8. 관리자가 수동으로 확인 및 재처리
+```
+
+**DLQ 데이터베이스 스키마**:
+
+```sql
+CREATE TABLE failed_messages (
+    id BINARY(16) PRIMARY KEY,
+    topic VARCHAR(255) NOT NULL,           -- 원본 토픽 (order-created)
+    partition INT NOT NULL,
+    offset BIGINT NOT NULL,
+    message_key VARCHAR(255),
+    payload TEXT NOT NULL,                  -- JSON 메시지
+    error_message TEXT NOT NULL,
+    stack_trace TEXT,
+    failed_at TIMESTAMP NOT NULL,
+    retry_count INT NOT NULL,               -- 재시도 횟수 (3)
+    status VARCHAR(20) NOT NULL,            -- PENDING, REPROCESSED, IGNORED
+    reprocessed_at TIMESTAMP,
+    reprocess_note TEXT,
+    created_at TIMESTAMP NOT NULL,
+    updated_at TIMESTAMP NOT NULL,
+    INDEX idx_topic_status (topic, status),
+    INDEX idx_failed_at (failed_at)
+);
+```
+
+**수동 재처리 프로세스**:
+
+1. **실패 메시지 조회**
+   ```kotlin
+   val failedMessages = failedMessageRepository
+       .findByTopicAndStatus("order-created", FailedMessageStatus.PENDING)
+   ```
+
+2. **실패 원인 분석**
+   - `error_message`: 에러 메시지 확인
+   - `stack_trace`: 스택 트레이스 분석
+   - `payload`: 원본 메시지 내용 확인
+
+3. **재처리 또는 무시**
+   ```kotlin
+   // 재처리
+   failedMessage.markAsReprocessed("문제 해결 후 재처리 완료")
+
+   // 무시
+   failedMessage.markAsIgnored("데이터 오류로 재처리 불필요")
+   ```
 
 **복구**:
 
-- Consumer 재시작 시 마지막 커밋된 offset부터 재처리
-- 멱등성 보장으로 중복 처리 방지
+- 일시적 오류 (DB 연결 오류, 네트워크 타임아웃 등): 재시도로 자동 복구
+- 영구적 오류 (데이터 오류, 비즈니스 규칙 위반 등): DLQ에 저장 후 수동 처리
 
 ### 3. 메시지 처리 실패 (비치명적)
 
@@ -561,7 +675,7 @@ private fun updateProductRanking(event: OrderCreatedEvent) {
         productRankingService.incrementOrderCount(...)
     } catch (e: Exception) {
         logger.error("랭킹 업데이트 실패", e)
-        // 예외를 던지지 않음 → ACK 진행
+        // 예외를 던지지 않음 → 재시도 없이 ACK 진행
         // 랭킹 실패가 주 비즈니스에 영향을 주지 않도록
     }
 }
@@ -571,6 +685,7 @@ private fun updateProductRanking(event: OrderCreatedEvent) {
 
 - 랭킹 업데이트는 부가 기능
 - 실패해도 주문/결제에 영향 없음
+- 예외를 던지지 않으면 DLQ로 가지 않음
 
 ### 4. 보상 트랜잭션 (결제 실패 시)
 
@@ -653,13 +768,33 @@ logger.error("Kafka Consumer - 메시지 처리 실패: partition={}, offset={},
 - `payment-failed` - 결제 실패
 - `shipping-started` - 배송 시작
 
-### 3. Dead Letter Queue (DLQ)
+### 3. Dead Letter Queue (DLQ) ✅ 구현 완료
 
-처리 실패 메시지를 별도 토픽으로 전송:
+**현재 상태**: 완전히 구현됨
+
+**DLQ 구조**:
 
 ```
-order-created → 처리 실패 → order-created-dlq
+원본 토픽: order-created
+DLQ 토픽: order-created.DLQ
+
+원본 토픽: payment-completed
+DLQ 토픽: payment-completed.DLQ
 ```
+
+**구현 내용**:
+
+1. **DefaultErrorHandler**: 재시도 3회 후 DLQ 전송
+2. **DLQConsumer**: DLQ 메시지를 DB에 저장
+3. **FailedMessage 엔티티**: 실패 메시지 영구 보관
+4. **수동 재처리 지원**: 관리자가 DB에서 확인 후 재처리 가능
+
+**관리자 대시보드 (향후 개발)**:
+
+- 실패 메시지 목록 조회
+- 실패 원인 분석
+- 원클릭 재처리 기능
+- 통계 및 모니터링
 
 ---
 
@@ -672,10 +807,12 @@ order-created → 처리 실패 → order-created-dlq
 3. ✅ **멱등성**: Producer 레벨 중복 방지
 4. ✅ **확장성**: 마이크로서비스 전환 대비
 5. ✅ **신뢰성**: 메시지 영속성 및 재처리 보장
+6. ✅ **DLQ 구현**: 재시도 실패 메시지 자동 저장 및 수동 처리 지원
 
 ### 향후 개선 사항
 
-1. **DLQ 도입**: 처리 실패 메시지 관리
-2. **메트릭 수집**: Prometheus + Grafana
+1. **관리자 대시보드**: DLQ 메시지 조회 및 재처리 UI
+2. **메트릭 수집**: Prometheus + Grafana로 Consumer Lag 모니터링
 3. **Circuit Breaker**: Resilience4j 적용
 4. **이벤트 버전 관리**: Schema Registry 도입
+5. **알림 시스템**: DLQ에 메시지가 쌓이면 Slack/Email 알림
