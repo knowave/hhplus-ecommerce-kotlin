@@ -31,13 +31,12 @@ class PaymentEventConsumer(
     private val logger = LoggerFactory.getLogger(javaClass)
 
     /**
-     * payment-completed 토픽의 메시지를 소비.
-     * 수동 ACK 모드를 사용하여 메시지 처리가 성공적으로 완료된 경우에만 offset 커밋.
+     * payment-completed 토픽의 메시지를 소비
+     * ErrorHandler가 자동으로 재시도 및 DLQ 처리를 수행
      *
      * @param message 메시지 페이로드 (JSON → PaymentCompletedEvent로 역직렬화)
      * @param partition 파티션 번호
      * @param offset offset 위치
-     * @param acknowledgment 수동 ACK를 위한 객체
      */
     @KafkaListener(
         topics = [PaymentEventProducer.TOPIC_PAYMENT_COMPLETED],
@@ -47,8 +46,7 @@ class PaymentEventConsumer(
     fun consumePaymentCompletedEvent(
         @Payload message: String,
         @Header(KafkaHeaders.RECEIVED_PARTITION) partition: Int,
-        @Header(KafkaHeaders.OFFSET) offset: Long,
-        acknowledgment: Acknowledgment?
+        @Header(KafkaHeaders.OFFSET) offset: Long
     ) {
         logger.info(
             "Kafka Consumer - 메시지 수신: topic={}, partition={}, offset={}",
@@ -57,38 +55,24 @@ class PaymentEventConsumer(
             offset
         )
 
-        try {
-            // JSON 문자열을 PaymentCompletedEvent로 역직렬화
-            val event = objectMapper.readValue(message, PaymentCompletedEvent::class.java)
+        // JSON 문자열을 PaymentCompletedEvent로 역직렬화
+        val event = objectMapper.readValue(message, PaymentCompletedEvent::class.java)
 
-            logger.info(
-                "Kafka Consumer - 결제 완료 이벤트 처리 시작: orderId={}, paymentId={}",
-                event.orderId,
-                event.paymentId
-            )
+        logger.info(
+            "Kafka Consumer - 결제 완료 이벤트 처리 시작: orderId={}, paymentId={}",
+            event.orderId,
+            event.paymentId
+        )
 
-            // 데이터 플랫폼으로 전송 (기존 mockAPI 호출 로직 사용)
-            dataPlatformService.sendPaymentData(event)
+        // 데이터 플랫폼으로 전송 (기존 mockAPI 호출 로직 사용)
+        dataPlatformService.sendPaymentData(event)
 
-            // 처리 성공 시 수동 ACK
-            acknowledgment?.acknowledge()
-
-            logger.info(
-                "Kafka Consumer - 메시지 처리 완료 및 ACK: orderId={}, partition={}, offset={}",
-                event.orderId,
-                partition,
-                offset
-            )
-        } catch (e: Exception) {
-            logger.error(
-                "Kafka Consumer - 메시지 처리 실패: partition={}, offset={}, error={}",
-                partition,
-                offset,
-                e.message,
-                e
-            )
-            // ACK하지 않으면 메시지가 재처리됨 (Consumer 재시작 시)
-            // 필요 시 DLQ(Dead Letter Queue)로 전송하거나 재시도 로직 추가 가능
-        }
+        logger.info(
+            "Kafka Consumer - 메시지 처리 완료: orderId={}, partition={}, offset={}",
+            event.orderId,
+            partition,
+            offset
+        )
+        // ErrorHandler가 자동으로 offset 커밋 및 예외 발생 시 재시도/DLQ 처리
     }
 }
