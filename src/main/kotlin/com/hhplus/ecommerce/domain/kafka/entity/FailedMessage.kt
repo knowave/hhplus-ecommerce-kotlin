@@ -28,7 +28,7 @@ class FailedMessage(
     /**
      * 파티션 번호
      */
-    @Column(nullable = false)
+    @Column(name = "partition_number", nullable = false)
     val partition: Int,
 
     /**
