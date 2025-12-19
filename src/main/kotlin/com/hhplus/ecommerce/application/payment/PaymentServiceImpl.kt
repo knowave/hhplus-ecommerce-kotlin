@@ -14,20 +14,14 @@ import com.hhplus.ecommerce.domain.order.entity.*
 import com.hhplus.ecommerce.domain.payment.entity.*
 import com.hhplus.ecommerce.domain.payment.repository.DataTransmissionJpaRepository
 import com.hhplus.ecommerce.domain.payment.repository.PaymentJpaRepository
-import org.springframework.context.ApplicationEventPublisher
+import com.hhplus.ecommerce.infrastructure.kafka.PaymentEventProducer
+import org.slf4j.LoggerFactory
 import org.springframework.stereotype.Service
 import org.springframework.transaction.annotation.Transactional
 import java.time.LocalDateTime
 import java.time.format.DateTimeFormatter
 import java.util.UUID
 
-/**
- * 결제 서비스 구현체
- *
- * 비즈니스 정책에 따른 결제 처리:
- * 1. 결제 성공: 잔액 차감 → 주문 상태 변경(PAID) → shipping 생성 (PENDING) → 결제 완료 이벤트 발행 (비동기 데이터 전송)
- * 2. 결제 실패: 재고 복원 → 쿠폰 복원 → 주문 취소(CANCELLED)
- */
 @Service
 class PaymentServiceImpl(
     private val paymentRepository: PaymentJpaRepository,
@@ -37,21 +31,53 @@ class PaymentServiceImpl(
     private val productService: ProductService,
     private val couponService: CouponService,
     private val shippingService: ShippingService,
-    private val applicationEventPublisher: ApplicationEventPublisher
+    private val paymentEventProducer: PaymentEventProducer? = null
 ) : PaymentService {
+
+    private val logger = LoggerFactory.getLogger(javaClass)
     private val DATE_FORMATTER: DateTimeFormatter = DateTimeFormatter.ISO_LOCAL_DATE_TIME
 
-    /**
-     * 결제 처리
-     *
-     * 동시성 제어:
-     * - 분산락: 다중 서버 환경에서 같은 주문에 대한 동시 결제 방지
-     * - 비관적 락: DB 레벨에서 주문 데이터의 원자성 보장
-     *
-     * 분산락 + 비관적 락을 함께 사용하는 이유:
-     * - 분산락: Redis 레벨에서 빠른 동시성 제어 (다중 서버 환경)
-     * - 비관적 락: DB 트랜잭션 내에서 데이터 정합성 보장
-     */
+    override fun processPayment(orderId: UUID, request: ProcessPaymentCommand): ProcessPaymentResult {
+        val paymentData = processPaymentTransaction(orderId, request)
+
+        paymentEventProducer?.let {
+            try {
+                it.sendPaymentCompletedEvent(
+                    PaymentCompletedEvent(
+                        paymentId = paymentData.paymentId,
+                        orderId = orderId,
+                        userId = request.userId,
+                        amount = paymentData.amount
+                    )
+                )
+                logger.info("결제 완료 이벤트 Kafka 발행 완료 - paymentId: {}", paymentData.paymentId)
+            } catch (e: Exception) {
+                logger.error("결제 완료 이벤트 Kafka 발행 실패 - paymentId: ${paymentData.paymentId}", e)
+            }
+        }
+
+        return ProcessPaymentResult(
+            paymentId = paymentData.paymentId,
+            orderId = paymentData.orderId,
+            orderNumber = paymentData.orderNumber,
+            userId = paymentData.userId,
+            amount = paymentData.amount,
+            paymentStatus = paymentData.paymentStatus,
+            orderStatus = paymentData.orderStatus,
+            balance = BalanceInfoResult(
+                previousBalance = paymentData.previousBalance,
+                paidAmount = paymentData.amount,
+                remainingBalance = paymentData.currentBalance
+            ),
+            dataTransmission = DataTransmissionInfoResult(
+                transmissionId = null,
+                status = "PENDING_EVENT_PROCESSING",
+                scheduledAt = paymentData.paidAt.format(DATE_FORMATTER)
+            ),
+            paidAt = paymentData.paidAt.format(DATE_FORMATTER)
+        )
+    }
+
     @DistributedLock(
         key = "'payment:process:' + #orderId",
         waitTimeMs = 5000,
@@ -60,7 +86,7 @@ class PaymentServiceImpl(
         unlockAfterCommit = true
     )
     @Transactional
-    override fun processPayment(orderId: UUID, request: ProcessPaymentCommand): ProcessPaymentResult {
+    internal fun processPaymentTransaction(orderId: UUID, request: ProcessPaymentCommand): PaymentTransactionData {
         // 주문 조회 및 검증 (비관적 락으로 동시성 제어)
         val order = orderService.getOrderWithLock(orderId)
 
@@ -110,21 +136,10 @@ class PaymentServiceImpl(
         )
         val savedPayment = paymentRepository.save(payment)
 
-        // 5. 배송 생성
+        // 배송 생성
         shippingService.createShipping(orderId, "CJ대한통운")
 
-        // 6. 결제 완료 이벤트 발행 (비동기: 데이터 플랫폼 전송)
-        applicationEventPublisher.publishEvent(
-            PaymentCompletedEvent(
-                paymentId = savedPayment.id!!,
-                orderId = orderId,
-                userId = request.userId,
-                amount = paymentAmount
-            )
-        )
-
-        // 7. 응답 생성
-        return ProcessPaymentResult(
+        return PaymentTransactionData(
             paymentId = savedPayment.id!!,
             orderId = order.id!!,
             orderNumber = order.orderNumber,
@@ -132,17 +147,9 @@ class PaymentServiceImpl(
             amount = paymentAmount,
             paymentStatus = savedPayment.status.name,
             orderStatus = order.status.name,
-            balance = BalanceInfoResult(
-                previousBalance = previousBalance,
-                paidAmount = paymentAmount,
-                remainingBalance = currentBalance
-            ),
-            dataTransmission = DataTransmissionInfoResult(
-                transmissionId = null,
-                status = "PENDING_EVENT_PROCESSING",
-                scheduledAt = now.format(DATE_FORMATTER)
-            ),
-            paidAt = savedPayment.paidAt.format(DATE_FORMATTER)
+            previousBalance = previousBalance,
+            currentBalance = currentBalance,
+            paidAt = savedPayment.paidAt
         )
     }
 

@@ -18,6 +18,9 @@ spring:
   # 테스트 환경에서는 캐시 비활성화 (Redis 불필요)
   cache:
     type: none
+  # Kafka 비활성화
+  kafka:
+    enabled: false
 
 logging:
   level:
