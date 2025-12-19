@@ -39,6 +39,9 @@ dependencies {
     implementation("org.springframework.boot:spring-boot-starter-data-redis")
     implementation("org.springframework.boot:spring-boot-starter-cache")
 
+    // Kafka
+    implementation("org.springframework.kafka:spring-kafka")
+
     runtimeOnly("com.mysql:mysql-connector-j")
     runtimeOnly("com.h2database:h2")
 
@@ -59,6 +62,9 @@ dependencies {
     testImplementation("it.ozimov:embedded-redis:0.7.3") {
         exclude(group = "org.slf4j", module = "slf4j-simple")
     }
+
+    // Embedded Kafka for testing
+    testImplementation("org.springframework.kafka:spring-kafka-test")
 
     testRuntimeOnly("org.junit.platform:junit-platform-launcher")
 }
