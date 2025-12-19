@@ -18,4 +18,14 @@ interface FailedMessageJpaRepository : JpaRepository<FailedMessage, UUID> {
      * 상태별 실패 메시지 수 조회
      */
     fun countByStatus(status: FailedMessageStatus): Long
+
+    /**
+     * 상태별 실패 메시지 조회 (실패 시각 내림차순)
+     */
+    fun findByStatusOrderByFailedAtDesc(status: FailedMessageStatus): List<FailedMessage>
+
+    /**
+     * 전체 실패 메시지 조회 (실패 시각 내림차순)
+     */
+    fun findAllByOrderByFailedAtDesc(): List<FailedMessage>
 }
