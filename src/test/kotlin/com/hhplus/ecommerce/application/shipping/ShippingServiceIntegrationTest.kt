@@ -21,12 +21,15 @@ import io.kotest.matchers.shouldBe
 import org.assertj.core.api.Assertions.assertThatThrownBy
 import org.springframework.boot.test.autoconfigure.orm.jpa.DataJpaTest
 import org.springframework.context.annotation.ComponentScan
+import org.springframework.context.annotation.Import
 import org.springframework.test.context.TestPropertySource
+import com.hhplus.ecommerce.config.TestConfiguration
 import java.time.LocalDateTime
 import java.util.UUID
 
 @DataJpaTest
 @ComponentScan(basePackages = ["com.hhplus.ecommerce"])
+@Import(TestConfiguration::class)
 @TestPropertySource(
     properties = [
         "spring.jpa.hibernate.ddl-auto=create-drop",

@@ -32,7 +32,8 @@ import java.time.LocalDate
 )
 @Import(
     com.hhplus.ecommerce.config.EmbeddedRedisConfig::class,
-    com.hhplus.ecommerce.config.TestRedisConfig::class
+    com.hhplus.ecommerce.config.TestRedisConfig::class,
+    com.hhplus.ecommerce.config.TestConfiguration::class
 )
 class ProductRankingServiceIntegrationTest(
     private val productRankingService: ProductRankingService,
@@ -46,7 +47,7 @@ class ProductRankingServiceIntegrationTest(
     init {
         beforeEach {
             // Redis 데이터 초기화
-            redisTemplate.keys("product:ranking:*")?.forEach { key ->
+            redisTemplate.keys("product:ranking:*").forEach { key ->
                 redisTemplate.delete(key)
             }
 
@@ -109,7 +110,7 @@ class ProductRankingServiceIntegrationTest(
 
         afterEach {
             // Redis 데이터 정리
-            redisTemplate.keys("product:ranking:*")?.forEach { key ->
+            redisTemplate.keys("product:ranking:*").forEach { key ->
                 redisTemplate.delete(key)
             }
             productRepository.deleteAll()

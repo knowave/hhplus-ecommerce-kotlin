@@ -39,7 +39,7 @@ import java.util.concurrent.atomic.AtomicInteger
 @EmbeddedKafka(
     partitions = 1,
     topics = ["order-created", "payment-completed", "coupon-issued"],
-    brokerProperties = ["listeners=PLAINTEXT://localhost:9092", "port=9092"]
+    brokerProperties = ["listeners=PLAINTEXT://localhost:9093"]
 )
 @TestPropertySource(
     properties = [
@@ -50,13 +50,14 @@ import java.util.concurrent.atomic.AtomicInteger
         "spring.data.redis.host=localhost",
         "spring.data.redis.port=6379",
         "spring.kafka.enabled=true",
-        "spring.kafka.bootstrap-servers=localhost:9092",
+        "spring.kafka.bootstrap-servers=localhost:9093",
         "spring.kafka.consumer.group-id=test-group"
     ]
 )
 @Import(
     com.hhplus.ecommerce.config.EmbeddedRedisConfig::class,
-    com.hhplus.ecommerce.config.TestRedisConfig::class
+    com.hhplus.ecommerce.config.TestRedisConfig::class,
+    com.hhplus.ecommerce.config.TestConfiguration::class
 )
 class OrderServiceIntegrationTest(
     private val productService: ProductService,
@@ -265,7 +266,7 @@ class OrderServiceIntegrationTest(
                 it("쿠폰 사용한 주문을 취소하면 쿠폰이 복원된다") {
                     // given - 쿠폰 발급
                     val issueCouponCommand = IssueCouponCommand(userId = testUserId)
-                    val issuedCoupon = couponService.issueCoupon(couponId, issueCouponCommand)
+                    couponService.issueCoupon(couponId, issueCouponCommand)
 
                     // given - 쿠폰 사용하여 주문 생성
                     val createCommand = CreateOrderCommand(

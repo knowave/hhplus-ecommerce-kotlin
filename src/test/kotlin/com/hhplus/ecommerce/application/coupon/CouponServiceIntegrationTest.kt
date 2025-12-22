@@ -37,6 +37,7 @@ import java.util.concurrent.atomic.AtomicInteger
 @EmbeddedKafka(
     partitions = 1,
     topics = ["order-created", "payment-completed", "coupon-issued"],
+    brokerProperties = ["listeners=PLAINTEXT://localhost:9093"]
 )
 @TestPropertySource(
     properties = [
@@ -47,13 +48,14 @@ import java.util.concurrent.atomic.AtomicInteger
         "spring.data.redis.host=localhost",
         "spring.data.redis.port=6379",
         "spring.kafka.enabled=true",
-        "spring.kafka.bootstrap-servers=localhost:9092",
+        "spring.kafka.bootstrap-servers=localhost:9093",
         "spring.kafka.consumer.group-id=test-group"
     ]
 )
 @Import(
     com.hhplus.ecommerce.config.EmbeddedRedisConfig::class,
-    com.hhplus.ecommerce.config.TestRedisConfig::class
+    com.hhplus.ecommerce.config.TestRedisConfig::class,
+    com.hhplus.ecommerce.config.TestConfiguration::class
 )
 class CouponServiceIntegrationTest(
     private val couponService: CouponService,
