@@ -38,7 +38,8 @@ import jakarta.persistence.EntityManager
 )
 @Import(
     com.hhplus.ecommerce.config.EmbeddedRedisConfig::class,
-    com.hhplus.ecommerce.config.TestRedisConfig::class
+    com.hhplus.ecommerce.config.TestRedisConfig::class,
+    com.hhplus.ecommerce.config.TestConfiguration::class
 )
 class DataPlatformServiceIntegrationTest(
     private val paymentService: PaymentService,
@@ -117,7 +118,7 @@ class DataPlatformServiceIntegrationTest(
                     paymentResult.dataTransmission.status shouldBe "PENDING_EVENT_PROCESSING"
 
                     // then - DataTransmission이 저장되었는지 확인
-                    val transmissions = executeInNewTransaction {
+                    executeInNewTransaction {
                         dataTransmissionRepository.findAll().filter { it.orderId == orderId }
                     }
                     

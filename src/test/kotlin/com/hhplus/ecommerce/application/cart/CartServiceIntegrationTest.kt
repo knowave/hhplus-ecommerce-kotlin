@@ -5,7 +5,6 @@ import com.hhplus.ecommerce.application.product.ProductService
 import com.hhplus.ecommerce.application.user.UserService
 import com.hhplus.ecommerce.application.user.dto.CreateUserCommand
 import com.hhplus.ecommerce.common.exception.*
-import com.hhplus.ecommerce.domain.cart.repository.CartJpaRepository
 import com.hhplus.ecommerce.domain.product.entity.Product
 import com.hhplus.ecommerce.domain.product.entity.ProductCategory
 import io.kotest.assertions.throwables.shouldThrow
@@ -19,11 +18,14 @@ import io.kotest.matchers.shouldBe
 import io.kotest.matchers.shouldNotBe
 import org.springframework.boot.test.autoconfigure.orm.jpa.DataJpaTest
 import org.springframework.context.annotation.ComponentScan
+import org.springframework.context.annotation.Import
 import org.springframework.test.context.TestPropertySource
+import com.hhplus.ecommerce.config.TestConfiguration
 import java.util.UUID
 
 @DataJpaTest
 @ComponentScan(basePackages = ["com.hhplus.ecommerce"])
+@Import(TestConfiguration::class)
 @TestPropertySource(
     properties = [
         "spring.jpa.hibernate.ddl-auto=create-drop",
@@ -75,7 +77,7 @@ class CartServiceIntegrationTest(
             val secondProduct = productService.updateProduct(secondCommand)
 
             product1Id = firstProduct.id!!
-            product2Id = secondCommand.id!!
+            product2Id = secondProduct.id!!
         }
 
         describe("CartService 통합 테스트 - 장바구니 조회") {
@@ -796,7 +798,7 @@ class CartServiceIntegrationTest(
                     // 2. 상품 3개 추가
                     val item1 = cartService.addCartItem(userId, AddCartItemCommand(productId = product1Id, quantity = 2))
                     val item2 = cartService.addCartItem(userId, AddCartItemCommand(productId = product2Id, quantity = 1))
-                    val item3 = cartService.addCartItem(userId, AddCartItemCommand(productId = product3.id!!, quantity = 3))
+                    cartService.addCartItem(userId, AddCartItemCommand(productId = product3.id!!, quantity = 3))
 
                     // 3. 장바구니 조회 - 3개 아이템 확인
                     val cartWith3Items = cartService.getCart(userId)
