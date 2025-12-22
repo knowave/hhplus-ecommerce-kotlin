@@ -103,11 +103,13 @@ class FailedMessageServiceImpl(
 
     private fun reprocessOrderCreatedEvent(payload: String) {
         val event = objectMapper.readValue(payload, OrderCreatedEvent::class.java)
-        orderEventProducer.sendOrderCreatedEvent(event)
+        orderEventProducer?.sendOrderCreatedEvent(event)
+            ?: throw IllegalStateException("OrderEventProducer가 없습니다. Kafka가 비활성화되어 있습니다.")
     }
 
     private fun reprocessPaymentCompletedEvent(payload: String) {
         val event = objectMapper.readValue(payload, PaymentCompletedEvent::class.java)
-        paymentEventProducer.sendPaymentCompletedEvent(event)
+        paymentEventProducer?.sendPaymentCompletedEvent(event)
+            ?: throw IllegalStateException("PaymentEventProducer가 없습니다. Kafka가 비활성화되어 있습니다.")
     }
 }

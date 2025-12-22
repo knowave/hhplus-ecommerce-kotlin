@@ -38,7 +38,7 @@ import java.util.concurrent.atomic.AtomicInteger
 @ComponentScan(basePackages = ["com.hhplus.ecommerce"])
 @EmbeddedKafka(
     partitions = 1,
-    topics = ["order-created", "payment-completed"],
+    topics = ["order-created", "payment-completed", "coupon-issued"],
     brokerProperties = ["listeners=PLAINTEXT://localhost:9092", "port=9092"]
 )
 @TestPropertySource(

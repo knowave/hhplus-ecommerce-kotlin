@@ -34,7 +34,7 @@ class FailedMessage(
     /**
      * Offset 위치
      */
-    @Column(nullable = false)
+    @Column(name = "message_offset", nullable = false)
     val offset: Long,
 
     /**

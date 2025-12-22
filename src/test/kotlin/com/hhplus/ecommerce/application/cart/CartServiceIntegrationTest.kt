@@ -2,25 +2,14 @@ package com.hhplus.ecommerce.application.cart
 
 import com.hhplus.ecommerce.application.cart.dto.*
 import com.hhplus.ecommerce.application.product.ProductService
-import com.hhplus.ecommerce.application.product.ProductServiceImpl
-import com.hhplus.ecommerce.application.product.dto.GetProductsCommand
 import com.hhplus.ecommerce.application.user.UserService
-import com.hhplus.ecommerce.application.user.UserServiceImpl
 import com.hhplus.ecommerce.application.user.dto.CreateUserCommand
 import com.hhplus.ecommerce.common.exception.*
 import com.hhplus.ecommerce.domain.cart.repository.CartJpaRepository
-import com.hhplus.ecommerce.domain.cart.repository.CartRepository
 import com.hhplus.ecommerce.domain.product.entity.Product
 import com.hhplus.ecommerce.domain.product.entity.ProductCategory
-import com.hhplus.ecommerce.domain.product.repository.ProductJpaRepository
-import com.hhplus.ecommerce.domain.product.repository.ProductRepository
-import com.hhplus.ecommerce.domain.user.repository.UserJpaRepository
-import com.hhplus.ecommerce.domain.user.repository.UserRepository
-import com.hhplus.ecommerce.infrastructure.product.ProductRepositoryImpl
-import com.hhplus.ecommerce.infrastructure.user.UserRepositoryImpl
 import io.kotest.assertions.throwables.shouldThrow
 import io.kotest.core.extensions.Extension
-import io.kotest.core.spec.style.AnnotationSpec
 import io.kotest.core.spec.style.DescribeSpec
 import io.kotest.extensions.spring.SpringExtension
 import io.kotest.matchers.collections.shouldBeEmpty
@@ -28,7 +17,6 @@ import io.kotest.matchers.collections.shouldContainExactlyInAnyOrder
 import io.kotest.matchers.collections.shouldHaveSize
 import io.kotest.matchers.shouldBe
 import io.kotest.matchers.shouldNotBe
-import org.springframework.beans.factory.annotation.Autowired
 import org.springframework.boot.test.autoconfigure.orm.jpa.DataJpaTest
 import org.springframework.context.annotation.ComponentScan
 import org.springframework.test.context.TestPropertySource
@@ -45,7 +33,6 @@ import java.util.UUID
     ]
 )
 class CartServiceIntegrationTest(
-    private val cartRepository: CartJpaRepository ,
     private val productService: ProductService,
     private val userService: UserService,
     private val cartService: CartService

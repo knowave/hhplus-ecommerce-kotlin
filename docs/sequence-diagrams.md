@@ -1037,6 +1037,9 @@ sequenceDiagram
     participant CouponRepo as CouponRepository
     participant UserCouponRepo as UserCouponRepository
     participant DB as Database
+    participant Producer as CouponEventProducer
+    participant Kafka as Kafka Broker
+    participant Consumer as CouponEventConsumer
 
     User->>Controller: POST /api/coupons/{couponId}/issue<br/>{userId}
     Controller->>Service: issueCoupon(userId, couponId)
@@ -1090,10 +1093,25 @@ sequenceDiagram
     UserCouponRepo->>DB: INSERT INTO user_coupons<br/>(user_id, coupon_id, status, issued_at, expires_at)<br/>VALUES (?, ?, 'AVAILABLE', NOW(), ?)
     DB-->>UserCouponRepo: Success
 
+    Note over Service: ✅ 트랜잭션 커밋 완료
+
+    Note over Service,Producer: 6. Kafka 이벤트 발행 (비동기)
+    Service->>Producer: sendCouponIssuedEvent(event)
+    Producer->>Kafka: send(coupon-issued,<br/>key=userCouponId)
+    Note over Kafka: 파티션 키: userCouponId<br/>순서 보장
+    Kafka-->>Producer: ACK
+    Producer-->>Service: CompletableFuture
+
     Service-->>Controller: CouponIssueResponseDto
     Controller-->>User: 201 Created<br/>{userCouponId, couponName,<br/>discountRate, expiresAt,<br/>remainingQuantity}
 
-    Note over User,DB: 쿠폰 발급 완료<br/>issued_quantity 증가<br/>남은 수량 감소
+    Note over Kafka,Consumer: 비동기 처리
+    Kafka->>Consumer: consume(CouponIssuedEvent)
+    Consumer->>Consumer: 사용자 알림 발송<br/>(Push/Email/SMS)
+    Note over Consumer: 로깅 (현재)<br/>향후 실제 알림 서비스 연동
+    Consumer->>Kafka: ACK (수동 커밋)
+
+    Note over User,Consumer: 쿠폰 발급 완료<br/>issued_quantity 증가<br/>사용자 알림 발송 (비동기)
 ```
 
 **핵심 로직**:
@@ -1102,6 +1120,8 @@ sequenceDiagram
 - `issued_quantity < total_quantity` 조건 체크
 - 중복 발급 방지 (`user_id`, `coupon_id` 조합)
 - 발급 후 30일 자동 만료
+- **Kafka 이벤트 발행**: 트랜잭션 커밋 후 CouponIssuedEvent 발행
+- **비동기 알림 처리**: Consumer가 사용자에게 쿠폰 발급 완료 알림 전송
 
 ---
 

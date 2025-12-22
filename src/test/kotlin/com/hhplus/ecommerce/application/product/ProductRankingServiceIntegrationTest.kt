@@ -17,7 +17,6 @@ import org.springframework.context.annotation.Import
 import org.springframework.data.redis.core.RedisTemplate
 import org.springframework.test.context.TestPropertySource
 import java.time.LocalDate
-import java.util.UUID
 
 @DataJpaTest
 @ComponentScan(basePackages = ["com.hhplus.ecommerce"])

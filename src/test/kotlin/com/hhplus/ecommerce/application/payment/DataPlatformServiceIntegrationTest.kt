@@ -1,11 +1,9 @@
 package com.hhplus.ecommerce.application.payment
 
-import com.hhplus.ecommerce.application.coupon.CouponService
 import com.hhplus.ecommerce.application.order.OrderService
 import com.hhplus.ecommerce.application.order.dto.CreateOrderCommand
 import com.hhplus.ecommerce.application.order.dto.OrderItemCommand
 import com.hhplus.ecommerce.application.payment.dto.ProcessPaymentCommand
-import com.hhplus.ecommerce.application.product.ProductService
 import com.hhplus.ecommerce.application.user.UserService
 import com.hhplus.ecommerce.application.user.dto.CreateUserCommand
 import com.hhplus.ecommerce.domain.payment.entity.TransmissionStatus
@@ -17,7 +15,6 @@ import io.kotest.core.extensions.Extension
 import io.kotest.core.spec.style.DescribeSpec
 import io.kotest.extensions.spring.SpringExtension
 import io.kotest.matchers.shouldBe
-import io.kotest.matchers.shouldNotBe
 import org.springframework.boot.test.autoconfigure.orm.jpa.DataJpaTest
 import org.springframework.context.annotation.ComponentScan
 import org.springframework.context.annotation.Import
@@ -26,7 +23,6 @@ import org.springframework.transaction.PlatformTransactionManager
 import org.springframework.transaction.TransactionDefinition
 import org.springframework.transaction.support.DefaultTransactionDefinition
 import jakarta.persistence.EntityManager
-import java.util.UUID
 
 @DataJpaTest
 @ComponentScan(basePackages = ["com.hhplus.ecommerce"])
@@ -48,7 +44,6 @@ class DataPlatformServiceIntegrationTest(
     private val paymentService: PaymentService,
     private val orderService: OrderService,
     private val userService: UserService,
-    private val productService: ProductService,
     private val productRepository: ProductJpaRepository,
     private val dataTransmissionRepository: DataTransmissionJpaRepository,
     private val entityManager: EntityManager,
