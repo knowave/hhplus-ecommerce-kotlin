@@ -24,6 +24,7 @@ import java.time.LocalDateTime
  * DLQ 토픽 패턴:
  * - order-created.DLQ
  * - payment-completed.DLQ
+ * - coupon-issued.DLQ
  */
 @Component
 @ConditionalOnProperty(
@@ -51,12 +52,12 @@ class DLQConsumer(
         @Header(value = KafkaHeaders.EXCEPTION_MESSAGE, required = false) errorMessage: String?,
         @Header(value = KafkaHeaders.EXCEPTION_STACKTRACE, required = false) stackTrace: String?
     ) {
-        logger.warn(
-            "DLQ Consumer - 실패한 메시지 수신: topic={}, partition={}, offset={}, key={}",
-            record.topic(),
-            partition,
-            offset,
-            record.key()
+
+        logDlqMessageReceived(
+            topic = record.topic(),
+            partition = partition,
+            offset = offset,
+            key = record.key()
         )
 
         saveFailedMessage(record, partition, offset, errorMessage, stackTrace)
@@ -77,12 +78,36 @@ class DLQConsumer(
         @Header(value = KafkaHeaders.EXCEPTION_MESSAGE, required = false) errorMessage: String?,
         @Header(value = KafkaHeaders.EXCEPTION_STACKTRACE, required = false) stackTrace: String?
     ) {
-        logger.warn(
-            "DLQ Consumer - 실패한 메시지 수신: topic={}, partition={}, offset={}, key={}",
-            record.topic(),
-            partition,
-            offset,
-            record.key()
+        logDlqMessageReceived(
+            topic = record.topic(),
+            partition = partition,
+            offset = offset,
+            key = record.key()
+        )
+
+        saveFailedMessage(record, partition, offset, errorMessage, stackTrace)
+    }
+
+    /**
+     * 쿠폰 발급 이벤트 DLQ 메시지 소비
+     */
+    @KafkaListener(
+        topics = ["coupon-issued.DLQ"],
+        groupId = "\${spring.kafka.consumer.group-id}-dlq",
+        containerFactory = "dlqKafkaListenerContainerFactory"
+    )
+    fun consumeCouponIssuedDLQ(
+        record: ConsumerRecord<String, String>,
+        @Header(KafkaHeaders.RECEIVED_PARTITION) partition: Int,
+        @Header(KafkaHeaders.OFFSET) offset: Long,
+        @Header(value = KafkaHeaders.EXCEPTION_MESSAGE, required = false) errorMessage: String?,
+        @Header(value = KafkaHeaders.EXCEPTION_STACKTRACE, required = false) stackTrace: String?
+    ) {
+        logDlqMessageReceived(
+            topic = record.topic(),
+            partition = partition,
+            offset = offset,
+            key = record.key()
         )
 
         saveFailedMessage(record, partition, offset, errorMessage, stackTrace)
@@ -152,5 +177,20 @@ class DLQConsumer(
         val pw = PrintWriter(sw)
         throwable.printStackTrace(pw)
         return sw.toString()
+    }
+
+    private fun logDlqMessageReceived(
+        topic: String,
+        partition: Int,
+        offset: Long,
+        key: String?
+    ) {
+        logger.warn(
+            "DLQ Consumer - 실패한 메시지 수신: topic={}, partition={}, offset={}, key={}",
+            topic,
+            partition,
+            offset,
+            key
+        )
     }
 }

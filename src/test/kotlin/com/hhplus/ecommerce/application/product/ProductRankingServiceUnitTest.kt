@@ -214,7 +214,7 @@ class ProductRankingServiceUnitTest : DescribeSpec({
                 every { productRepository.findAllById(listOf(product1Id)) } returns listOf(product1)
 
                 // when
-                val result = productRankingService.getRanking(RankingPeriod.DAILY, limit = 5)
+                productRankingService.getRanking(RankingPeriod.DAILY, limit = 5)
 
                 // then
                 verify(exactly = 1) { zSetOps.reverseRangeWithScores(expectedKey, 0, 4) }

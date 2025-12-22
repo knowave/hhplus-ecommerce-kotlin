@@ -3,10 +3,12 @@ package com.hhplus.ecommerce.application.kafka
 import com.fasterxml.jackson.databind.ObjectMapper
 import com.hhplus.ecommerce.application.kafka.dto.FailedMessageDto
 import com.hhplus.ecommerce.application.kafka.dto.ReprocessResultDto
+import com.hhplus.ecommerce.common.event.CouponIssuedEvent
 import com.hhplus.ecommerce.common.event.OrderCreatedEvent
 import com.hhplus.ecommerce.common.event.PaymentCompletedEvent
 import com.hhplus.ecommerce.domain.kafka.entity.FailedMessageStatus
 import com.hhplus.ecommerce.domain.kafka.repository.FailedMessageJpaRepository
+import com.hhplus.ecommerce.infrastructure.kafka.CouponEventProducer
 import com.hhplus.ecommerce.infrastructure.kafka.OrderEventProducer
 import com.hhplus.ecommerce.infrastructure.kafka.PaymentEventProducer
 import org.springframework.data.repository.findByIdOrNull
@@ -20,8 +22,9 @@ import java.util.*
 @Service
 class FailedMessageServiceImpl(
     private val failedMessageRepository: FailedMessageJpaRepository,
-    private val orderEventProducer: OrderEventProducer,
-    private val paymentEventProducer: PaymentEventProducer,
+    private val orderEventProducer: OrderEventProducer?,
+    private val paymentEventProducer: PaymentEventProducer?,
+    private val couponEventProducer: CouponEventProducer?,
     private val objectMapper: ObjectMapper
 ) : FailedMessageService {
 
@@ -65,6 +68,9 @@ class FailedMessageServiceImpl(
                 PaymentEventProducer.TOPIC_PAYMENT_COMPLETED -> {
                     reprocessPaymentCompletedEvent(failedMessage.payload)
                 }
+                CouponEventProducer.TOPIC_COUPON_ISSUED -> {
+                    reprocessCouponIssuedEvent(failedMessage.payload)
+                }
                 else -> {
                     throw IllegalArgumentException("지원하지 않는 토픽입니다: ${failedMessage.topic}")
                 }
@@ -103,11 +109,19 @@ class FailedMessageServiceImpl(
 
     private fun reprocessOrderCreatedEvent(payload: String) {
         val event = objectMapper.readValue(payload, OrderCreatedEvent::class.java)
-        orderEventProducer.sendOrderCreatedEvent(event)
+        orderEventProducer?.sendOrderCreatedEvent(event)
+            ?: throw IllegalStateException("OrderEventProducer가 없습니다. Kafka가 비활성화되어 있습니다.")
     }
 
     private fun reprocessPaymentCompletedEvent(payload: String) {
         val event = objectMapper.readValue(payload, PaymentCompletedEvent::class.java)
-        paymentEventProducer.sendPaymentCompletedEvent(event)
+        paymentEventProducer?.sendPaymentCompletedEvent(event)
+            ?: throw IllegalStateException("PaymentEventProducer가 없습니다. Kafka가 비활성화되어 있습니다.")
+    }
+
+    private fun reprocessCouponIssuedEvent(payload: String) {
+        val event = objectMapper.readValue(payload, CouponIssuedEvent::class.java)
+        couponEventProducer?.sendCouponIssuedEvent(event)
+            ?: throw IllegalStateException("CouponEventProducer가 없습니다. Kafka가 비활성화되어 있습니다.")
     }
 }

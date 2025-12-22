@@ -1,12 +1,15 @@
 package com.hhplus.ecommerce.application.coupon
 
 import com.hhplus.ecommerce.application.coupon.dto.*
+import com.hhplus.ecommerce.common.event.CouponIssuedEvent
 import com.hhplus.ecommerce.common.exception.*
 import com.hhplus.ecommerce.common.lock.DistributedLock
 import com.hhplus.ecommerce.domain.coupon.entity.*
 import com.hhplus.ecommerce.domain.coupon.repository.CouponJpaRepository
 import com.hhplus.ecommerce.domain.coupon.repository.CouponStatus
 import com.hhplus.ecommerce.domain.coupon.repository.UserCouponJpaRepository
+import com.hhplus.ecommerce.infrastructure.kafka.CouponEventProducer
+import org.slf4j.LoggerFactory
 import org.springframework.data.redis.core.RedisTemplate
 import org.springframework.http.HttpStatus
 import org.springframework.stereotype.Service
@@ -24,8 +27,10 @@ import kotlin.math.max
 class CouponServiceImpl(
     private val couponRepository: CouponJpaRepository,
     private val userCouponRepository: UserCouponJpaRepository,
-    private val redisTemplate: RedisTemplate<String, String>
+    private val redisTemplate: RedisTemplate<String, String>,
+    private val couponEventProducer: CouponEventProducer? = null
 ) : CouponService {
+    private val logger = LoggerFactory.getLogger(javaClass)
     private val DATETIME_FORMATTER = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss")
 
     /**
@@ -38,8 +43,38 @@ class CouponServiceImpl(
         errorMessage = "쿠폰 발급 요청이 많습니다. 잠시 후 다시 시도해주세요.",
         unlockAfterCommit = true
     )
-    @Transactional
     override fun issueCoupon(couponId: UUID, request: IssueCouponCommand): IssueCouponResult {
+        // 트랜잭션 로직 실행 (커밋까지 완료)
+        val result = issueCouponTransaction(couponId, request)
+
+        // 트랜잭션 커밋 완료 후 Kafka 이벤트 발행
+        couponEventProducer?.let {
+            try {
+                val event = CouponIssuedEvent(
+                    userCouponId = result.userCouponId,
+                    userId = result.userId,
+                    couponId = result.couponId,
+                    couponName = result.couponName,
+                    discountRate = result.discountRate,
+                    issuedAt = LocalDateTime.parse(result.issuedAt, DATETIME_FORMATTER),
+                    expiresAt = LocalDateTime.parse(result.expiresAt, DATETIME_FORMATTER)
+                )
+                it.sendCouponIssuedEvent(event)
+                logger.info("Kafka 이벤트 발행 성공 - userCouponId: ${result.userCouponId}")
+            } catch (e: Exception) {
+                logger.error("Kafka 이벤트 발행 실패 - userCouponId: ${result.userCouponId}", e)
+            }
+        }
+
+        return result
+    }
+
+    /**
+     * 쿠폰 발급 트랜잭션 로직
+     * - 트랜잭션 커밋 후 Kafka 이벤트를 발행하기 위해 분리
+     */
+    @Transactional
+    private fun issueCouponTransaction(couponId: UUID, request: IssueCouponCommand): IssueCouponResult {
         // 비관적 락으로 쿠폰 조회
         val coupon = couponRepository.findByIdWithLock(couponId)
             .orElseThrow { CouponNotFoundException(couponId) }

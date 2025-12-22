@@ -5,7 +5,6 @@ import com.hhplus.ecommerce.application.user.UserService
 import com.hhplus.ecommerce.application.user.dto.CreateUserCommand
 import com.hhplus.ecommerce.domain.coupon.entity.Coupon
 import com.hhplus.ecommerce.domain.coupon.repository.CouponJpaRepository
-import com.hhplus.ecommerce.domain.coupon.repository.UserCouponJpaRepository
 import io.kotest.core.extensions.Extension
 import io.kotest.core.spec.style.DescribeSpec
 import io.kotest.extensions.spring.SpringExtension
@@ -15,6 +14,7 @@ import org.springframework.boot.test.autoconfigure.orm.jpa.DataJpaTest
 import org.springframework.context.annotation.ComponentScan
 import org.springframework.context.annotation.Import
 import org.springframework.data.redis.core.RedisTemplate
+import org.springframework.kafka.test.context.EmbeddedKafka
 import org.springframework.test.context.TestPropertySource
 import org.springframework.transaction.PlatformTransactionManager
 import org.springframework.transaction.TransactionDefinition
@@ -28,6 +28,11 @@ import java.util.concurrent.atomic.AtomicInteger
 
 @DataJpaTest
 @ComponentScan(basePackages = ["com.hhplus.ecommerce"])
+@EmbeddedKafka(
+    partitions = 1,
+    topics = ["order-created", "payment-completed", "coupon-issued"],
+    brokerProperties = ["listeners=PLAINTEXT://localhost:9093"]
+)
 @TestPropertySource(
     properties = [
         "spring.jpa.hibernate.ddl-auto=create-drop",
@@ -35,18 +40,21 @@ import java.util.concurrent.atomic.AtomicInteger
         "spring.datasource.driver-class-name=org.h2.Driver",
         "spring.jpa.database-platform=org.hibernate.dialect.H2Dialect",
         "spring.data.redis.host=localhost",
-        "spring.data.redis.port=6379"
+        "spring.data.redis.port=6379",
+        "spring.kafka.enabled=true",
+        "spring.kafka.bootstrap-servers=localhost:9093",
+        "spring.kafka.consumer.group-id=test-group"
     ]
 )
 @Import(
     com.hhplus.ecommerce.config.EmbeddedRedisConfig::class,
-    com.hhplus.ecommerce.config.TestRedisConfig::class
+    com.hhplus.ecommerce.config.TestRedisConfig::class,
+    com.hhplus.ecommerce.config.TestConfiguration::class
 )
 class CouponAsyncIssuanceIntegrationTest(
     private val couponService: CouponService,
     private val userService: UserService,
     private val couponRepository: CouponJpaRepository,
-    private val userCouponRepository: UserCouponJpaRepository,
     private val redisTemplate: RedisTemplate<String, String>,
     private val couponIssueScheduler: CouponIssueScheduler,
     private val entityManager: EntityManager,
@@ -73,7 +81,7 @@ class CouponAsyncIssuanceIntegrationTest(
     init {
         beforeEach {
             // Redis 데이터 초기화
-            redisTemplate.keys("coupon:*")?.forEach { key ->
+            redisTemplate.keys("coupon:*").forEach { key ->
                 redisTemplate.delete(key)
             }
         }
