@@ -5,7 +5,6 @@ import com.hhplus.ecommerce.common.exception.BalanceLimitExceededException
 import com.hhplus.ecommerce.common.exception.InvalidAmountException
 import com.hhplus.ecommerce.common.exception.UserNotFoundException
 import com.hhplus.ecommerce.domain.user.repository.UserRepository
-import com.hhplus.ecommerce.infrastructure.user.UserRepositoryImpl
 import io.kotest.assertions.throwables.shouldThrow
 import io.kotest.core.extensions.Extension
 import io.kotest.core.spec.style.DescribeSpec
@@ -14,11 +13,14 @@ import io.kotest.matchers.shouldBe
 import io.kotest.matchers.shouldNotBe
 import org.springframework.boot.test.autoconfigure.orm.jpa.DataJpaTest
 import org.springframework.context.annotation.ComponentScan
+import org.springframework.context.annotation.Import
 import org.springframework.test.context.TestPropertySource
+import com.hhplus.ecommerce.config.TestConfiguration
 import java.util.UUID
 
 @DataJpaTest
 @ComponentScan(basePackages = ["com.hhplus.ecommerce"])
+@Import(TestConfiguration::class)
 @TestPropertySource(
     properties = [
         "spring.jpa.hibernate.ddl-auto=create-drop",

@@ -27,6 +27,7 @@ E-commerce 시스템의 이벤트 처리를 Spring Event + @Async 기반에서 A
 
 - Order 이벤트 처리
 - Payment 이벤트 처리
+- Coupon 이벤트 처리 (선착순 쿠폰 발급)
 - Spring Event + @Async 제거 및 Kafka Producer/Consumer로 전환
 
 ---
@@ -195,18 +196,80 @@ sequenceDiagram
     PaymentService-->>PaymentService: throw InsufficientBalanceException
 ```
 
+### 4. 선착순 쿠폰 발급 프로세스
+
+```mermaid
+sequenceDiagram
+    participant Client
+    participant CouponAPI
+    participant CouponService
+    participant CouponRepo
+    participant UserCouponRepo
+    participant DB
+    participant CouponEventProducer
+    participant Kafka
+    participant CouponEventConsumer
+    participant NotificationService
+
+    Client->>CouponAPI: POST /coupons/{couponId}/issue (쿠폰 발급)
+    CouponAPI->>CouponService: issueCoupon()
+
+    Note over CouponService: 트랜잭션 시작 + 분산 락
+    CouponService->>CouponRepo: findByIdWithLock(couponId)
+    CouponRepo->>DB: SELECT * FROM coupons WHERE id = ? FOR UPDATE
+    DB-->>CouponRepo: Coupon
+    CouponRepo-->>CouponService: Coupon
+
+    Note over CouponService: 검증 (중복 발급, 발급 기간, 재고)
+    CouponService->>CouponService: 재고 검증 및 발급 수량 증가
+    CouponService->>CouponRepo: save(coupon)
+    CouponRepo->>DB: UPDATE coupons SET issued_quantity = issued_quantity + 1
+    DB-->>CouponRepo: Success
+
+    CouponService->>UserCouponRepo: save(userCoupon)
+    UserCouponRepo->>DB: INSERT INTO user_coupons (status = AVAILABLE)
+    DB-->>UserCouponRepo: Success
+
+    Note over CouponService: 트랜잭션 커밋 완료
+
+    CouponService->>CouponEventProducer: sendCouponIssuedEvent()
+    CouponEventProducer->>Kafka: send(coupon-issued, key=userCouponId)
+    Note over Kafka: 파티션 키: userCouponId<br/>순서 보장
+
+    CouponService-->>CouponAPI: IssueCouponResult
+    CouponAPI-->>Client: 201 Created + 쿠폰 발급 정보
+
+    Note over Kafka,CouponEventConsumer: 비동기 처리
+    Kafka->>CouponEventConsumer: consume(CouponIssuedEvent)
+    CouponEventConsumer->>NotificationService: 사용자 알림 발송
+    Note over NotificationService: Push/Email/SMS 알림 전송<br/>(현재는 로깅만)
+    CouponEventConsumer->>Kafka: ACK (수동 커밋)
+```
+
+**핵심 단계**:
+
+1. 사용자가 쿠폰 발급 요청
+2. 분산 락 + 비관적 락으로 동시성 제어
+3. 중복 발급, 발급 기간, 재고 검증
+4. 쿠폰 발급 수량 증가 및 사용자 쿠폰 생성
+5. 트랜잭션 커밋
+6. **Kafka 이벤트 발행** (CouponIssuedEvent)
+7. **비동기: 사용자 알림 발송** (Consumer가 처리)
+
 ---
 
 ## Kafka 구성
 
 ### 토픽 구조
 
-| 토픽 이름                  | 파티션 수 | 복제 계수            | 용도                        | 파티션 키 |
-| -------------------------- | --------- | -------------------- | --------------------------- | --------- |
-| `order-created`            | 3         | 1 (개발: 1, 운영: 3) | 주문 생성 이벤트            | orderId   |
-| `payment-completed`        | 3         | 1 (개발: 1, 운영: 3) | 결제 완료 이벤트            | orderId   |
-| `order-created.DLQ`        | 1         | 1 (개발: 1, 운영: 3) | 주문 이벤트 처리 실패 메시지 | orderId   |
-| `payment-completed.DLQ`    | 1         | 1 (개발: 1, 운영: 3) | 결제 이벤트 처리 실패 메시지 | orderId   |
+| 토픽 이름                  | 파티션 수 | 복제 계수            | 용도                        | 파티션 키      |
+| -------------------------- | --------- | -------------------- | --------------------------- | -------------- |
+| `order-created`            | 3         | 1 (개발: 1, 운영: 3) | 주문 생성 이벤트            | orderId        |
+| `payment-completed`        | 3         | 1 (개발: 1, 운영: 3) | 결제 완료 이벤트            | orderId        |
+| `coupon-issued`            | 3         | 1 (개발: 1, 운영: 3) | 쿠폰 발급 이벤트            | userCouponId   |
+| `order-created.DLQ`        | 1         | 1 (개발: 1, 운영: 3) | 주문 이벤트 처리 실패 메시지 | orderId        |
+| `payment-completed.DLQ`    | 1         | 1 (개발: 1, 운영: 3) | 결제 이벤트 처리 실패 메시지 | orderId        |
+| `coupon-issued.DLQ`        | 1         | 1 (개발: 1, 운영: 3) | 쿠폰 이벤트 처리 실패 메시지 | userCouponId   |
 
 ### Producer 설정
 
@@ -780,6 +843,9 @@ DLQ 토픽: order-created.DLQ
 
 원본 토픽: payment-completed
 DLQ 토픽: payment-completed.DLQ
+
+원본 토픽: coupon-issued
+DLQ 토픽: coupon-issued.DLQ
 ```
 
 **구현 내용**:
@@ -802,12 +868,13 @@ DLQ 토픽: payment-completed.DLQ
 
 ### 달성한 목표
 
-1. ✅ **일관성**: Order와 Payment 모두 동일한 Kafka 패턴 적용
-2. ✅ **순서 보장**: orderId 파티션 키 사용
+1. ✅ **일관성**: Order, Payment, Coupon 모두 동일한 Kafka 패턴 적용
+2. ✅ **순서 보장**: orderId/userCouponId 파티션 키 사용
 3. ✅ **멱등성**: Producer 레벨 중복 방지
 4. ✅ **확장성**: 마이크로서비스 전환 대비
 5. ✅ **신뢰성**: 메시지 영속성 및 재처리 보장
 6. ✅ **DLQ 구현**: 재시도 실패 메시지 자동 저장 및 수동 처리 지원
+7. ✅ **선착순 쿠폰 발급**: Kafka 기반 비동기 알림 처리
 
 ### 향후 개선 사항
 
