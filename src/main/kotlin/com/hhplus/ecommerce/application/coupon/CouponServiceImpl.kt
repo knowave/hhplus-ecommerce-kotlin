@@ -1,12 +1,15 @@
 package com.hhplus.ecommerce.application.coupon
 
 import com.hhplus.ecommerce.application.coupon.dto.*
+import com.hhplus.ecommerce.common.event.CouponIssuedEvent
 import com.hhplus.ecommerce.common.exception.*
 import com.hhplus.ecommerce.common.lock.DistributedLock
 import com.hhplus.ecommerce.domain.coupon.entity.*
 import com.hhplus.ecommerce.domain.coupon.repository.CouponJpaRepository
 import com.hhplus.ecommerce.domain.coupon.repository.CouponStatus
 import com.hhplus.ecommerce.domain.coupon.repository.UserCouponJpaRepository
+import com.hhplus.ecommerce.infrastructure.kafka.CouponEventProducer
+import org.slf4j.LoggerFactory
 import org.springframework.data.redis.core.RedisTemplate
 import org.springframework.http.HttpStatus
 import org.springframework.stereotype.Service
@@ -24,8 +27,10 @@ import kotlin.math.max
 class CouponServiceImpl(
     private val couponRepository: CouponJpaRepository,
     private val userCouponRepository: UserCouponJpaRepository,
-    private val redisTemplate: RedisTemplate<String, String>
+    private val redisTemplate: RedisTemplate<String, String>,
+    private val couponEventProducer: CouponEventProducer? = null
 ) : CouponService {
+    private val logger = LoggerFactory.getLogger(javaClass)
     private val DATETIME_FORMATTER = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss")
 
     /**
@@ -83,6 +88,24 @@ class CouponServiceImpl(
         )
 
         val savedUserCoupon = userCouponRepository.save(userCoupon)
+
+        // Kafka 이벤트 발행 (비동기) - 트랜잭션 커밋 후 실행
+        couponEventProducer?.let {
+            try {
+                val event = CouponIssuedEvent(
+                    userCouponId = savedUserCoupon.id!!,
+                    userId = savedUserCoupon.userId,
+                    couponId = coupon.id!!,
+                    couponName = coupon.name,
+                    discountRate = coupon.discountRate,
+                    issuedAt = savedUserCoupon.issuedAt,
+                    expiresAt = savedUserCoupon.expiresAt
+                )
+                it.sendCouponIssuedEvent(event)
+            } catch (e: Exception) {
+                logger.error("Kafka 이벤트 발행 실패 - userCouponId: ${savedUserCoupon.id}", e)
+            }
+        }
 
         return IssueCouponResult(
             userCouponId = savedUserCoupon.id!!,
