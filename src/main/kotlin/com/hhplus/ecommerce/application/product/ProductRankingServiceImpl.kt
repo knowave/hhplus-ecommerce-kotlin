@@ -5,6 +5,7 @@ import com.hhplus.ecommerce.application.product.dto.ProductRankingListResult
 import com.hhplus.ecommerce.domain.product.entity.RankingPeriod
 import com.hhplus.ecommerce.domain.product.repository.ProductJpaRepository
 import org.slf4j.LoggerFactory
+import org.springframework.context.annotation.Profile
 import org.springframework.data.redis.core.RedisTemplate
 import org.springframework.data.redis.core.ZSetOperations
 import org.springframework.stereotype.Service
@@ -13,7 +14,12 @@ import java.time.format.DateTimeFormatter
 import java.time.temporal.WeekFields
 import java.util.UUID
 
+/**
+ * Redis 기반 상품 랭킹 서비스 (운영 환경)
+ * load-test 프로파일이 아닌 경우에만 활성화.
+ */
 @Service
+@Profile("!load-test")
 class ProductRankingServiceImpl(
     private val redisTemplate: RedisTemplate<String, String>,
     private val productRepository: ProductJpaRepository

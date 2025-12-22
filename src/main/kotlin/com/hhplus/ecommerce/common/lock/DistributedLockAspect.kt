@@ -5,6 +5,7 @@ import org.aspectj.lang.annotation.Around
 import org.aspectj.lang.annotation.Aspect
 import org.aspectj.lang.reflect.MethodSignature
 import org.slf4j.LoggerFactory
+import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty
 import org.springframework.core.Ordered
 import org.springframework.core.annotation.Order
 import org.springframework.expression.spel.standard.SpelExpressionParser
@@ -28,10 +29,19 @@ import org.springframework.stereotype.Component
  * - unlockAfterCommit=true 설정 시
  * - 트랜잭션이 완전히 커밋된 후에 락을 해제
  * - 다음 요청이 항상 최신 데이터를 읽도록 보장
+ *
+ * 조건부 활성화:
+ * - app.lock.enabled=false 설정 시 이 Bean이 생성되지 않음 (순수 DB 비관적락만 사용)
+ * - 기본값: true (분산락 활성화)
  */
 @Aspect
 @Component
 @Order(Ordered.HIGHEST_PRECEDENCE)
+@ConditionalOnProperty(
+    name = ["app.lock.enabled"],
+    havingValue = "true",
+    matchIfMissing = true
+)
 class DistributedLockAspect(
     private val redisDistributedLock: RedisDistributedLock
 ) {
