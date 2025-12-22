@@ -43,8 +43,38 @@ class CouponServiceImpl(
         errorMessage = "쿠폰 발급 요청이 많습니다. 잠시 후 다시 시도해주세요.",
         unlockAfterCommit = true
     )
-    @Transactional
     override fun issueCoupon(couponId: UUID, request: IssueCouponCommand): IssueCouponResult {
+        // 트랜잭션 로직 실행 (커밋까지 완료)
+        val result = issueCouponTransaction(couponId, request)
+
+        // 트랜잭션 커밋 완료 후 Kafka 이벤트 발행
+        couponEventProducer?.let {
+            try {
+                val event = CouponIssuedEvent(
+                    userCouponId = result.userCouponId,
+                    userId = result.userId,
+                    couponId = result.couponId,
+                    couponName = result.couponName,
+                    discountRate = result.discountRate,
+                    issuedAt = LocalDateTime.parse(result.issuedAt, DATETIME_FORMATTER),
+                    expiresAt = LocalDateTime.parse(result.expiresAt, DATETIME_FORMATTER)
+                )
+                it.sendCouponIssuedEvent(event)
+                logger.info("Kafka 이벤트 발행 성공 - userCouponId: ${result.userCouponId}")
+            } catch (e: Exception) {
+                logger.error("Kafka 이벤트 발행 실패 - userCouponId: ${result.userCouponId}", e)
+            }
+        }
+
+        return result
+    }
+
+    /**
+     * 쿠폰 발급 트랜잭션 로직
+     * - 트랜잭션 커밋 후 Kafka 이벤트를 발행하기 위해 분리
+     */
+    @Transactional
+    private fun issueCouponTransaction(couponId: UUID, request: IssueCouponCommand): IssueCouponResult {
         // 비관적 락으로 쿠폰 조회
         val coupon = couponRepository.findByIdWithLock(couponId)
             .orElseThrow { CouponNotFoundException(couponId) }
@@ -88,24 +118,6 @@ class CouponServiceImpl(
         )
 
         val savedUserCoupon = userCouponRepository.save(userCoupon)
-
-        // Kafka 이벤트 발행 (비동기) - 트랜잭션 커밋 후 실행
-        couponEventProducer?.let {
-            try {
-                val event = CouponIssuedEvent(
-                    userCouponId = savedUserCoupon.id!!,
-                    userId = savedUserCoupon.userId,
-                    couponId = coupon.id!!,
-                    couponName = coupon.name,
-                    discountRate = coupon.discountRate,
-                    issuedAt = savedUserCoupon.issuedAt,
-                    expiresAt = savedUserCoupon.expiresAt
-                )
-                it.sendCouponIssuedEvent(event)
-            } catch (e: Exception) {
-                logger.error("Kafka 이벤트 발행 실패 - userCouponId: ${savedUserCoupon.id}", e)
-            }
-        }
 
         return IssueCouponResult(
             userCouponId = savedUserCoupon.id!!,
