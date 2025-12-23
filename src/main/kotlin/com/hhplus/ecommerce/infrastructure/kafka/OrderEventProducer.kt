@@ -6,6 +6,7 @@ import org.springframework.kafka.core.KafkaTemplate
 import org.springframework.kafka.support.SendResult
 import org.springframework.stereotype.Component
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty
+import org.springframework.context.annotation.Profile
 import java.util.concurrent.CompletableFuture
 
 /**
@@ -21,6 +22,7 @@ import java.util.concurrent.CompletableFuture
     havingValue = "true",
     matchIfMissing = true
 )
+@Profile("!load-test")
 class OrderEventProducer(
     private val kafkaTemplate: KafkaTemplate<String, Any>
 ) {

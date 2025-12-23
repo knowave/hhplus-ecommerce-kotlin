@@ -6,13 +6,11 @@ import com.hhplus.ecommerce.application.user.UserService
 import com.hhplus.ecommerce.common.exception.*
 import com.hhplus.ecommerce.domain.cart.repository.CartJpaRepository
 import com.hhplus.ecommerce.domain.cart.entity.CartItem
-import org.springframework.context.annotation.Profile
 import org.springframework.stereotype.Service
 import java.time.format.DateTimeFormatter
 import java.util.UUID
 
 @Service
-@Profile("!load-test")
 class CartServiceImpl(
     private val cartRepository: CartJpaRepository,
     private val productService: ProductService,

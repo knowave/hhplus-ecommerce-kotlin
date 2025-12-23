@@ -4,6 +4,7 @@ import com.fasterxml.jackson.databind.ObjectMapper
 import com.hhplus.ecommerce.common.event.CouponIssuedEvent
 import org.slf4j.LoggerFactory
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty
+import org.springframework.context.annotation.Profile
 import org.springframework.kafka.annotation.KafkaListener
 import org.springframework.kafka.support.KafkaHeaders
 import org.springframework.messaging.handler.annotation.Header
@@ -22,6 +23,7 @@ import org.springframework.stereotype.Component
     havingValue = "true",
     matchIfMissing = true
 )
+@Profile("!load-test")
 class CouponEventConsumer(
     private val objectMapper: ObjectMapper
 ) {

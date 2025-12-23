@@ -3,6 +3,7 @@ package com.hhplus.ecommerce.infrastructure.kafka
 import com.hhplus.ecommerce.common.event.CouponIssuedEvent
 import org.slf4j.LoggerFactory
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty
+import org.springframework.context.annotation.Profile
 import org.springframework.kafka.core.KafkaTemplate
 import org.springframework.kafka.support.SendResult
 import org.springframework.stereotype.Component
@@ -20,6 +21,7 @@ import java.util.concurrent.CompletableFuture
     havingValue = "true",
     matchIfMissing = true
 )
+@Profile("!load-test")
 class CouponEventProducer(
     private val kafkaTemplate: KafkaTemplate<String, Any>
 ) {

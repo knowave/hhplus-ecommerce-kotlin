@@ -6,6 +6,7 @@ import com.hhplus.ecommerce.domain.kafka.repository.FailedMessageJpaRepository
 import org.apache.kafka.clients.consumer.ConsumerRecord
 import org.slf4j.LoggerFactory
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty
+import org.springframework.context.annotation.Profile
 import org.springframework.kafka.annotation.KafkaListener
 import org.springframework.kafka.support.KafkaHeaders
 import org.springframework.messaging.handler.annotation.Header
@@ -32,6 +33,7 @@ import java.time.LocalDateTime
     havingValue = "true",
     matchIfMissing = true
 )
+@Profile("!load-test")
 class DLQConsumer(
     private val failedMessageRepository: FailedMessageJpaRepository
 ) {
