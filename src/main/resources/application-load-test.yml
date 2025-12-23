@@ -7,9 +7,17 @@ app:
     enabled: false
 
 spring:
+  # Kafka 완전 비활성화
   kafka:
     enabled: false
+  autoconfigure:
+    exclude:
+      - org.springframework.boot.autoconfigure.kafka.KafkaAutoConfiguration
 
+  datasource:
+    url: jdbc:mysql://${DB_HOST}:${DB_PORT}/${DB_NAME}?serverTimezone=Asia/Seoul&characterEncoding=UTF-8
+    username: ${DB_USER}
+    password: ${DB_PASSWORD}
   # 데이터베이스 상세 로깅 활성화
   jpa:
     properties:
