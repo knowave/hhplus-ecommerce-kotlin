@@ -124,7 +124,10 @@ class CouponServiceDbImpl(
      *
      * DB 기반 구현에서는 비동기 처리를 지원하지 않으므로,
      * 동기 방식(issueCoupon)으로 바로 처리합니다.
+     *
+     * @Transactional 필수: findByIdWithLock()의 비관적 락 사용을 위해 필요
      */
+    @Transactional
     override fun requestCouponIssuance(couponId: UUID, request: IssueCouponCommand): IssueCouponResult {
         logger.debug("requestCouponIssuance 호출 -> issueCoupon으로 동기 처리")
         return issueCoupon(couponId, request)

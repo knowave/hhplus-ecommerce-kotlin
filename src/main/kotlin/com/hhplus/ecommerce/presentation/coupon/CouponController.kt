@@ -25,7 +25,7 @@ class CouponController(
         // 비동기 발급 요청 메서드 호출
         val result = couponService.requestCouponIssuance(couponId, command)
 
-        return ResponseEntity.ok(IssueCouponResponse.from(result))
+        return ResponseEntity.status(201).body(IssueCouponResponse.from(result))
     }
 
     @Operation(summary = "사용 가능한 쿠폰 목록 조회", description = "현재 발급 가능한 모든 쿠폰 목록을 조회합니다")
