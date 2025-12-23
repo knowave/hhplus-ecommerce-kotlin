@@ -14,7 +14,7 @@
 import http from 'k6/http';
 import { check } from 'k6';
 import { Counter, Rate, Trend } from 'k6/metrics';
-import { BASE_URL, HEADERS, TEST_DATA, getRandomUserId, logResponse } from '../config/config.js';
+import { BASE_URL, HEADERS, TEST_DATA, getVuUserId, logResponse } from '../config/config.js';
 
 // 커스텀 메트릭
 const successfulIssues = new Counter('coupon_successful_issues');
@@ -42,7 +42,7 @@ export const options = {
 };
 
 export default function () {
-  const userId = getRandomUserId();
+  const userId = getVuUserId();  // 각 VU가 고정된 사용자 사용 (VU 1 → User 0, VU 2 → User 1, ...)
 
   // 쿠폰 발급 요청
   const url = `${BASE_URL}/coupons/${TEST_DATA.COUPON_ID}/issue`;

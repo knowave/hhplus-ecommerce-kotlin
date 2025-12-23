@@ -18,7 +18,7 @@ import {
   BASE_URL,
   HEADERS,
   TEST_DATA,
-  getRandomUserId,
+  getVuUserId,
   getRandomProductId,
   logResponse,
 } from '../config/config.js';
@@ -60,7 +60,7 @@ function generateOrderItems() {
 }
 
 export default function () {
-  const userId = getRandomUserId();
+  const userId = getVuUserId();
 
   // 주문 생성 요청
   const url = `${BASE_URL}/orders`;

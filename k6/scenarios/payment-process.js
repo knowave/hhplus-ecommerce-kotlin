@@ -17,7 +17,7 @@ import {
   BASE_URL,
   HEADERS,
   TEST_DATA,
-  getRandomUserId,
+  getVuUserId,
   getRandomProductId,
   logResponse,
 } from '../config/config.js';
@@ -100,7 +100,7 @@ function processPayment(orderId, userId) {
 }
 
 export default function () {
-  const userId = getRandomUserId();
+  const userId = getVuUserId();
 
   // 1. 주문 생성
   const orderId = createOrder(userId);

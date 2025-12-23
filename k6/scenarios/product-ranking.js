@@ -35,7 +35,7 @@ export const options = {
 
 export default function () {
   // 인기 상품 Top 10 조회
-  const url = `${BASE_URL}/products/ranking/top`;
+const url = `${BASE_URL}/products/top`;
 
   const params = {
     headers: HEADERS,
