@@ -1,93 +1,80 @@
 # K6 부하 테스트 스크립트
 
-순수 DB 환경(Redis, Kafka 비활성화, 인덱스 제거)에서의 성능을 측정하기 위한 K6 부하 테스트 스크립트입니다.
+API 기반으로 테스트 데이터를 생성하고 부하 테스트를 수행하는 K6 스크립트입니다.
+
+## 🎯 테스트 목적
+
+**두 환경의 성능을 비교**하여 인프라 개선 효과를 측정합니다:
+
+| 환경                | 설명                                      | 프로파일    |
+| ------------------- | ----------------------------------------- | ----------- |
+| **부하테스트 환경** | 순수 DB만 사용 (비관적 락, DB 집계)       | `load-test` |
+| **운영 환경**       | Redis + Kafka 사용 (분산락, 캐시, 비동기) | `default`   |
 
 ## 📁 디렉토리 구조
 
 ```
 k6/
-├── config/
-│   └── config.js              # 공통 설정 (BASE_URL, 테스트 데이터 등)
-├── data/
-│   └── load-test-data.sql     # 테스트 데이터 초기화 SQL (Entity 기반)
 ├── scenarios/
-│   ├── product-ranking.js     # 인기 상품 조회 테스트
-│   ├── coupon-issue.js        # 선착순 쿠폰 발급 테스트
-│   ├── order-create.js        # 주문 생성 테스트
-│   └── payment-process.js     # 결제 처리 테스트
-├── run-all.js                 # 전체 시나리오 순차 실행
-└── README.md                  # 이 파일
+│   ├── product-ranking.js   # 인기 상품 조회 테스트
+│   ├── coupon-issue.js      # 선착순 쿠폰 발급 테스트
+│   └── order-payment.js     # 주문 및 결제 통합 테스트
+├── results/                 # 테스트 결과 저장 디렉토리
+│   ├── load-test/           # 부하테스트 환경 결과
+│   └── production/          # 운영 환경 결과
+├── run-all.js               # 전체 시나리오 순차 실행
+├── run-load-test.sh         # 부하테스트 환경 실행 스크립트
+├── run-production.sh        # 운영 환경 실행 스크립트
+└── README.md                # 이 파일
 ```
 
 ## 🎯 테스트 시나리오
 
 ### 1. 인기 상품 조회 (product-ranking.js)
 
-**목적**: 인덱스 없는 Full Table Scan 부하 측정
+| 환경       | 구현 방식                             |
+| ---------- | ------------------------------------- |
+| 부하테스트 | DB 집계 쿼리 (`GROUP BY`, `ORDER BY`) |
+| 운영       | Redis Sorted Set 기반 실시간 랭킹     |
 
-- **VU (Virtual Users)**: 100명
-- **Duration**: 30초
-- **측정 지표**:
-  - 응답 시간 (p95 < 2초, p99 < 5초)
-  - TPS (Transactions Per Second)
-  - 실패율 (< 5%)
-
-```bash
-k6 run k6/scenarios/product-ranking.js
-```
+-   **VU (Virtual Users)**: 50명
+-   **Duration**: 30초
+-   **플로우**:
+    1. setup에서 50명의 사용자 생성 (API 호출)
+    2. 상품 목록 조회
+    3. 랜덤 상품 주문 → 결제
+    4. 인기 상품 Top 조회
 
 ---
 
 ### 2. 선착순 쿠폰 발급 (coupon-issue.js)
 
-**목적**: DB 비관적락만으로 동시성 제어 시 성능 측정
+| 환경       | 동시성 제어                            |
+| ---------- | -------------------------------------- |
+| 부하테스트 | 비관적 락 (Pessimistic Lock, DB Level) |
+| 운영       | Redis 분산락 (Distributed Lock)        |
 
-- **VU**: 0 → 100명 (10초에 걸쳐 증가) → 30초 유지
-- **쿠폰 수량**: 50개
-- **측정 지표**:
-  - 락 대기 시간
-  - 성공/실패 비율 (50:50 예상)
-  - p95 응답 시간 (< 3초)
-
-```bash
-k6 run k6/scenarios/coupon-issue.js
-```
+-   **VU**: 0 → 100명 (10초에 걸쳐 증가) → 30초 유지
+-   **플로우**:
+    1. setup에서 100명의 사용자 생성 (API 호출)
+    2. 사용 가능한 쿠폰 목록 조회
+    3. 100명이 동시에 쿠폰 발급 요청
 
 ---
 
-### 3. 주문 생성 (order-create.js)
+### 3. 주문 및 결제 (order-payment.js)
 
-**목적**: 재고 차감 시 DB 비관적락 경합 측정
+| 환경       | 처리 방식                     |
+| ---------- | ----------------------------- |
+| 부하테스트 | 동기 트랜잭션 처리            |
+| 운영       | Kafka 기반 비동기 이벤트 처리 |
 
-- **VU**: 100명
-- **Duration**: 30초
-- **주문 아이템**: 1-3개 랜덤
-- **측정 지표**:
-  - 트랜잭션 처리 시간
-  - 재고 부족 실패율
-  - p95 응답 시간 (< 3초)
-
-```bash
-k6 run k6/scenarios/order-create.js
-```
-
----
-
-### 4. 결제 처리 (payment-process.js)
-
-**목적**: 사용자 잔액 차감 시 락 경합 측정
-
-- **VU**: 100명
-- **Duration**: 30초
-- **프로세스**: 주문 생성 → 결제 처리
-- **측정 지표**:
-  - 결제 처리 시간
-  - 잔액 부족 실패율
-  - p95 응답 시간 (< 3초)
-
-```bash
-k6 run k6/scenarios/payment-process.js
-```
+-   **VU**: 100명
+-   **Duration**: 30초
+-   **플로우**:
+    1. setup에서 100명의 사용자 생성 (API 호출)
+    2. 상품 목록 조회
+    3. 주문 생성 → 결제 처리 통합 플로우
 
 ---
 
@@ -111,118 +98,80 @@ sudo apt-get update
 sudo apt-get install k6
 ```
 
-2. **애플리케이션 실행 (부하 테스트 모드)**
+2. **테스트 데이터 준비**
 
-```bash
-# 애플리케이션 실행 (load-test 프로파일)
-# 시작 시 k6/data/load-test-data.sql이 자동으로 실행되어 테스트 데이터 생성
-./gradlew bootRun --args='--spring.profiles.active=load-test'
-```
-
-3. **테스트 데이터 자동 생성**
-
-   애플리케이션 시작 시 `k6/data/load-test-data.sql`이 자동 실행되어 다음 데이터가 생성됩니다:
-
-   - **사용자 (User)**: 1명 (잔액 1,000,000원)
-     - ID: `550e8400-e29b-41d4-a716-446655440000`
-
-   - **쿠폰 (Coupon)**: 1개 (10,000개 수량)
-     - ID: `550e8400-e29b-41d4-a716-446655440001`
-     - 할인율: 10%
-     - 유효기간: 30일
-
-   - **상품 (Product)**: 3개 (각 10,000개 재고)
-     - 상품 1 (노트북): `550e8400-e29b-41d4-a716-446655440011`
-     - 상품 2 (코트): `550e8400-e29b-41d4-a716-446655440012`
-     - 상품 3 (과일 세트): `550e8400-e29b-41d4-a716-446655440013`
-
-   > 💡 **수동 실행**: 필요시 MySQL에서 직접 실행 가능
-   > ```bash
-   > mysql -u root -p -D hhplus_ecommerce < k6/data/load-test-data.sql
-   > ```
+> ⚠️ **중요**: 상품과 쿠폰은 미리 DB에 생성되어 있어야 합니다.
+> 사용자는 각 테스트 시나리오의 `setup()`에서 API를 통해 자동 생성됩니다.
 
 ---
 
-### 개별 시나리오 실행
+## 🔄 환경별 테스트 실행
+
+### 1️⃣ 부하테스트 환경 (순수 DB)
+
+Redis, Kafka 없이 순수 DB만 사용하는 환경입니다.
 
 ```bash
-# 1. 인기 상품 조회
-k6 run k6/scenarios/product-ranking.js
+# 1. MySQL만 실행
+docker-compose up -d mysql
 
-# 2. 쿠폰 발급
-k6 run k6/scenarios/coupon-issue.js
+# 2. 부하테스트 프로파일로 애플리케이션 실행
+SPRING_PROFILES_ACTIVE=load-test ./gradlew bootRun
 
-# 3. 주문 생성
-k6 run k6/scenarios/order-create.js
+# 3. 테스트 실행
+chmod +x k6/run-load-test.sh
+./k6/run-load-test.sh              # 전체 테스트
+./k6/run-load-test.sh ranking      # 인기 상품만
+./k6/run-load-test.sh coupon       # 쿠폰만
+./k6/run-load-test.sh order-payment # 주문/결제만
+```
 
-# 4. 결제 처리
-k6 run k6/scenarios/payment-process.js
+### 2️⃣ 운영 환경 (Redis + Kafka)
+
+Redis, Kafka를 활용한 개선된 아키텍처 환경입니다.
+
+```bash
+# 1. 모든 의존성 실행
+docker-compose up -d
+
+# 2. 기본 프로파일로 애플리케이션 실행
+./gradlew bootRun
+
+# 3. 테스트 실행
+chmod +x k6/run-production.sh
+./k6/run-production.sh              # 전체 테스트
+./k6/run-production.sh ranking      # 인기 상품만
+./k6/run-production.sh coupon       # 쿠폰만
+./k6/run-production.sh order-payment # 주문/결제만
+```
+
+---
+
+### 수동 실행 (환경 변수 지정)
+
+```bash
+# 부하테스트 환경
+PROFILE=load-test k6 run k6/run-all.js
+
+# 운영 환경
+PROFILE=production k6 run k6/run-all.js
 ```
 
 ---
 
 ### 전체 시나리오 실행
 
-모든 시나리오를 순차적으로 실행합니다 (총 약 3분 소요).
+모든 시나리오를 순차적으로 실행합니다 (총 약 2.5분 소요).
 
 ```bash
 k6 run k6/run-all.js
 ```
 
 **실행 순서**:
-1. 인기 상품 조회 (0-35초)
-2. 쿠폰 발급 (40-90초)
-3. 주문 생성 (95-130초)
-4. 결제 처리 (135-170초)
 
----
-
-## 📊 결과 분석
-
-### K6 출력 지표
-
-```
-     execution: local
-        script: k6/scenarios/product-ranking.js
-        output: -
-
-     scenarios: (100.00%) 1 scenario, 100 max VUs, 1m0s max duration (incl. graceful stop):
-              * product_ranking_load: 100 looping VUs for 30s (gracefulStop: 30s)
-
-
-     ✓ status is 200
-     ✓ response time < 2000ms
-     ✓ has rankings
-
-     checks.........................: 100.00% ✓ 3000      ✗ 0
-     data_received..................: 1.5 MB  50 kB/s
-     data_sent......................: 300 kB  10 kB/s
-     http_req_blocked...............: avg=1.2ms    min=0s   med=1ms   max=15ms  p(90)=2ms   p(95)=3ms
-     http_req_connecting............: avg=500µs    min=0s   med=400µs max=5ms   p(90)=800µs p(95)=1ms
-     http_req_duration..............: avg=150ms    min=50ms med=130ms max=800ms p(90)=250ms p(95)=400ms
-       { expected_response:true }...: avg=150ms    min=50ms med=130ms max=800ms p(90)=250ms p(95)=400ms
-     http_req_failed................: 0.00%   ✓ 0         ✗ 1000
-     http_req_receiving.............: avg=50µs     min=20µs med=40µs  max=200µs p(90)=80µs  p(95)=100µs
-     http_req_sending...............: avg=30µs     min=10µs med=25µs  max=100µs p(90)=50µs  p(95)=60µs
-     http_req_tls_handshaking.......: avg=0s       min=0s   med=0s    max=0s    p(90)=0s    p(95)=0s
-     http_req_waiting...............: avg=149ms    min=49ms med=129ms max=799ms p(90)=249ms p(95)=399ms
-     http_reqs......................: 1000    33.33/s
-     iteration_duration.............: avg=3s       min=1.5s med=2.8s  max=5s    p(90)=4s    p(95)=4.5s
-     iterations.....................: 1000    33.33/s
-     vus............................: 100     min=100     max=100
-     vus_max........................: 100     min=100     max=100
-```
-
-### 주요 지표 설명
-
-| 지표 | 설명 |
-|---|---|
-| `http_req_duration` | HTTP 요청 총 시간 (전송 + 대기 + 수신) |
-| `http_req_waiting` | 서버 처리 시간 (응답 대기 시간) |
-| `http_reqs` | 총 요청 수 및 RPS (Requests Per Second) |
-| `http_req_failed` | 실패한 요청 비율 |
-| `p(95), p(99)` | 95%, 99% 백분위수 응답 시간 |
-| `checks` | 검증 통과율 |
+1. 인기 상품 조회 (0-40초)
+2. 쿠폰 발급 (45-105초)
+3. 주문 및 결제 (110-150초)
 
 ---
 
@@ -240,32 +189,35 @@ BASE_URL=http://192.168.1.100:8080/api k6 run k6/scenarios/product-ranking.js
 
 ---
 
-## 📝 테스트 데이터 설정
+## 📊 결과 분석
 
-### K6 테스트 데이터 UUID 정의
+### K6 출력 지표 예시
 
-`k6/config/config.js`에 정의된 UUID들은 `k6/data/load-test-data.sql`의 데이터와 일치합니다:
+```
+     ✓ status is 200
+     ✓ response time < 2000ms
+     ✓ has rankings
 
-```javascript
-export const TEST_DATA = {
-  COUPON_ID: '550e8400-e29b-41d4-a716-446655440001',  // 쿠폰 UUID
-  PRODUCT_IDS: [
-    '550e8400-e29b-41d4-a716-446655440011',          // 상품 UUIDs
-    '550e8400-e29b-41d4-a716-446655440012',
-    '550e8400-e29b-41d4-a716-446655440013',
-  ],
-};
+     checks.........................: 100.00% ✓ 3000      ✗ 0
+     data_received..................: 1.5 MB  50 kB/s
+     data_sent......................: 300 kB  10 kB/s
+     http_req_duration..............: avg=150ms    min=50ms med=130ms max=800ms p(90)=250ms p(95)=400ms
+     http_req_failed................: 0.00%   ✓ 0         ✗ 1000
+     http_reqs......................: 1000    33.33/s
+     iterations.....................: 1000    33.33/s
+     vus............................: 100     min=100     max=100
 ```
 
-### 테스트 데이터 커스터마이징
+### 주요 지표 설명
 
-데이터를 수정하려면:
-
-1. **K6 설정 파일**: `k6/config/config.js`에서 UUID 수정
-2. **SQL 파일**: `k6/data/load-test-data.sql`에서 동일한 UUID로 데이터 수정
-3. **Entity 클래스**: SQL 스키마는 Entity 클래스(`User`, `Coupon`, `Product`)와 정확히 일치해야 함
-
-> ⚠️ **중요**: config.js의 UUID와 SQL 파일의 UUID가 일치하지 않으면 404 에러가 발생합니다!
+| 지표                | 설명                                    |
+| ------------------- | --------------------------------------- |
+| `http_req_duration` | HTTP 요청 총 시간 (전송 + 대기 + 수신)  |
+| `http_req_waiting`  | 서버 처리 시간 (응답 대기 시간)         |
+| `http_reqs`         | 총 요청 수 및 RPS (Requests Per Second) |
+| `http_req_failed`   | 실패한 요청 비율                        |
+| `p(95), p(99)`      | 95%, 99% 백분위수 응답 시간             |
+| `checks`            | 검증 통과율                             |
 
 ---
 
@@ -280,76 +232,83 @@ WARN[0001] Request Failed error="Get \"http://localhost:8080/api/...\": dial tcp
 **해결**: 애플리케이션이 실행 중인지 확인하세요.
 
 ```bash
-# 애플리케이션 상태 확인
-curl http://localhost:8080/api/products/ranking/top
+curl http://localhost:8080/api/products
 ```
 
 ---
 
-### 2. 높은 실패율
+### 2. 상품이 없다는 에러
 
-**원인**:
-- 재고 부족 (정상적인 실패)
-- 쿠폰 품절 (정상적인 실패)
-- 잔액 부족 (정상적인 실패)
+```
+Error: 상품이 없습니다. 상품을 먼저 생성해주세요.
+```
+
+**해결**: 상품을 DB에 먼저 생성해주세요. (현재 상품 생성 API가 없으므로 DB에서 직접 생성)
+
+---
+
+### 3. 쿠폰이 없다는 에러
+
+```
+Error: 사용 가능한 쿠폰이 없습니다. 쿠폰을 먼저 생성해주세요.
+```
+
+**해결**: 쿠폰을 DB에 먼저 생성해주세요. (현재 쿠폰 생성 API가 없으므로 DB에서 직접 생성)
+
+---
+
+### 4. 높은 실패율
+
+**원인 (정상적인 실패)**:
+
+-   재고 부족
+-   쿠폰 품절
+-   잔액 부족
+-   중복 쿠폰 발급 시도
 
 **확인**: 로그에서 실패 사유를 확인하세요.
 
 ---
 
-### 3. 느린 응답 시간
+## 🎯 테스트 데이터 요구사항
 
-**예상 결과**:
-- 인덱스 제거로 인한 Full Table Scan
-- Redis 분산락 비활성화로 인한 DB 락 대기
-- Kafka 비활성화로 인한 동기 처리
+각 시나리오 실행 전 필요한 데이터:
 
-이것이 바로 측정하고자 하는 부하입니다!
-
----
-
-## 🎯 기대 결과
-
-### 최적화 제거 전 (운영 환경)
-- 인기 상품 조회: ~50ms
-- 쿠폰 발급: ~100ms
-- 주문 생성: ~200ms
-- 결제 처리: ~150ms
-
-### 최적화 제거 후 (부하 테스트 환경)
-- 인기 상품 조회: ~500ms 이상 (인덱스 없음)
-- 쿠폰 발급: ~500ms 이상 (DB 락 대기)
-- 주문 생성: ~1000ms 이상 (트랜잭션 경합)
-- 결제 처리: ~800ms 이상 (User 락 경합)
+| 시나리오       | 사용자            | 상품          | 쿠폰          |
+| -------------- | ----------------- | ------------- | ------------- |
+| 인기 상품 조회 | 자동 생성 (50명)  | 최소 1개 필요 | -             |
+| 쿠폰 발급      | 자동 생성 (100명) | -             | 최소 1개 필요 |
+| 주문 및 결제   | 자동 생성 (100명) | 최소 1개 필요 | -             |
 
 ---
 
-## 📈 사후 작업
+## 📊 성능 비교 보고서
 
-테스트 완료 후:
+테스트 완료 후 두 환경의 결과를 비교하여 개선 효과를 분석합니다.
 
-1. **인덱스 복구**
+### 보고서 작성
 
-```bash
-mysql -u root -p -D hhplus_ecommerce < scripts/load-test/restore-product-indexes.sql
+1. 두 환경에서 각각 테스트 실행
+2. `k6/results/` 디렉토리의 결과 파일 확인
+3. [성능 비교 보고서 템플릿](../docs/LOAD_TEST_COMPARISON_REPORT.md)에 결과 기입
+
+### 결과 파일 위치
+
 ```
-
-2. **애플리케이션 재시작 (운영 모드)**
-
-```bash
-./gradlew bootRun
+k6/results/
+├── load-test/                     # 부하테스트 환경 결과
+│   ├── run-all_YYYYMMDD_HHMMSS.json
+│   └── run-all_YYYYMMDD_HHMMSS_summary.json
+└── production/                    # 운영 환경 결과
+    ├── run-all_YYYYMMDD_HHMMSS.json
+    └── run-all_YYYYMMDD_HHMMSS_summary.json
 ```
-
-3. **결과 분석 및 보고서 작성**
-   - 각 시나리오별 성능 지표 정리
-   - 최적화 전/후 비교 차트 작성
-   - 병목 지점 식별 및 개선 방안 도출
 
 ---
 
 ## 📚 참고 자료
 
-- [K6 공식 문서](https://k6.io/docs/)
-- [K6 Thresholds](https://k6.io/docs/using-k6/thresholds/)
-- [K6 Scenarios](https://k6.io/docs/using-k6/scenarios/)
-- [부하 테스트 계획서](../docs/LOAD_TEST_PLAN.md)
+-   [K6 공식 문서](https://k6.io/docs/)
+-   [K6 Thresholds](https://k6.io/docs/using-k6/thresholds/)
+-   [K6 Scenarios](https://k6.io/docs/using-k6/scenarios/)
+-   [성능 비교 보고서 템플릿](../docs/LOAD_TEST_COMPARISON_REPORT.md)

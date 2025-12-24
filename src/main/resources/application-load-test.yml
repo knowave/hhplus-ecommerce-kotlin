@@ -36,14 +36,6 @@ spring:
     username: ${DB_USER}
     password: ${DB_PASSWORD}
 
-  # SQL 스크립트 자동 실행 설정
-  sql:
-    init:
-      mode: always  # 항상 SQL 스크립트 실행
-      data-locations: file:k6/data/load-test-data.sql  # K6 디렉토리의 테스트 데이터
-      encoding: UTF-8
-      continue-on-error: false  # 에러 발생 시 중단
-
   # 데이터베이스 상세 로깅 활성화
   jpa:
     defer-datasource-initialization: true  # Hibernate 스키마 생성 후 SQL 스크립트 실행
