@@ -10,6 +10,7 @@ import com.hhplus.ecommerce.domain.coupon.repository.CouponStatus
 import com.hhplus.ecommerce.domain.coupon.repository.UserCouponJpaRepository
 import com.hhplus.ecommerce.infrastructure.kafka.CouponEventProducer
 import org.slf4j.LoggerFactory
+import org.springframework.context.annotation.Profile
 import org.springframework.data.redis.core.RedisTemplate
 import org.springframework.http.HttpStatus
 import org.springframework.stereotype.Service
@@ -23,7 +24,12 @@ import java.time.temporal.ChronoUnit
 import java.util.UUID
 import kotlin.math.max
 
+/**
+ * Redis + Kafka 기반 쿠폰 서비스 (운영 환경)
+ * load-test 프로파일이 아닌 경우에만 활성화.
+ */
 @Service
+@Profile("!load-test")
 class CouponServiceImpl(
     private val couponRepository: CouponJpaRepository,
     private val userCouponRepository: UserCouponJpaRepository,

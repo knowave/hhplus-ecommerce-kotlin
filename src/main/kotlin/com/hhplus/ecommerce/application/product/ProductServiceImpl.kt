@@ -7,6 +7,7 @@ import com.hhplus.ecommerce.domain.product.entity.Product
 import com.hhplus.ecommerce.domain.product.repository.ProductJpaRepository
 import org.springframework.cache.annotation.CacheEvict
 import org.springframework.cache.annotation.Cacheable
+import org.springframework.context.annotation.Profile
 import org.springframework.data.domain.PageRequest
 import org.springframework.data.domain.Sort
 import org.springframework.stereotype.Service
@@ -15,7 +16,12 @@ import java.time.LocalDateTime
 import java.time.format.DateTimeFormatter
 import java.util.UUID
 
+/**
+ * Redis 캐시 기반 상품 서비스 (운영 환경)
+ * load-test 프로파일이 아닌 경우에만 활성화.
+ */
 @Service
+@Profile("!load-test")
 class ProductServiceImpl(
     private val productRepository: ProductJpaRepository
 ) : ProductService {

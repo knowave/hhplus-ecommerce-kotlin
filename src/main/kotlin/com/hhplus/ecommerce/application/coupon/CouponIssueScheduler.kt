@@ -1,17 +1,21 @@
 package com.hhplus.ecommerce.application.coupon
 
 import com.hhplus.ecommerce.application.coupon.dto.IssueCouponCommand
-import com.hhplus.ecommerce.common.exception.BaseException
 import com.hhplus.ecommerce.common.exception.CouponAlreadyIssuedException
 import com.hhplus.ecommerce.common.exception.CouponOutOfStockException
-import com.hhplus.ecommerce.common.exception.ErrorCode
 import org.slf4j.LoggerFactory
+import org.springframework.context.annotation.Profile
 import org.springframework.data.redis.core.RedisTemplate
 import org.springframework.scheduling.annotation.Scheduled
 import org.springframework.stereotype.Component
 import java.util.UUID
 
+/**
+ * Redis 기반 쿠폰 발급 스케줄러
+ * load-test 프로파일에서는 비활성화 (Redis 없음)
+ */
 @Component
+@Profile("!load-test")
 class CouponIssueScheduler(
     private val redisTemplate: RedisTemplate<String, String>,
     private val couponService: CouponService

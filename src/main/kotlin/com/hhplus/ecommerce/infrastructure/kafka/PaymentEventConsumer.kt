@@ -5,6 +5,7 @@ import com.hhplus.ecommerce.application.payment.DataPlatformService
 import com.hhplus.ecommerce.common.event.PaymentCompletedEvent
 import org.slf4j.LoggerFactory
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty
+import org.springframework.context.annotation.Profile
 import org.springframework.kafka.annotation.KafkaListener
 import org.springframework.kafka.support.KafkaHeaders
 import org.springframework.messaging.handler.annotation.Header
@@ -42,6 +43,7 @@ class PaymentEventConsumer(
         groupId = "\${spring.kafka.consumer.group-id}",
         containerFactory = "kafkaListenerContainerFactory"
     )
+    @Profile("!load-test")
     fun consumePaymentCompletedEvent(
         @Payload message: String,
         @Header(KafkaHeaders.RECEIVED_PARTITION) partition: Int,

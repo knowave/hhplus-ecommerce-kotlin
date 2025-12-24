@@ -1,0 +1,126 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<configuration scan="true" scanPeriod="30 seconds">
+
+    <!-- 속성 정의 -->
+    <property name="LOG_PATH" value="logs"/>
+    <property name="APP_NAME" value="hhplus-ecommerce"/>
+    
+    <!-- Logstash 호스트 (ELK 스택) -->
+    <springProperty scope="context" name="LOGSTASH_HOST" source="logging.logstash.host" defaultValue="localhost"/>
+    <springProperty scope="context" name="LOGSTASH_PORT" source="logging.logstash.port" defaultValue="5044"/>
+
+    <!-- 콘솔 출력 (개발용) -->
+    <appender name="CONSOLE" class="ch.qos.logback.core.ConsoleAppender">
+        <encoder>
+            <pattern>[%d{HH:mm:ss.SSS}][%-5level][%logger{36}.%method:line%line] - %msg%n</pattern>
+        </encoder>
+    </appender>
+
+    <!-- 파일 출력 (롤링) -->
+    <appender name="FILE" class="ch.qos.logback.core.rolling.RollingFileAppender">
+        <file>${LOG_PATH}/${APP_NAME}.log</file>
+        <rollingPolicy class="ch.qos.logback.core.rolling.TimeBasedRollingPolicy">
+            <fileNamePattern>${LOG_PATH}/${APP_NAME}.%d{yyyy-MM-dd}.%i.log</fileNamePattern>
+            <timeBasedFileNamingAndTriggeringPolicy class="ch.qos.logback.core.rolling.SizeAndTimeBasedFNATP">
+                <maxFileSize>100MB</maxFileSize>
+            </timeBasedFileNamingAndTriggeringPolicy>
+            <maxHistory>30</maxHistory>
+            <totalSizeCap>3GB</totalSizeCap>
+        </rollingPolicy>
+        <encoder>
+            <pattern>[%d{yyyy-MM-dd HH:mm:ss.SSS}][%-5level][%thread][%logger{36}] - %msg%n</pattern>
+        </encoder>
+    </appender>
+
+    <!-- JSON 파일 출력 (ELK 분석용) -->
+    <appender name="JSON_FILE" class="ch.qos.logback.core.rolling.RollingFileAppender">
+        <file>${LOG_PATH}/${APP_NAME}-json.log</file>
+        <rollingPolicy class="ch.qos.logback.core.rolling.TimeBasedRollingPolicy">
+            <fileNamePattern>${LOG_PATH}/${APP_NAME}-json.%d{yyyy-MM-dd}.log</fileNamePattern>
+            <maxHistory>7</maxHistory>
+        </rollingPolicy>
+        <encoder class="net.logstash.logback.encoder.LogstashEncoder">
+            <customFields>{"app_name":"${APP_NAME}","environment":"${SPRING_PROFILES_ACTIVE:-default}"}</customFields>
+            <includeMdcKeyName>traceId</includeMdcKeyName>
+            <includeMdcKeyName>spanId</includeMdcKeyName>
+            <includeMdcKeyName>userId</includeMdcKeyName>
+            <includeMdcKeyName>orderId</includeMdcKeyName>
+        </encoder>
+    </appender>
+
+    <!-- DLQ 전용 로그 파일 -->
+    <appender name="DLQ_FILE" class="ch.qos.logback.core.rolling.RollingFileAppender">
+        <file>${LOG_PATH}/dlq.log</file>
+        <rollingPolicy class="ch.qos.logback.core.rolling.TimeBasedRollingPolicy">
+            <fileNamePattern>${LOG_PATH}/dlq.%d{yyyy-MM-dd}.log</fileNamePattern>
+            <maxHistory>30</maxHistory>
+        </rollingPolicy>
+        <encoder class="net.logstash.logback.encoder.LogstashEncoder">
+            <customFields>{"app_name":"${APP_NAME}","log_type":"DLQ"}</customFields>
+        </encoder>
+    </appender>
+
+    <!-- Logstash TCP 소켓 전송 (ELK 스택) -->
+    <appender name="LOGSTASH" class="net.logstash.logback.appender.LogstashTcpSocketAppender">
+        <destination>${LOGSTASH_HOST}:${LOGSTASH_PORT}</destination>
+        <encoder class="net.logstash.logback.encoder.LogstashEncoder">
+            <customFields>{"app_name":"${APP_NAME}","environment":"${SPRING_PROFILES_ACTIVE:-default}"}</customFields>
+            <includeMdcKeyName>traceId</includeMdcKeyName>
+            <includeMdcKeyName>spanId</includeMdcKeyName>
+        </encoder>
+        <!-- 연결 실패 시 재시도 설정 -->
+        <connectionStrategy>
+            <roundRobin>
+                <connectionTTL>5 minutes</connectionTTL>
+            </roundRobin>
+        </connectionStrategy>
+        <!-- 버퍼링 설정 -->
+        <ringBufferSize>8192</ringBufferSize>
+    </appender>
+
+    <!-- DLQ Consumer 전용 로거 -->
+    <logger name="com.hhplus.ecommerce.infrastructure.kafka.DLQConsumer" level="WARN" additivity="false">
+        <appender-ref ref="CONSOLE"/>
+        <appender-ref ref="DLQ_FILE"/>
+    </logger>
+
+    <!-- Kafka 관련 로거 -->
+    <logger name="org.apache.kafka" level="WARN"/>
+    <logger name="org.springframework.kafka" level="INFO"/>
+
+    <!-- Redis 관련 로거 -->
+    <logger name="io.lettuce" level="INFO"/>
+    <logger name="org.springframework.data.redis" level="INFO"/>
+
+    <!-- 분산락 관련 로거 -->
+    <logger name="com.hhplus.ecommerce.common.lock" level="DEBUG"/>
+
+    <!-- 프로파일별 설정 -->
+    
+    <!-- 개발 환경 -->
+    <springProfile name="default,dev">
+        <root level="INFO">
+            <appender-ref ref="CONSOLE"/>
+            <appender-ref ref="JSON_FILE"/>
+        </root>
+    </springProfile>
+
+    <!-- 부하테스트 환경 -->
+    <springProfile name="load-test">
+        <root level="WARN">
+            <appender-ref ref="CONSOLE"/>
+            <appender-ref ref="FILE"/>
+        </root>
+    </springProfile>
+
+    <!-- 운영 환경 -->
+    <springProfile name="prod,production">
+        <root level="INFO">
+            <appender-ref ref="CONSOLE"/>
+            <appender-ref ref="JSON_FILE"/>
+            <appender-ref ref="LOGSTASH"/>
+        </root>
+    </springProfile>
+
+</configuration>
+

@@ -116,6 +116,8 @@ class FailedMessage(
  */
 enum class FailedMessageStatus {
     PENDING,
+    RETRYING,
+    FAILED,
     REPROCESSED,
     IGNORED
 }

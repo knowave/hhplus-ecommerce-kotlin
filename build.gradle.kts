@@ -38,9 +38,17 @@ dependencies {
     // Redis & Cache
     implementation("org.springframework.boot:spring-boot-starter-data-redis")
     implementation("org.springframework.boot:spring-boot-starter-cache")
+    implementation("org.apache.commons:commons-pool2:2.12.0")
 
     // Kafka
     implementation("org.springframework.kafka:spring-kafka")
+
+    // Actuator & Monitoring (Prometheus, Micrometer)
+    implementation("org.springframework.boot:spring-boot-starter-actuator")
+    implementation("io.micrometer:micrometer-registry-prometheus")
+
+    // Logback for ELK (Logstash encoder)
+    implementation("net.logstash.logback:logstash-logback-encoder:7.4")
 
     runtimeOnly("com.mysql:mysql-connector-j")
     runtimeOnly("com.h2database:h2")

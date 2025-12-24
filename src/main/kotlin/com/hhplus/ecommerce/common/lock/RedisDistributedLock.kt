@@ -1,5 +1,6 @@
 package com.hhplus.ecommerce.common.lock
 
+import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty
 import org.springframework.data.redis.core.RedisTemplate
 import org.springframework.data.redis.core.script.DefaultRedisScript
 import org.springframework.stereotype.Component
@@ -17,8 +18,16 @@ import java.util.concurrent.TimeUnit
  * - 빠른 락 획득/해제 (메모리 기반)
  * - DB 부하 감소 (Redis 레벨에서 제어)
  *
+ * 조건부 활성화:
+ * - app.lock.enabled=false 설정 시 이 Bean이 생성되지 않음
+ * - load-test 프로파일에서는 비활성화 (순수 DB만 사용)
  */
 @Component
+@ConditionalOnProperty(
+    name = ["app.lock.enabled"],
+    havingValue = "true",
+    matchIfMissing = true
+)
 class RedisDistributedLock(
     private val redisTemplate: RedisTemplate<String, String>
 ) {

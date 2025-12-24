@@ -18,6 +18,8 @@ import com.hhplus.ecommerce.infrastructure.kafka.PaymentEventProducer
 import org.slf4j.LoggerFactory
 import org.springframework.stereotype.Service
 import org.springframework.transaction.annotation.Transactional
+import org.springframework.transaction.support.TransactionSynchronization
+import org.springframework.transaction.support.TransactionSynchronizationManager
 import java.time.LocalDateTime
 import java.time.format.DateTimeFormatter
 import java.util.UUID
@@ -37,23 +39,31 @@ class PaymentServiceImpl(
     private val logger = LoggerFactory.getLogger(javaClass)
     private val DATE_FORMATTER: DateTimeFormatter = DateTimeFormatter.ISO_LOCAL_DATE_TIME
 
+    @Transactional
     override fun processPayment(orderId: UUID, request: ProcessPaymentCommand): ProcessPaymentResult {
         val paymentData = processPaymentTransaction(orderId, request)
 
-        paymentEventProducer?.let {
-            try {
-                it.sendPaymentCompletedEvent(
-                    PaymentCompletedEvent(
-                        paymentId = paymentData.paymentId,
-                        orderId = orderId,
-                        userId = request.userId,
-                        amount = paymentData.amount
-                    )
-                )
-                logger.info("결제 완료 이벤트 Kafka 발행 완료 - paymentId: {}", paymentData.paymentId)
-            } catch (e: Exception) {
-                logger.error("결제 완료 이벤트 Kafka 발행 실패 - paymentId: ${paymentData.paymentId}", e)
-            }
+        // 트랜잭션 커밋 후 Kafka로 이벤트 발행
+        paymentEventProducer?.let { producer ->
+            TransactionSynchronizationManager.registerSynchronization(
+                object : TransactionSynchronization {
+                    override fun afterCommit() {
+                        try {
+                            producer.sendPaymentCompletedEvent(
+                                PaymentCompletedEvent(
+                                    paymentId = paymentData.paymentId,
+                                    orderId = orderId,
+                                    userId = request.userId,
+                                    amount = paymentData.amount
+                                )
+                            )
+                            logger.info("결제 완료 이벤트 Kafka 발행 완료 - paymentId: {}", paymentData.paymentId)
+                        } catch (e: Exception) {
+                            logger.error("결제 완료 이벤트 Kafka 발행 실패 - paymentId: ${paymentData.paymentId}", e)
+                        }
+                    }
+                }
+            )
         }
 
         return ProcessPaymentResult(
