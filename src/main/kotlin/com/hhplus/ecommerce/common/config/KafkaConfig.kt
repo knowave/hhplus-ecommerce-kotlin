@@ -20,6 +20,8 @@ import org.springframework.kafka.listener.DeadLetterPublishingRecoverer
 import org.springframework.kafka.support.serializer.JsonDeserializer
 import org.springframework.kafka.support.serializer.JsonSerializer
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty
+import org.springframework.context.annotation.Primary
+import org.springframework.context.annotation.Profile
 import org.springframework.util.backoff.FixedBackOff
 
 /**
@@ -52,6 +54,7 @@ class KafkaConfig {
      * Kotlin 및 JavaTime 모듈 지원
      */
     @Bean
+    @Primary
     fun kafkaObjectMapper(): ObjectMapper {
         return ObjectMapper().apply {
             registerKotlinModule()

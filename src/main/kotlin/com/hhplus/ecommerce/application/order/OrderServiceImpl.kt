@@ -19,6 +19,8 @@ import org.slf4j.LoggerFactory
 import org.springframework.data.domain.PageRequest
 import org.springframework.stereotype.Service
 import org.springframework.transaction.annotation.Transactional
+import org.springframework.transaction.support.TransactionSynchronization
+import org.springframework.transaction.support.TransactionSynchronizationManager
 import java.time.LocalDate
 import java.time.format.DateTimeFormatter
 import java.util.UUID
@@ -41,10 +43,10 @@ class OrderServiceImpl(
     /**
      * 주문 생성
      *
-     * createOrderTransaction 내부 트랜잭션에서:
+     * 트랜잭션 내에서:
      * - 요청 검증
      * - 사용자 조회
-     * - 재고 차감
+     * - 재고 차감 (비관적 락 사용)
      * - 쿠폰 사용
      * - 주문 저장
      *
@@ -52,6 +54,7 @@ class OrderServiceImpl(
      * - 이벤트 발행 (비동기: 랭킹 업데이트, 카트 삭제)
      * - 응답 생성
      */
+    @Transactional
     override fun createOrder(request: CreateOrderCommand): CreateOrderResult {
         validateOrderRequest(request)
         val user = userService.getUser(request.userId)
@@ -59,26 +62,31 @@ class OrderServiceImpl(
         val orderData = createOrderTransaction(request, user.id!!)
 
         // 트랜잭션 커밋 후 Kafka로 이벤트 발행 (랭킹 업데이트, 카트 삭제)
-        orderEventProducer?.let {
-            try {
-                it.sendOrderCreatedEvent(
-                    OrderCreatedEvent(
-                        orderId = orderData.orderId,
-                        userId = request.userId,
-                        productIds = orderData.productIds,
-                        items = orderData.items.map { item ->
-                            OrderItemInfo(
-                                productId = item.productId,
-                                quantity = item.quantity
+        orderEventProducer?.let { producer ->
+            TransactionSynchronizationManager.registerSynchronization(
+                object : TransactionSynchronization {
+                    override fun afterCommit() {
+                        try {
+                            producer.sendOrderCreatedEvent(
+                                OrderCreatedEvent(
+                                    orderId = orderData.orderId,
+                                    userId = request.userId,
+                                    productIds = orderData.productIds,
+                                    items = orderData.items.map { item ->
+                                        OrderItemInfo(
+                                            productId = item.productId,
+                                            quantity = item.quantity
+                                        )
+                                    }
+                                )
                             )
+                            logger.info("주문 생성 이벤트 Kafka 발행 완료 - orderId: {}", orderData.orderId)
+                        } catch (e: Exception) {
+                            logger.error("주문 생성 이벤트 Kafka 발행 실패 - orderId: ${orderData.orderId}", e)
                         }
-                    )
-                )
-                logger.info("주문 생성 이벤트 Kafka 발행 완료 - orderId: {}", orderData.orderId)
-            } catch (e: Exception) {
-                // Kafka 발행 실패는 로그만 기록 주문 생성 성공 여부에 영향을 끼치지 않는다.
-                logger.error("주문 생성 이벤트 Kafka 발행 실패 - orderId: ${orderData.orderId}", e)
-            }
+                    }
+                }
+            )
         }
 
         return CreateOrderResult(
